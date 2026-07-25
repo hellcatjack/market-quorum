@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,7 @@ class TradingAgentsGraph:
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
+        event_callback: Callable[[dict[str, Any]], None] | None = None,
     ):
         """Initialize the trading agents graph and components.
 
@@ -79,10 +81,12 @@ class TradingAgentsGraph:
             debug: Whether to run in debug mode
             config: Configuration dictionary. If None, uses default config
             callbacks: Optional list of callback handlers (e.g., for tracking LLM/tool stats)
+            event_callback: Optional callback invoked for every public graph state value
         """
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
+        self.event_callback = event_callback
 
         # Update the interface's config
         set_config(self.config)
@@ -182,6 +186,10 @@ class TradingAgentsGraph:
         max_retries = self.config.get("llm_max_retries")
         if max_retries is not None and max_retries != "":
             kwargs["max_retries"] = _coerce_max_retries(max_retries)
+
+        default_headers = self.config.get("llm_default_headers")
+        if default_headers:
+            kwargs["default_headers"] = dict(default_headers)
 
         return kwargs
 
@@ -429,7 +437,7 @@ class TradingAgentsGraph:
             past_context=past_context,
             instrument_context=instrument_context,
         )
-        args = self.propagator.get_graph_args()
+        args = self.propagator.get_graph_args(callbacks=self.callbacks)
 
         # Inject thread_id so same ticker+date+graph-shape resumes; a different
         # date or graph shape starts fresh (#1089).
@@ -437,11 +445,14 @@ class TradingAgentsGraph:
             tid = thread_id(company_name, str(trade_date), self._run_signature(asset_type))
             args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
 
-        if self.debug:
-            trace = []
+        should_stream = self.debug or self.event_callback is not None
+        if should_stream:
+            final_state = {}
             last_printed = None
             for chunk in self.graph.stream(init_agent_state, **args):
-                if chunk["messages"]:
+                if self.event_callback is not None:
+                    self.event_callback(chunk)
+                if self.debug and chunk.get("messages"):
                     msg = chunk["messages"][-1]
                     # Nodes after the trader don't append to messages, so the
                     # same trailing message repeats across chunks. Print it only
@@ -450,11 +461,6 @@ class TradingAgentsGraph:
                     if signature != last_printed:
                         msg.pretty_print()
                         last_printed = signature
-                    trace.append(chunk)
-            # Streamed chunks are per-node deltas. Merge them so the returned
-            # state matches what graph.invoke() yields in the non-debug path.
-            final_state = {}
-            for chunk in trace:
                 final_state.update(chunk)
         else:
             final_state = self.graph.invoke(init_agent_state, **args)
