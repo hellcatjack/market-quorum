@@ -21,7 +21,7 @@ from tradingng_platform.models.execution import (
 from tradingng_platform.models.identity import ApiCredential, Role, User, UserRole
 from tradingng_platform.models.records import Artifact, AuditEvent
 from tradingng_platform.models.results import Decision, EvidenceItem
-from tradingng_platform.models.validation import Validation
+from tradingng_platform.models.validation import DecisionPriceBasis, Validation
 from tradingng_platform.models.webhooks import Webhook, WebhookDelivery
 
 __all__ = [
@@ -36,6 +36,7 @@ __all__ = [
     "Comment",
     "CoordinationLock",
     "Decision",
+    "DecisionPriceBasis",
     "EvidenceItem",
     "GatewayHealthSample",
     "Instrument",
