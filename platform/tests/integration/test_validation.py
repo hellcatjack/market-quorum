@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+import exchange_calendars as xcals
 from sqlalchemy import select
 
 from tradingng_platform.artifacts.store import LocalArtifactStore
@@ -16,6 +17,7 @@ from tradingng_platform.models import (
     RunEvent,
     Validation,
 )
+from tradingng_platform.validation.price_contracts import OhlcBasis, ProviderPriceSeries
 from tradingng_platform.validation.prices import PriceSeries
 from tradingng_platform.validation.repository import ValidationRepository
 from tradingng_platform.validation.service import ValidationService
@@ -56,6 +58,39 @@ class _Prices:
             adjusted_close=closes,
             source="fixture",
             collected_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        )
+
+
+class _PricesV2:
+    provider_id = "fixture-v2"
+
+    async def history(self, ticker, start, end):
+        calendar = xcals.get_calendar("XNYS")
+        sessions = [
+            value.date()
+            for value in calendar.sessions_in_range(start, end)
+        ]
+        base = Decimal("200") if ticker == "SPY" else Decimal("100")
+        closes = [base + index for index in range(len(sessions))]
+        return ProviderPriceSeries(
+            ticker=ticker,
+            provider_symbol=ticker,
+            provider_id=self.provider_id,
+            provider_adapter_version="fixture.v2",
+            request_fingerprint=("e" if ticker == "SPY" else "f") * 64,
+            ohlc_basis=OhlcBasis.SPLIT_NORMALIZED,
+            capabilities=frozenset({"cash_dividends", "splits"}),
+            currency="USD",
+            timezone="America/New_York",
+            sessions=sessions,
+            open=closes,
+            high=[value + Decimal("1") for value in closes],
+            low=[value - Decimal("1") for value in closes],
+            close=closes,
+            adjusted_close=closes,
+            cash_distributions=[Decimal("0")] * len(sessions),
+            split_coefficient=[Decimal("1")] * len(sessions),
+            collected_at=datetime(2026, 8, 1, tzinfo=timezone.utc),
         )
 
 
@@ -108,8 +143,11 @@ async def test_validation_worker_completes_three_horizons_without_rewriting_run(
         session_factory,
         _Prices(),
         LocalArtifactStore(tmp_path / "artifacts"),
+        v2_provider=_PricesV2(),
     )
-    now = datetime(2026, 7, 25, 12, tzinfo=timezone.utc)
+    now = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
+    # The target-price basis is prepared independently before the three horizons.
+    assert await worker.run_once(now)
     assert await worker.run_once(now)
     assert await worker.run_once(now)
     assert await worker.run_once(now)
@@ -131,7 +169,9 @@ async def test_validation_worker_completes_three_horizons_without_rewriting_run(
             await session.scalars(select(RunEvent.event_type).where(RunEvent.run_id == run.id))
         )
     assert [item.status for item in validations] == ["completed", "completed", "completed"]
-    assert validations[1].raw_return == Decimal("0.0500000000")
+    assert validations[1].raw_return == validations[1].total_return
+    assert validations[1].price_return == validations[1].total_return
+    assert validations[1].provider_id == "fixture-v2"
     assert persisted.status == RunStatus.SUCCEEDED.value
     assert len(artifacts) == 3
     assert {artifact.retention_class for artifact in artifacts} == {"permanent"}
@@ -144,6 +184,7 @@ async def test_validation_worker_completes_three_horizons_without_rewriting_run(
     assert twenty_day.trigger_results.direction == "bullish"
     assert twenty_day.trigger_results.direction_correct is True
     assert twenty_day.trigger_results.entry_session == date(2026, 7, 1)
-    assert twenty_day.trigger_results.exit_session == date(2026, 7, 21)
+    assert twenty_day.trigger_results.exit_session == date(2026, 7, 30)
     assert twenty_day.error_code is None
-    assert twenty_day.calculation_version == "validation.v1"
+    assert twenty_day.calculation_version == "validation.v2"
+    assert twenty_day.normalization_version == "prices.v1"

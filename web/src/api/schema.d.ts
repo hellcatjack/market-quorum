@@ -452,6 +452,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/validations/{validation_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Validation */
+        post: operations["retry_validation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/webhooks": {
         parameters: {
             query?: never;
@@ -1096,6 +1113,8 @@ export interface components {
         };
         /** ValidationTriggerResults */
         ValidationTriggerResults: {
+            /** Data Quality Status */
+            data_quality_status?: ("matched" | "minor_difference" | "material_difference" | "not_available") | null;
             /** Direction */
             direction?: ("bullish" | "bearish" | "neutral") | null;
             /** Direction Correct */
@@ -1110,25 +1129,39 @@ export interface components {
             exit_session?: string | null;
             /** Price Target Hit */
             price_target_hit?: boolean | null;
+            /** Price Target Status */
+            price_target_status?: ("not_set" | "basis_pending" | "basis_unavailable" | "evaluated") | null;
             /** Rating */
             rating?: string | null;
+            /** Rebased Price Target */
+            rebased_price_target?: string | null;
         };
         /** ValidationView */
         ValidationView: {
             /** Alpha */
             alpha: string | null;
+            /** Benchmark Price Return */
+            benchmark_price_return?: string | null;
             /** Benchmark Return */
             benchmark_return: string | null;
+            /** Benchmark Total Return */
+            benchmark_total_return?: string | null;
             /**
              * Calculation Version
              * @default validation.v1
-             * @constant
+             * @enum {string}
              */
-            calculation_version: "validation.v1";
+            calculation_version: "validation.v1" | "validation.v2";
+            /** Calendar Code */
+            calendar_code?: string | null;
             /** Data Artifact Id */
             data_artifact_id?: string | null;
+            /** Entry Session */
+            entry_session?: string | null;
             /** Error Code */
             error_code?: string | null;
+            /** Exit Session */
+            exit_session?: string | null;
             /**
              * Horizon
              * @enum {integer}
@@ -1139,12 +1172,24 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Matures At */
+            matures_at?: string | null;
             /** Max Adverse Excursion */
             max_adverse_excursion: string | null;
             /** Max Favorable Excursion */
             max_favorable_excursion: string | null;
+            /** Normalization Version */
+            normalization_version?: string | null;
             /** Observed At */
             observed_at: string | null;
+            /** Price Alpha */
+            price_alpha?: string | null;
+            /** Price Return */
+            price_return?: string | null;
+            /** Provider Adapter Version */
+            provider_adapter_version?: string | null;
+            /** Provider Id */
+            provider_id?: string | null;
             /** Raw Return */
             raw_return: string | null;
             /**
@@ -1162,6 +1207,10 @@ export interface components {
              * @enum {string}
              */
             status: "scheduled" | "running" | "completed" | "retry_wait" | "unavailable" | "failed";
+            /** Total Alpha */
+            total_alpha?: string | null;
+            /** Total Return */
+            total_return?: string | null;
             trigger_results?: components["schemas"]["ValidationTriggerResults"];
         };
         /** WebhookView */
@@ -2131,6 +2180,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_validation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                validation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationView"];
                 };
             };
             /** @description Validation Error */

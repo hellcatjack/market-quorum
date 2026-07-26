@@ -50,7 +50,8 @@ function directionLabel(validation: Validation): string {
 
 function statusMessage(validation: Validation): string | null {
   if (validation.status === "scheduled") {
-    return `尚未到达验证时间，计划时间 ${new Date(validation.scheduled_for).toLocaleString("zh-CN")}。`;
+    const dueAt = validation.matures_at ?? validation.scheduled_for;
+    return `尚未到达验证时间，计划时间 ${new Date(dueAt).toLocaleString("zh-CN")}。`;
   }
   if (validation.status === "running") return "正在读取并核验市场价格。";
   if (validation.status === "retry_wait") return "行情暂不可用，验证引擎将在稍后自动重试。";
@@ -125,6 +126,7 @@ export function ValidationReplayPanel({
   const externalUrl = tradingViewUrl(ticker, exchange);
   const trigger = selected?.trigger_results;
   const stateMessage = selected ? statusMessage(selected) : null;
+  const isV2 = selected?.calculation_version === "validation.v2";
 
   const copyRange = async () => {
     if (!trigger?.entry_session || !trigger.exit_session) return;
@@ -172,9 +174,22 @@ export function ValidationReplayPanel({
               <small>{directionLabel(selected)}</small>
             </div>
             <dl>
-              <div><dt>标的收益</dt><dd>{signedPercent(selected.raw_return)}</dd></div>
-              <div><dt>基准收益</dt><dd>{signedPercent(selected.benchmark_return)}</dd></div>
-              <div><dt>超额收益 Alpha</dt><dd>{signedPercent(selected.alpha)}</dd></div>
+              {isV2 ? (
+                <>
+                  <div><dt>总回报（含现金分配）</dt><dd>{signedPercent(selected.total_return)}</dd></div>
+                  <div><dt>价格回报</dt><dd>{signedPercent(selected.price_return)}</dd></div>
+                  <div><dt>基准总回报</dt><dd>{signedPercent(selected.benchmark_total_return)}</dd></div>
+                  <div><dt>基准价格回报</dt><dd>{signedPercent(selected.benchmark_price_return)}</dd></div>
+                  <div><dt>总回报 Alpha</dt><dd>{signedPercent(selected.total_alpha)}</dd></div>
+                  <div><dt>价格 Alpha</dt><dd>{signedPercent(selected.price_alpha)}</dd></div>
+                </>
+              ) : (
+                <>
+                  <div><dt>标的收益</dt><dd>{signedPercent(selected.raw_return)}</dd></div>
+                  <div><dt>基准收益</dt><dd>{signedPercent(selected.benchmark_return)}</dd></div>
+                  <div><dt>超额收益 Alpha</dt><dd>{signedPercent(selected.alpha)}</dd></div>
+                </>
+              )}
               <div><dt>最大不利波动</dt><dd>{signedPercent(selected.max_adverse_excursion)}</dd></div>
               <div><dt>最大有利波动</dt><dd>{signedPercent(selected.max_favorable_excursion)}</dd></div>
             </dl>
@@ -227,19 +242,27 @@ export function ValidationReplayPanel({
             <summary>计算与数据依据</summary>
             <dl>
               <div><dt>评估日期</dt><dd>{analysisDate}</dd></div>
+              <div><dt>交易日历</dt><dd>{selected.calendar_code ?? "—"}</dd></div>
               <div><dt>验证起点</dt><dd>{trigger?.entry_session ?? "—"}</dd></div>
               <div><dt>验证终点</dt><dd>{trigger?.exit_session ?? "—"}</dd></div>
-              <div><dt>入场复权价</dt><dd>{trigger?.entry_price ?? "—"}</dd></div>
-              <div><dt>退出复权价</dt><dd>{trigger?.exit_price ?? "—"}</dd></div>
+              <div><dt>{isV2 ? "入场标准化价" : "入场复权价"}</dt><dd>{trigger?.entry_price ?? "—"}</dd></div>
+              <div><dt>{isV2 ? "退出标准化价" : "退出复权价"}</dt><dd>{trigger?.exit_price ?? "—"}</dd></div>
               <div><dt>目标价命中</dt><dd>{trigger?.price_target_hit === null || trigger?.price_target_hit === undefined ? "未设置" : trigger.price_target_hit ? "是" : "否"}</dd></div>
+              {isV2 ? <div><dt>目标价判定状态</dt><dd>{trigger?.price_target_status ?? "—"}</dd></div> : null}
+              {isV2 ? <div><dt>同股本口径目标价</dt><dd>{trigger?.rebased_price_target ?? "—"}</dd></div> : null}
               <div><dt>计算规则</dt><dd>{selected.calculation_version ?? "validation.v1"}</dd></div>
-              <div><dt>行情来源</dt><dd>{replay.data?.source ?? "—"}</dd></div>
+              <div><dt>行情来源</dt><dd>{selected.provider_id ?? replay.data?.source ?? "—"}</dd></div>
+              {isV2 ? <div><dt>供应商适配器</dt><dd>{selected.provider_adapter_version ?? "—"}</dd></div> : null}
+              {isV2 ? <div><dt>价格标准化规则</dt><dd>{selected.normalization_version ?? "—"}</dd></div> : null}
+              {isV2 ? <div><dt>数据质量核对</dt><dd>{trigger?.data_quality_status ?? "—"}</dd></div> : null}
               <div><dt>采集时间</dt><dd>{replay.data?.collectedAt ?? "—"}</dd></div>
               <div><dt>价格产物 ID</dt><dd><code>{artifactId ?? "—"}</code></dd></div>
               <div><dt>SHA-256</dt><dd><code>{artifact?.sha256 ?? "—"}</code></dd></div>
             </dl>
             <p>
-              收益率使用入场与退出复权收盘价；Alpha 为标的收益减基准收益；MAE/MFE 使用验证窗口内按当日复权因子换算的最低价与最高价。
+              {isV2
+                ? "总回报包含现金分配，价格回报仅反映价格变化；两类 Alpha 均使用同口径的标的回报减去基准回报。MAE/MFE 使用拆股标准化后的价格路径，目标价按分析日股本口径固化并在需要时重基准。"
+                : "收益率使用入场与退出复权收盘价；Alpha 为标的收益减基准收益；MAE/MFE 使用验证窗口内按当日复权因子换算的最低价与最高价。"}
             </p>
           </details>
 

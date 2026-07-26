@@ -187,6 +187,46 @@ test("keeps saved metrics visible when artifact permission is unavailable", () =
   expect(loadArtifact).not.toHaveBeenCalled();
 });
 
+test("shows v2 total and price returns with provider audit metadata", async () => {
+  renderPanel({
+    validations: [
+      validation(20, {
+        calculation_version: "validation.v2",
+        calendar_code: "XNYS",
+        entry_session: "2026-07-01",
+        exit_session: "2026-07-21",
+        matures_at: "2026-07-21T22:00:00Z",
+        price_return: "0.0800",
+        benchmark_price_return: "0.0200",
+        price_alpha: "0.0600",
+        total_return: "0.0842",
+        benchmark_total_return: "0.0217",
+        total_alpha: "0.0625",
+        provider_id: "alphavantage",
+        provider_adapter_version: "alphavantage.v1",
+        normalization_version: "prices.v1",
+        trigger_results: {
+          ...validation(20).trigger_results,
+          price_target_status: "evaluated",
+          rebased_price_target: "120",
+          data_quality_status: "matched",
+        },
+      }),
+    ],
+  });
+
+  await screen.findByTestId("validation-chart");
+  expect(screen.getByText("总回报（含现金分配）")).toBeInTheDocument();
+  expect(screen.getByText("价格回报")).toBeInTheDocument();
+  expect(screen.getByText("总回报 Alpha")).toBeInTheDocument();
+  const audit = screen.getByText("计算与数据依据").closest("details");
+  if (!audit) throw new Error("audit disclosure is missing");
+  expect(within(audit).getByText("alphavantage")).toBeInTheDocument();
+  expect(within(audit).getByText("alphavantage.v1")).toBeInTheDocument();
+  expect(within(audit).getByText("prices.v1")).toBeInTheDocument();
+  expect(within(audit).getByText("matched")).toBeInTheDocument();
+});
+
 test("copies the exact immutable review range", async () => {
   const writeText = vi.fn(async () => undefined);
   const user = userEvent.setup();
