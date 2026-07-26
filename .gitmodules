@@ -1,0 +1,4 @@
+[submodule "TradingAgents"]
+	path = TradingAgents
+	url = https://github.com/hellcatjack/market-quorum.git
+	branch = vendor/tradingagents

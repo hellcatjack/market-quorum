@@ -1,0 +1,1 @@
+"""Core assessment domain rules."""

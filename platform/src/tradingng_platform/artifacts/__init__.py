@@ -1,0 +1,1 @@
+"""Durable assessment artifact storage."""

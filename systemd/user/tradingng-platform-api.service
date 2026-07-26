@@ -1,0 +1,22 @@
+[Unit]
+Description=TradingNG management API and MCP server
+After=tradingng-platform-containers.service tradingng-codex-gateway.service
+Requires=tradingng-platform-containers.service
+Wants=tradingng-codex-gateway.service
+
+[Service]
+Type=simple
+WorkingDirectory=/app/devs/TradingNG
+EnvironmentFile=/app/devs/TradingNG/.env.platform
+Environment=PYTHONPATH=/app/devs/TradingNG/platform/src:/app/devs/TradingNG/TradingAgents
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/app/devs/TradingNG/.venv/bin/python /app/devs/TradingNG/scripts/check_platform_database.py
+ExecStart=/app/devs/TradingNG/.venv/bin/python -m tradingng_platform.api.app
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

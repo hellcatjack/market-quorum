@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tradingng-codex-gateway"
+version = "0.1.0"
+description = "Loopback OpenAI-compatible gateway for a locally authenticated Codex runtime"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.116,<1",
+    "httpx>=0.28,<1",
+    "jsonschema>=4.23,<5",
+    "pydantic>=2.10,<3",
+    "uvicorn>=0.35,<1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx2>=2.9,<3",
+    "pytest>=8.3,<9",
+    "pytest-asyncio>=0.25,<2",
+    "ruff>=0.12,<1",
+]
+
+[project.scripts]
+codex-openai-gateway = "codex_gateway.__main__:main"
+codex-gateway-audit = "codex_gateway.audit_proxy:main"
+codex-gateway-audit-summary = "codex_gateway.audit_summary:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
+markers = ["real: consumes one real Codex turn and is excluded by default"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM"]

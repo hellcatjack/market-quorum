@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: tradingng
+      POSTGRES_USER: tradingng
+      POSTGRES_PASSWORD: ${TRADINGNG_POSTGRES_PASSWORD:?required}
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tradingng -d tradingng"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - tradingng-postgres:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.5
+    command: ["start", "--import-realm"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: tradingng
+      KC_DB_PASSWORD: ${TRADINGNG_POSTGRES_PASSWORD:?required}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_BOOTSTRAP_ADMIN_USERNAME:?required}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_BOOTSTRAP_ADMIN_PASSWORD:?required}
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: https://ushome.amycat.com
+      KC_PROXY_HEADERS: xforwarded
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET:?required}
+      TRADINGNG_API_CLIENT_SECRET: ${TRADINGNG_API_CLIENT_SECRET:?required}
+      TRADINGNG_MCP_CLIENT_SECRET: ${TRADINGNG_MCP_CLIENT_SECRET:?required}
+      TRADINGNG_INITIAL_ADMIN_USERNAME: ${TRADINGNG_INITIAL_ADMIN_USERNAME:?required}
+      TRADINGNG_INITIAL_ADMIN_PASSWORD: ${TRADINGNG_INITIAL_ADMIN_PASSWORD:?required}
+    ports:
+      - "127.0.0.1:18081:8080"
+    healthcheck:
+      test:
+        ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/9000; printf 'GET /health/ready HTTP/1.0\\r\\n\\r\\n' >&3; grep -q UP <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ./keycloak/tradingng-realm.json:/opt/keycloak/data/import/tradingng-realm.json:ro
+    restart: unless-stopped
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.1
+    command: ["--config=/etc/oauth2-proxy.cfg"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    environment:
+      OAUTH2_PROXY_CLIENT_SECRET: ${OAUTH2_PROXY_CLIENT_SECRET:?required}
+      OAUTH2_PROXY_COOKIE_SECRET: ${OAUTH2_PROXY_COOKIE_SECRET:?required}
+    ports:
+      - "127.0.0.1:4180:4180"
+    extra_hosts:
+      - "ushome.amycat.com:host-gateway"
+    volumes:
+      - ./oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
+    restart: unless-stopped
+
+volumes:
+  tradingng-postgres:

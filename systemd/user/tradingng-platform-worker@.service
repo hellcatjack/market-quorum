@@ -1,0 +1,26 @@
+[Unit]
+Description=TradingNG assessment worker %i
+After=tradingng-platform-scheduler.service tradingng-codex-gateway.service
+Requires=tradingng-platform-scheduler.service
+Wants=tradingng-codex-gateway.service
+PartOf=tradingng-platform-workers.target
+
+[Service]
+Type=simple
+WorkingDirectory=/app/devs/TradingNG
+EnvironmentFile=/app/devs/TradingNG/.env.platform
+Environment=PYTHONPATH=/app/devs/TradingNG/platform/src:/app/devs/TradingNG/TradingAgents
+Environment=PYTHONUNBUFFERED=1
+Environment=TRADINGNG_WORKER_INSTANCE=%i
+ExecStartPre=/app/devs/TradingNG/.venv/bin/python /app/devs/TradingNG/scripts/check_platform_database.py
+ExecStart=/app/devs/TradingNG/.venv/bin/python -m tradingng_platform.worker.main
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+KillMode=mixed
+TimeoutStopSec=60
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

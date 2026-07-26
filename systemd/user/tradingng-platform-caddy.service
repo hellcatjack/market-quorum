@@ -1,0 +1,21 @@
+[Unit]
+Description=Legacy TradingNG internal TLS proxy (rollback only)
+After=tradingng-platform-api.service tradingng-platform-containers.service
+Requires=tradingng-platform-api.service tradingng-platform-containers.service
+
+[Service]
+Type=notify
+WorkingDirectory=/app/devs/TradingNG
+ExecStart=/usr/bin/caddy run --config /app/devs/TradingNG/deploy/Caddyfile
+ExecReload=/usr/bin/caddy reload --address 127.0.0.1:2020 --config /app/devs/TradingNG/deploy/Caddyfile --force
+TimeoutStopSec=5s
+LimitNOFILE=1048576
+PrivateTmp=true
+NoNewPrivileges=true
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

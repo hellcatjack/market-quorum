@@ -1,0 +1,17 @@
+[Unit]
+Description=TradingNG Keycloak PostgreSQL and identity containers
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/app/devs/TradingNG
+EnvironmentFile=/app/devs/TradingNG/.env.platform
+ExecStart=/usr/bin/sg docker -c "/usr/bin/docker compose --env-file /app/devs/TradingNG/.env.platform -f /app/devs/TradingNG/deploy/compose.prod.yml up -d --remove-orphans"
+ExecStop=/usr/bin/sg docker -c "/usr/bin/docker compose --env-file /app/devs/TradingNG/.env.platform -f /app/devs/TradingNG/deploy/compose.prod.yml stop"
+RemainAfterExit=yes
+TimeoutStartSec=300
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

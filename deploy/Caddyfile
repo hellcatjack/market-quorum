@@ -1,0 +1,79 @@
+{
+	admin 127.0.0.1:2020
+	auto_https disable_redirects
+}
+
+https://ushome.amycat.com:8443 {
+	tls internal
+
+	@apiBearer {
+		path /api/*
+		header_regexp Authorization ^Bearer[[:space:]]+[^[:space:]]+$
+	}
+	handle @apiBearer {
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	handle /realms/* {
+		reverse_proxy 127.0.0.1:18081
+	}
+	handle /resources/* {
+		reverse_proxy 127.0.0.1:18081
+	}
+	handle /oauth2/* {
+		reverse_proxy 127.0.0.1:4180
+	}
+	handle /.well-known/oauth-protected-resource* {
+		reverse_proxy 127.0.0.1:8010
+	}
+	handle /api/* {
+		route {
+			reverse_proxy 127.0.0.1:4180 {
+				method GET
+				rewrite /oauth2/auth
+				header_up X-Forwarded-Method {method}
+				header_up X-Forwarded-Uri {uri}
+				@apiAuthSuccess status 2xx
+				handle_response @apiAuthSuccess {
+					request_header X-Auth-Request-Access-Token {rp.header.X-Auth-Request-Access-Token}
+					copy_response_headers {
+						include Set-Cookie
+					}
+				}
+			}
+			request_header Authorization "Bearer {http.request.header.X-Auth-Request-Access-Token}"
+			request_header -X-Auth-Request-Access-Token
+			reverse_proxy 127.0.0.1:8010
+		}
+	}
+	handle /mcp* {
+		reverse_proxy 127.0.0.1:8010
+	}
+
+	@noSession {
+		not header Cookie *__Host-tradingng=*
+	}
+	handle @noSession {
+		redir * /oauth2/start?rd={http.request.uri} 302
+	}
+
+	handle {
+		route {
+			reverse_proxy 127.0.0.1:4180 {
+				method GET
+				rewrite /oauth2/auth
+				header_up X-Forwarded-Method {method}
+				header_up X-Forwarded-Uri {uri}
+				@webAuthSuccess status 2xx
+				handle_response @webAuthSuccess {
+					copy_response_headers {
+						include Set-Cookie
+					}
+				}
+			}
+			root * /app/devs/TradingNG/web/dist
+			try_files {path} /index.html
+			file_server
+		}
+	}
+}

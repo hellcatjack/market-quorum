@@ -1,0 +1,17 @@
+[Unit]
+Description=TradingNG Codex OpenAI-compatible Gateway
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/app/devs/TradingNG
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=/home/hellcat/.nvm/versions/node/v22.21.1/bin:/app/devs/TradingNG/.venv/bin:/home/hellcat/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/app/devs/TradingNG/.venv/bin/python -m codex_gateway
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

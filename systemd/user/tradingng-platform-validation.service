@@ -1,0 +1,21 @@
+[Unit]
+Description=TradingNG outcome validation worker
+After=tradingng-platform-api.service
+Requires=tradingng-platform-api.service
+
+[Service]
+Type=simple
+WorkingDirectory=/app/devs/TradingNG
+EnvironmentFile=/app/devs/TradingNG/.env.platform
+Environment=PYTHONPATH=/app/devs/TradingNG/platform/src
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/app/devs/TradingNG/.venv/bin/python /app/devs/TradingNG/scripts/check_platform_database.py
+ExecStart=/app/devs/TradingNG/.venv/bin/python -m tradingng_platform.validation.main
+Restart=always
+RestartSec=10
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

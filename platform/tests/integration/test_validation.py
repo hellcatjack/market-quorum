@@ -1,0 +1,138 @@
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+
+from sqlalchemy import func, select
+
+from tradingng_platform.artifacts.store import LocalArtifactStore
+from tradingng_platform.assessments.contracts import AssessmentItem, SubmitAssessments
+from tradingng_platform.assessments.service import AssessmentService
+from tradingng_platform.auth.principal import Principal
+from tradingng_platform.domain.runs import RunStatus
+from tradingng_platform.models import (
+    Artifact,
+    AssessmentRun,
+    Decision,
+    RunConfigSnapshot,
+    RunEvent,
+    Validation,
+)
+from tradingng_platform.validation.prices import PriceSeries
+from tradingng_platform.validation.repository import ValidationRepository
+from tradingng_platform.validation.service import ValidationService
+from tradingng_platform.validation.worker import ValidationWorker
+
+
+def _principal():
+    return Principal(
+        "issuer",
+        "validation-analyst",
+        "user",
+        frozenset(
+            {
+                "assessments:submit",
+                "assessments:read",
+                "validations:read",
+                "validations:write",
+            }
+        ),
+        roles=frozenset({"Analyst"}),
+    )
+
+
+class _Prices:
+    async def history(self, ticker, start, end):
+        del start, end
+        sessions = [date(2026, 7, 1) + timedelta(days=index) for index in range(21)]
+        base = Decimal("200") if ticker == "SPY" else Decimal("100")
+        closes = [base + index for index in range(21)]
+        return PriceSeries(
+            ticker=ticker,
+            currency="USD",
+            sessions=sessions,
+            open=closes,
+            high=[value + Decimal("1") for value in closes],
+            low=[value - Decimal("1") for value in closes],
+            close=closes,
+            adjusted_close=closes,
+            source="fixture",
+            collected_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+        )
+
+
+async def test_validation_worker_completes_three_horizons_without_rewriting_run(
+    session_factory,
+    instrument_classifier,
+    tmp_path,
+):
+    principal = _principal()
+    run = (
+        await AssessmentService(session_factory, instrument_classifier).submit(
+            principal,
+            SubmitAssessments(
+                items=[AssessmentItem(ticker="NVDA", analysis_date=date(2026, 7, 1))],
+                idempotency_key="validation-integration-20260725",  # gitleaks:allow
+            ),
+            "validation-submit",
+        )
+    )[0]
+    async with session_factory() as session, session.begin():
+        snapshot = RunConfigSnapshot(
+            content_json={"resolved": {"benchmark_ticker": "SPY"}},
+            sha256="9" * 64,
+            gateway_snapshot_id="validation-snapshot",
+        )
+        session.add(snapshot)
+        await session.flush()
+        persisted = await session.get(AssessmentRun, run.id)
+        persisted.status = RunStatus.SUCCEEDED.value
+        persisted.config_snapshot_id = snapshot.id
+        persisted.finished_at = datetime(2026, 7, 2, tzinfo=timezone.utc)
+        session.add(
+            Decision(
+                run_id=run.id,
+                rating="Buy",
+                executive_summary="Fixture",
+                investment_thesis="Fixture",
+                price_target=Decimal("110"),
+                time_horizon="20 sessions",
+                structured_json={},
+            )
+        )
+
+    service = ValidationService(ValidationRepository(session_factory))
+    first = await service.schedule(principal, run.id)
+    second = await service.schedule(principal, run.id)
+    assert [item.id for item in first] == [item.id for item in second]
+
+    worker = ValidationWorker(
+        session_factory,
+        _Prices(),
+        LocalArtifactStore(tmp_path / "artifacts"),
+    )
+    now = datetime(2026, 7, 25, 12, tzinfo=timezone.utc)
+    assert await worker.run_once(now)
+    assert await worker.run_once(now)
+    assert await worker.run_once(now)
+    assert not await worker.run_once(now)
+
+    async with session_factory() as session:
+        validations = list(
+            await session.scalars(
+                select(Validation).where(Validation.run_id == run.id).order_by(Validation.horizon)
+            )
+        )
+        persisted = await session.get(AssessmentRun, run.id)
+        artifact_count = int(
+            await session.scalar(
+                select(func.count()).select_from(Artifact).where(Artifact.run_id == run.id)
+            )
+            or 0
+        )
+        events = list(
+            await session.scalars(select(RunEvent.event_type).where(RunEvent.run_id == run.id))
+        )
+    assert [item.status for item in validations] == ["completed", "completed", "completed"]
+    assert validations[1].raw_return == Decimal("0.0500000000")
+    assert persisted.status == RunStatus.SUCCEEDED.value
+    assert artifact_count == 3
+    assert events.count("validation.completed") == 3
