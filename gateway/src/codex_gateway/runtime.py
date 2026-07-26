@@ -229,19 +229,19 @@ class CodexRuntime:
         self._active_completions += 1
         try:
             with tempfile.TemporaryDirectory(prefix="tradingng-codex-") as cwd:
-                return await asyncio.wait_for(
-                    self._run_turn(
-                        prompt,
-                        output_schema,
-                        Path(cwd),
-                        pinned_config=pinned_config,
-                    ),
-                    timeout=self.settings.request_timeout_seconds,
+                turn = self._run_turn(
+                    prompt,
+                    output_schema,
+                    Path(cwd),
+                    pinned_config=pinned_config,
                 )
-        except asyncio.TimeoutError as exc:
-            raise CodexTimeout(
-                f"Codex request exceeded {self.settings.request_timeout_seconds} seconds"
-            ) from exc
+                timeout = self.settings.request_timeout_seconds
+                if timeout is None:
+                    return await turn
+                try:
+                    return await asyncio.wait_for(turn, timeout=timeout)
+                except asyncio.TimeoutError as exc:
+                    raise CodexTimeout(f"Codex request exceeded {timeout} seconds") from exc
         finally:
             self._active_completions -= 1
 

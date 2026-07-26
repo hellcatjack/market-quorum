@@ -339,6 +339,21 @@ async def test_no_application_concurrency_limit(runtime_factory):
 
 
 @pytest.mark.asyncio
+async def test_unbounded_completion_waits_until_turn_finishes(runtime_factory):
+    runtime, transports = runtime_factory(timeout=None)
+    await runtime.start()
+    transport = transports[0]
+    task = asyncio.create_task(runtime.complete("prompt", {"type": "object"}))
+    await transport.turn_started.wait()
+    await asyncio.sleep(0.06)
+    assert not task.done()
+    assert not any(method == "turn/interrupt" for method, _ in transport.requests)
+    transport.release_turns.set()
+    assert (await task).final_message
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
 async def test_timeout_interrupts_turn(runtime_factory):
     runtime, transports = runtime_factory(timeout=0.05)
     await runtime.start()

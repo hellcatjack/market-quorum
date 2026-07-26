@@ -27,11 +27,24 @@ def _positive_int(env_name: str, default: int, maximum: int | None = None) -> in
     return value
 
 
+def _optional_timeout(env_name: str) -> int | None:
+    raw = os.getenv(env_name)
+    if raw in (None, "", "0"):
+        return None
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{env_name} must be an integer") from exc
+    if value < 0:
+        raise ValueError(f"{env_name} is outside its valid range")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     host: str = "127.0.0.1"
     port: int = 8000
-    request_timeout_seconds: int = 600
+    request_timeout_seconds: float | None = None
     max_body_bytes: int = 2 * 1024 * 1024
     codex_bin: str = "codex"
     minimum_codex_version: tuple[int, int, int] = (0, 145, 0)
@@ -41,5 +54,5 @@ class Settings:
     def from_env(cls) -> Settings:
         return cls(
             port=_positive_int("CODEX_GATEWAY_PORT", 8000, 65535),
-            request_timeout_seconds=_positive_int("CODEX_GATEWAY_REQUEST_TIMEOUT_SECONDS", 600),
+            request_timeout_seconds=_optional_timeout("CODEX_GATEWAY_REQUEST_TIMEOUT_SECONDS"),
         )
