@@ -17,6 +17,19 @@ from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.instruments.classification import InstrumentClassification
 
 
+def test_submission_memory_mode_defaults_to_independent_and_accepts_historical():
+    base = {
+        "items": [{"ticker": "NVDA", "analysis_date": "2026-07-25"}],
+        "idempotency_key": "memory-mode-20260725",
+    }
+
+    independent = SubmitAssessments.model_validate(base)
+    historical = SubmitAssessments.model_validate({**base, "memory_mode": "historical"})
+
+    assert independent.memory_mode.value == "independent"
+    assert historical.memory_mode.value == "historical"
+
+
 class _AsyncContext:
     async def __aenter__(self):
         return self

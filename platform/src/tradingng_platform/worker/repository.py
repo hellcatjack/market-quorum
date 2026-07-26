@@ -437,6 +437,11 @@ class WorkerRepository:
             ("final_state", "application/json", work_dir / "final_state.json"),
             ("decision", "application/json", work_dir / "decision.json"),
             ("run_config", "application/json", work_dir / "run-config.json"),
+            (
+                "memory_context",
+                "application/json",
+                work_dir / "working" / "memory_context.json",
+            ),
             ("evidence", "application/x-ndjson", work_dir / "working" / "evidence.jsonl"),
             (
                 "llm_interactions",

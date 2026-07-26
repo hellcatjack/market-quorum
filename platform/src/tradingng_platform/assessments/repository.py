@@ -9,9 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tradingng_platform.assessments.contracts import (
     AssessmentItem,
+    MemorySourceView,
     RunDetailView,
     RunEventView,
     RunListFilters,
+    RunMemoryView,
     RunPage,
     RunStepView,
     RunView,
@@ -206,6 +208,7 @@ class AssessmentRepository:
             defaults_json={
                 "analysts": list(command.analysts),
                 "depth": command.depth.value,
+                "memory_mode": command.memory_mode.value,
                 "language": command.language,
                 "_submission_sha256": _submission_sha256(command),
             },
@@ -339,6 +342,29 @@ class AssessmentRepository:
         content = dict(snapshot.content_json) if snapshot is not None else {}
         gateway = dict(content.get("gateway") or {})
         source = dict(content.get("source") or {})
+        memory_content = dict(content.get("memory") or {})
+        memory_sources = tuple(
+            MemorySourceView.model_validate(
+                {
+                    key: entry[key]
+                    for key in (
+                        "source_run_id",
+                        "validation_id",
+                        "analysis_date",
+                        "exit_session",
+                        "horizon",
+                        "rating",
+                        "raw_return",
+                        "alpha",
+                        "direction_correct",
+                        "price_target_hit",
+                        "content_sha256",
+                    )
+                    if key in entry
+                }
+            )
+            for entry in memory_content.get("entries", ())
+        )
         return RunDetailView(
             **base.model_dump(),
             config_snapshot_sha256=snapshot.sha256 if snapshot is not None else None,
@@ -352,6 +378,11 @@ class AssessmentRepository:
             resolved_config=dict(content.get("resolved") or {}),
             data_vendors=dict(content.get("data_vendors") or {}),
             tool_vendors=dict(content.get("tool_vendors") or {}),
+            memory=RunMemoryView(
+                mode=memory_content.get("mode", "independent"),
+                snapshot_sha256=memory_content.get("snapshot_sha256"),
+                sources=memory_sources,
+            ),
         )
 
     async def get_run_context(

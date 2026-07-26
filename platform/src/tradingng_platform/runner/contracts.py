@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, model_validator
 
+from tradingng_platform.memory import MemorySnapshot, empty_memory_snapshot
+
 
 class DependencyHealthEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -41,6 +43,7 @@ class RunnerInput(BaseModel):
     work_dir: Path
     data_vendors: dict[str, str]
     tool_vendors: dict[str, str]
+    memory: MemorySnapshot = Field(default_factory=empty_memory_snapshot)
 
 
 class RunnerEvent(BaseModel):

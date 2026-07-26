@@ -792,6 +792,48 @@ export interface components {
             /** Ticker */
             ticker: string;
         };
+        /**
+         * MemoryMode
+         * @enum {string}
+         */
+        MemoryMode: "independent" | "historical";
+        /** MemorySourceView */
+        MemorySourceView: {
+            /** Alpha */
+            alpha: string;
+            /**
+             * Analysis Date
+             * Format: date
+             */
+            analysis_date: string;
+            /** Content Sha256 */
+            content_sha256: string;
+            /** Direction Correct */
+            direction_correct?: boolean | null;
+            /**
+             * Exit Session
+             * Format: date
+             */
+            exit_session: string;
+            /** Horizon */
+            horizon: number;
+            /** Price Target Hit */
+            price_target_hit?: boolean | null;
+            /** Rating */
+            rating: string;
+            /** Raw Return */
+            raw_return: string;
+            /**
+             * Source Run Id
+             * Format: uuid
+             */
+            source_run_id: string;
+            /**
+             * Validation Id
+             * Format: uuid
+             */
+            validation_id: string;
+        };
         /** ReviewView */
         ReviewView: {
             /** Comment */
@@ -853,6 +895,7 @@ export interface components {
             id: string;
             /** Instrument Name */
             instrument_name?: string | null;
+            memory?: components["schemas"]["RunMemoryView"];
             /** Prompt Schema Version */
             prompt_schema_version?: string | null;
             /** Request Config */
@@ -879,6 +922,18 @@ export interface components {
             };
             /** Tradingagents Commit */
             tradingagents_commit?: string | null;
+        };
+        /** RunMemoryView */
+        RunMemoryView: {
+            /** @default independent */
+            mode: components["schemas"]["MemoryMode"];
+            /** Snapshot Sha256 */
+            snapshot_sha256?: string | null;
+            /**
+             * Sources
+             * @default []
+             */
+            sources: components["schemas"]["MemorySourceView"][];
         };
         /** RunPage */
         RunPage: {
@@ -1023,6 +1078,8 @@ export interface components {
              * @default Chinese
              */
             language: string;
+            /** @default independent */
+            memory_mode: components["schemas"]["MemoryMode"];
         };
         /** ValidationError */
         ValidationError: {

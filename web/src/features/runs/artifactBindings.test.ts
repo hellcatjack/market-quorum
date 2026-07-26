@@ -54,6 +54,7 @@ const EVENTS: RunEvent[] = [
 test("binds every persisted TradingAgents artifact to its real business event", () => {
   const expected = new Map<string, number>([
     ["run_config", 3],
+    ["memory_context", 3],
     ["report_2_fundamentals", 7],
     ["report_3_market", 4],
     ["report_4_news", 6],

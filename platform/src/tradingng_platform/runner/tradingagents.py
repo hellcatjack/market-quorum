@@ -11,6 +11,7 @@ from typing import Any
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
+from tradingng_platform.memory import render_tradingagents_memory
 from tradingng_platform.runner.callbacks import AuditCallback
 from tradingng_platform.runner.contracts import RunnerInput
 from tradingng_platform.runner.events import EventEmitter, StageTracker
@@ -49,6 +50,17 @@ class TradingAgentsRunner:
 
     def run(self) -> RunnerResult:
         directories = self._create_directories()
+        memory_context_path = directories["working"] / "memory_context.json"
+        _write_json(
+            memory_context_path,
+            self.input.memory.model_dump(mode="json"),
+        )
+        memory_content = render_tradingagents_memory(self.input.memory)
+        if memory_content:
+            _write_text(
+                directories["memory"] / "trading_memory.md",
+                memory_content,
+            )
         callback = AuditCallback(
             directories["working"],
             self.input.data_vendors,
@@ -99,6 +111,7 @@ class TradingAgentsRunner:
             ("final_state", final_state_path),
             ("decision", decision_path),
             ("reports", report_dir),
+            ("memory_context", memory_context_path),
         ]
         for name, path in artifacts:
             self.emitter.emit(
@@ -231,6 +244,18 @@ def _write_json(path: Path, value: Any) -> None:
         with temporary.open("x", encoding="utf-8") as stream:
             json.dump(value, stream, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
             stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _write_text(path: Path, value: str) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as stream:
+            stream.write(value)
             stream.flush()
             os.fsync(stream.fileno())
         temporary.replace(path)

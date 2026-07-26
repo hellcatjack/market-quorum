@@ -26,6 +26,8 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
   const [tickerText, setTickerText] = useState("");
   const [analysisDate, setAnalysisDate] = useState(localToday());
   const [depth, setDepth] = useState<SubmitAssessmentBatch["depth"]>("deep");
+  const [memoryMode, setMemoryMode] =
+    useState<SubmitAssessmentBatch["memory_mode"]>("independent");
   const [language, setLanguage] = useState("Chinese");
   const [analysts, setAnalysts] = useState<string[]>(ANALYSTS.map(([value]) => value));
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -76,6 +78,7 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
       items: tickers.map((ticker) => ({ ticker, analysis_date: analysisDate })),
       analysts,
       depth,
+      memory_mode: memoryMode,
       language,
       idempotency_key: idempotencyKey.current,
     });
@@ -141,6 +144,19 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
               <option value="Chinese">中文</option>
               <option value="English">English</option>
             </select>
+          </label>
+          <label className="field">
+            <span>评估记忆</span>
+            <select aria-label="评估记忆" value={memoryMode} onChange={(event) => {
+              setMemoryMode(event.target.value as typeof memoryMode);
+              idempotencyKey.current = globalThis.crypto.randomUUID();
+            }}>
+              <option value="independent">独立评估（默认）</option>
+              <option value="historical">历史辅助（仅限已验证记录）</option>
+            </select>
+            <small>
+              历史辅助最多引用 5 次同标的旧评估，且只使用分析日前已完成的表现验证。
+            </small>
           </label>
         </div>
         <fieldset className="analyst-fieldset">

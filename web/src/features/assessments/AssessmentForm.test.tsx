@@ -64,6 +64,7 @@ test("defaults to Chinese, Deep and all analysts, then routes after a batch subm
 
   expect(screen.getByRole("combobox", { name: "分析深度" })).toHaveValue("deep");
   expect(screen.getByRole("combobox", { name: "输出语言" })).toHaveValue("Chinese");
+  expect(screen.getByRole("combobox", { name: "评估记忆" })).toHaveValue("independent");
   expect(screen.queryByRole("combobox", { name: "资产类型" })).not.toBeInTheDocument();
   expect(screen.getAllByRole("checkbox")).toHaveLength(4);
   for (const checkbox of screen.getAllByRole("checkbox")) expect(checkbox).toBeChecked();
@@ -82,8 +83,44 @@ test("defaults to Chinese, Deep and all analysts, then routes after a batch subm
   expect(payload.items.every((item: object) => !("asset_type" in item))).toBe(true);
   expect(payload.analysts).toEqual(["market", "social", "news", "fundamentals"]);
   expect(payload.depth).toBe("deep");
+  expect(payload.memory_mode).toBe("independent");
   expect(payload.language).toBe("Chinese");
   expect(payload.idempotency_key).toBe("00000000-0000-4000-8000-000000000001");
+});
+
+test("can explicitly request a look-ahead-safe historical assessment", async () => {
+  const user = userEvent.setup();
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(
+      JSON.stringify({
+        items: [{
+          id: "00000000-0000-0000-0000-000000000601",
+          request_id: "00000000-0000-0000-0000-000000000602",
+          ticker: "NVDA",
+          asset_type: "stock",
+          analysis_date: "2026-07-25",
+          status: "queued",
+          attempt: 1,
+          created_at: "2026-07-25T12:00:00Z",
+        }],
+      }),
+      { status: 202, headers: { "Content-Type": "application/json" } },
+    ),
+  );
+  renderForm();
+
+  await user.type(screen.getByRole("textbox", { name: "标的代码" }), "NVDA");
+  await user.clear(screen.getByLabelText("分析日期"));
+  await user.type(screen.getByLabelText("分析日期"), "2026-07-25");
+  await user.selectOptions(
+    screen.getByRole("combobox", { name: "评估记忆" }),
+    "historical",
+  );
+  await user.click(screen.getByRole("button", { name: "派发评估" }));
+
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
+  expect(payload.memory_mode).toBe("historical");
 });
 
 test("validates dates and renders a server error next to the form", async () => {

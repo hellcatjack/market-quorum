@@ -67,6 +67,23 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
       resolved_config: { debate_rounds: 3, risk_rounds: 3 },
       data_vendors: { market: "yfinance" },
       tool_vendors: {},
+      memory: {
+        mode: "historical",
+        snapshot_sha256: "memory-snapshot-sha",
+        sources: [{
+          source_run_id: "00000000-0000-0000-0000-000000000777",
+          validation_id: "00000000-0000-0000-0000-000000000778",
+          analysis_date: "2026-07-01",
+          exit_session: "2026-07-06",
+          horizon: 5,
+          rating: "Buy",
+          raw_return: "0.05",
+          alpha: "0.02",
+          direction_correct: true,
+          price_target_hit: false,
+          content_sha256: "memory-entry-sha",
+        }],
+      },
     });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -83,6 +100,13 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
   expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
   expect(screen.getByText("xhigh")).toBeInTheDocument();
   expect(screen.getByText("snapshot-sha")).toBeInTheDocument();
+  expect(screen.getByText("历史辅助")).toBeInTheDocument();
+  expect(screen.getByText("历史经验 1 条")).toBeInTheDocument();
+  expect(screen.getByText("2026-07-01 · 5 个交易日验证")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "查看来源评估" })).toHaveAttribute(
+    "href",
+    "/runs/00000000-0000-0000-0000-000000000777",
+  );
   expect(screen.getByText("等待更好估值")).toBeInTheDocument();
   expect(screen.getByText("证据充分")).toBeInTheDocument();
   const decisionHeading = screen.getByRole("heading", { name: "投资结论" });

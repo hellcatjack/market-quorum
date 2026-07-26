@@ -1,4 +1,10 @@
+import uuid
+from datetime import date
+from decimal import Decimal
+
+from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.gateway.client import GatewaySnapshot
+from tradingng_platform.memory.context import MemoryCandidate, build_memory_snapshot
 from tradingng_platform.scheduler.policy import AdmissionDecision, AdmissionPolicy, SystemSnapshot
 from tradingng_platform.scheduler.repository import ExecutionMetadata, build_run_snapshot
 from tradingng_platform.scheduler.service import AdmissionService
@@ -96,10 +102,45 @@ def test_run_snapshot_is_canonical_and_resolves_depth_rounds():
         "language": "Chinese",
     }
 
-    first = build_run_snapshot(request_config, gateway, metadata)
-    second = build_run_snapshot(dict(reversed(list(request_config.items()))), gateway, metadata)
+    memory = build_memory_snapshot(
+        MemoryMode.HISTORICAL,
+        "NVDA",
+        date(2026, 7, 25),
+        [
+            MemoryCandidate(
+                source_run_id=uuid.UUID(int=1),
+                validation_id=uuid.UUID(int=2),
+                ticker="NVDA",
+                analysis_date=date(2026, 7, 1),
+                exit_session=date(2026, 7, 6),
+                horizon=5,
+                rating="Buy",
+                executive_summary="Earlier conclusion",
+                investment_thesis="Earlier thesis",
+                price_target=Decimal("200"),
+                time_horizon="6 months",
+                raw_return=Decimal("0.05"),
+                alpha=Decimal("0.02"),
+                max_adverse_excursion=Decimal("-0.03"),
+                max_favorable_excursion=Decimal("0.07"),
+                direction_correct=True,
+                price_target_hit=False,
+            )
+        ],
+    )
+
+    first = build_run_snapshot(request_config, gateway, metadata, memory)
+    second = build_run_snapshot(
+        dict(reversed(list(request_config.items()))),
+        gateway,
+        metadata,
+        memory,
+    )
 
     assert first.sha256 == second.sha256
     assert first.content["resolved"]["debate_rounds"] == 3
     assert first.content["resolved"]["risk_rounds"] == 3
     assert first.content["gateway"]["snapshot_id"] == "b" * 64
+    assert first.content["memory"]["mode"] == "historical"
+    assert first.content["memory"]["entries"][0]["horizon"] == 5
+    assert first.content["memory"]["snapshot_sha256"] == memory.snapshot_sha256

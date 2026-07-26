@@ -142,6 +142,27 @@ async def test_run_detail_exposes_immutable_execution_metadata(
                 "prompt_schema_version": "v1",
                 "data_vendors": {"market": "yfinance"},
                 "tool_vendors": {},
+                "memory": {
+                    "mode": "historical",
+                    "snapshot_sha256": "b" * 64,
+                    "entries": [
+                        {
+                            "source_run_id": "00000000-0000-0000-0000-000000000701",
+                            "validation_id": "00000000-0000-0000-0000-000000000702",
+                            "analysis_date": "2026-07-01",
+                            "exit_session": "2026-07-06",
+                            "horizon": 5,
+                            "rating": "Buy",
+                            "raw_return": "0.05",
+                            "alpha": "0.02",
+                            "direction_correct": True,
+                            "price_target_hit": False,
+                            "content_sha256": "c" * 64,
+                            "decision": "not exposed in the detail view",
+                            "reflection": "not exposed in the detail view",
+                        }
+                    ],
+                },
             },
             sha256="a" * 64,
             gateway_snapshot_id="gateway-snapshot",
@@ -161,3 +182,7 @@ async def test_run_detail_exposes_immutable_execution_metadata(
     assert detail.prompt_schema_version == "v1"
     assert detail.request_config == {"depth": "deep", "language": "Chinese"}
     assert detail.resolved_config == {"debate_rounds": 3, "risk_rounds": 3}
+    assert detail.memory.mode.value == "historical"
+    assert detail.memory.snapshot_sha256 == "b" * 64
+    assert detail.memory.sources[0].horizon == 5
+    assert not hasattr(detail.memory.sources[0], "decision")

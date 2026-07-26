@@ -2,6 +2,7 @@ import base64
 import json
 import uuid
 from datetime import date, datetime
+from decimal import Decimal
 from enum import Enum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -14,6 +15,11 @@ class Depth(str, Enum):
     SHALLOW = "shallow"
     MEDIUM = "medium"
     DEEP = "deep"
+
+
+class MemoryMode(str, Enum):
+    INDEPENDENT = "independent"
+    HISTORICAL = "historical"
 
 
 class AssessmentItem(BaseModel):
@@ -31,6 +37,7 @@ class SubmitAssessments(BaseModel):
     items: list[AssessmentItem] = Field(min_length=1, max_length=100)
     analysts: tuple[str, ...] = ("market", "social", "news", "fundamentals")
     depth: Depth = Depth.DEEP
+    memory_mode: MemoryMode = MemoryMode.INDEPENDENT
     language: str = "Chinese"
     idempotency_key: str = Field(min_length=8, max_length=128)
 
@@ -48,6 +55,26 @@ class RunView(BaseModel):
     created_at: datetime
 
 
+class MemorySourceView(BaseModel):
+    source_run_id: uuid.UUID
+    validation_id: uuid.UUID
+    analysis_date: date
+    exit_session: date
+    horizon: int
+    rating: str
+    raw_return: Decimal
+    alpha: Decimal
+    direction_correct: bool | None = None
+    price_target_hit: bool | None = None
+    content_sha256: str
+
+
+class RunMemoryView(BaseModel):
+    mode: MemoryMode = MemoryMode.INDEPENDENT
+    snapshot_sha256: str | None = None
+    sources: tuple[MemorySourceView, ...] = ()
+
+
 class RunDetailView(RunView):
     config_snapshot_sha256: str | None = None
     gateway_snapshot_id: str | None = None
@@ -60,6 +87,7 @@ class RunDetailView(RunView):
     resolved_config: dict = Field(default_factory=dict)
     data_vendors: dict[str, str] = Field(default_factory=dict)
     tool_vendors: dict[str, str] = Field(default_factory=dict)
+    memory: RunMemoryView = Field(default_factory=RunMemoryView)
 
 
 class RunListFilters(BaseModel):

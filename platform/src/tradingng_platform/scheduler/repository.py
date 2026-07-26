@@ -6,11 +6,12 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tradingng_platform.assessments.contracts import Depth
+from tradingng_platform.assessments.contracts import Depth, MemoryMode
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus, assert_transition
 from tradingng_platform.gateway.client import GatewaySnapshot
+from tradingng_platform.memory import HistoricalMemoryRepository, MemorySnapshot
 from tradingng_platform.models import (
     AssessmentBatch,
     AssessmentRequest,
@@ -66,6 +67,7 @@ def build_run_snapshot(
     request_config: dict,
     gateway: GatewaySnapshot,
     metadata: ExecutionMetadata,
+    memory: MemorySnapshot,
 ) -> BuiltRunSnapshot:
     depth = Depth(request_config["depth"])
     debate_rounds, risk_rounds = DEPTH_ROUNDS[depth]
@@ -89,6 +91,7 @@ def build_run_snapshot(
         "prompt_schema_version": metadata.prompt_schema_version,
         "data_vendors": dict(metadata.data_vendors),
         "tool_vendors": dict(metadata.tool_vendors),
+        "memory": memory.model_dump(mode="json"),
     }
     canonical = json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
     return BuiltRunSnapshot(content=content, sha256=hashlib.sha256(canonical).hexdigest())
@@ -267,16 +270,23 @@ class SchedulerRepository:
         await circuits.acquire_expired_probes(now, vendors=configured_vendors)
 
         defaults = dict(batch.defaults_json)
+        memory_mode = MemoryMode(defaults.get("memory_mode", MemoryMode.INDEPENDENT.value))
         request_config = {
             "ticker": instrument.canonical_ticker,
             "asset_type": instrument.asset_type,
             "analysis_date": request.analysis_date.isoformat(),
             "analysts": defaults["analysts"],
             "depth": defaults["depth"],
+            "memory_mode": memory_mode.value,
             "language": defaults["language"],
             **dict(request.requested_config_json),
         }
-        built = build_run_snapshot(request_config, gateway, metadata)
+        memory = await HistoricalMemoryRepository(self.session).build(
+            ticker=instrument.canonical_ticker,
+            analysis_date=request.analysis_date,
+            mode=memory_mode,
+        )
+        built = build_run_snapshot(request_config, gateway, metadata, memory)
         snapshot = await self.session.scalar(
             select(RunConfigSnapshot).where(RunConfigSnapshot.sha256 == built.sha256)
         )
@@ -299,6 +309,11 @@ class SchedulerRepository:
         await AssessmentRepository(self.session).append_event(
             run.id,
             "assessment.admitted",
-            {"config_snapshot_sha256": built.sha256},
+            {
+                "config_snapshot_sha256": built.sha256,
+                "memory_mode": memory.mode.value,
+                "memory_entry_count": len(memory.entries),
+                "memory_snapshot_sha256": memory.snapshot_sha256,
+            },
         )
         return decision

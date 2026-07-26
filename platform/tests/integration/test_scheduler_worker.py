@@ -5,17 +5,30 @@ import signal
 import sys
 import uuid
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import select
 
 from tradingng_platform.artifacts.store import LocalArtifactStore
-from tradingng_platform.assessments.contracts import AssessmentItem, SubmitAssessments
+from tradingng_platform.assessments.contracts import (
+    AssessmentItem,
+    MemoryMode,
+    SubmitAssessments,
+)
 from tradingng_platform.assessments.service import AssessmentService
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.gateway.client import GatewaySnapshot
-from tradingng_platform.models import AssessmentRun, RunEvent, Worker, WorkerLease
+from tradingng_platform.models import (
+    AssessmentRun,
+    Decision,
+    RunConfigSnapshot,
+    RunEvent,
+    Validation,
+    Worker,
+    WorkerLease,
+)
 from tradingng_platform.scheduler.policy import SystemSnapshot
 from tradingng_platform.scheduler.repository import (
     ExecutionMetadata,
@@ -103,6 +116,142 @@ async def test_idle_worker_heartbeat_refreshes_liveness(session_factory):
         worker = await session.get(Worker, worker_id)
         assert worker.status == "idle"
         assert worker.heartbeat_at > stale_at
+
+
+async def test_historical_mode_is_pinned_at_admission_without_eligible_history(
+    session_factory,
+    instrument_classifier,
+):
+    principal = Principal(
+        "issuer",
+        "historical-mode-test",
+        "user",
+        frozenset({"assessments:submit"}),
+        roles=frozenset({"Analyst"}),
+    )
+    run = (
+        await AssessmentService(session_factory, instrument_classifier).submit(
+            principal,
+            SubmitAssessments(
+                items=[AssessmentItem(ticker="NVDA", analysis_date=date(2026, 7, 25))],
+                memory_mode=MemoryMode.HISTORICAL,
+                idempotency_key="historical-mode-snapshot",
+            ),
+            "request-historical-mode",
+        )
+    )[0]
+
+    assert (
+        await _admit_once(
+            session_factory,
+            ExecutionMetadata("root", "submodule", "v1", {}, {}),
+        )
+    ).allowed
+
+    async with session_factory() as session:
+        admitted = await session.get(AssessmentRun, run.id)
+        snapshot = await session.get(RunConfigSnapshot, admitted.config_snapshot_id)
+        event_payload = await session.scalar(
+            select(RunEvent.payload_json).where(
+                RunEvent.run_id == run.id,
+                RunEvent.event_type == "assessment.admitted",
+            )
+        )
+
+    assert snapshot.content_json["request"]["memory_mode"] == "historical"
+    assert snapshot.content_json["memory"]["mode"] == "historical"
+    assert snapshot.content_json["memory"]["entries"] == []
+    assert event_payload["memory_entry_count"] == 0
+
+
+async def test_admission_pins_an_eligible_validated_prior_assessment(
+    session_factory,
+    instrument_classifier,
+):
+    principal = Principal(
+        "issuer",
+        "validated-history-test",
+        "user",
+        frozenset({"assessments:submit"}),
+        roles=frozenset({"Analyst"}),
+    )
+    service = AssessmentService(session_factory, instrument_classifier)
+    old_run = (
+        await service.submit(
+            principal,
+            SubmitAssessments(
+                items=[AssessmentItem(ticker="NVDA", analysis_date=date(2026, 6, 1))],
+                idempotency_key="validated-history-source",
+            ),
+            "request-validated-source",
+        )
+    )[0]
+    observed_at = datetime(2026, 7, 10, 20, 0, tzinfo=timezone.utc)
+    async with session_factory() as session, session.begin():
+        source = await session.get(AssessmentRun, old_run.id)
+        source.status = RunStatus.SUCCEEDED.value
+        source.finished_at = observed_at
+        session.add(
+            Decision(
+                run_id=old_run.id,
+                rating="Buy",
+                executive_summary="Earlier conclusion",
+                investment_thesis="Earlier thesis",
+                price_target=Decimal("200"),
+                time_horizon="6 months",
+                structured_json={},
+            )
+        )
+        session.add(
+            Validation(
+                run_id=old_run.id,
+                horizon=20,
+                status="completed",
+                scheduled_for=observed_at,
+                observed_at=observed_at,
+                raw_return=Decimal("0.05"),
+                benchmark_return=Decimal("0.03"),
+                alpha=Decimal("0.02"),
+                max_adverse_excursion=Decimal("-0.03"),
+                max_favorable_excursion=Decimal("0.07"),
+                trigger_results_json={
+                    "entry_session": "2026-06-02",
+                    "exit_session": "2026-07-10",
+                    "direction_correct": True,
+                    "price_target_hit": False,
+                },
+                attempts=1,
+            )
+        )
+
+    new_run = (
+        await service.submit(
+            principal,
+            SubmitAssessments(
+                items=[AssessmentItem(ticker="NVDA", analysis_date=date(2026, 7, 25))],
+                memory_mode=MemoryMode.HISTORICAL,
+                idempotency_key="validated-history-target",
+            ),
+            "request-validated-target",
+        )
+    )[0]
+    assert (
+        await _admit_once(
+            session_factory,
+            ExecutionMetadata("root", "submodule", "v1", {}, {}),
+        )
+    ).allowed
+
+    async with session_factory() as session:
+        admitted = await session.get(AssessmentRun, new_run.id)
+        snapshot = await session.get(RunConfigSnapshot, admitted.config_snapshot_id)
+
+    entry = snapshot.content_json["memory"]["entries"][0]
+    assert entry["source_run_id"] == str(old_run.id)
+    assert entry["horizon"] == 20
+    assert entry["analysis_date"] == "2026-06-01"
+    assert "Earlier conclusion" in entry["decision"]
+    assert "Validated after 20 sessions" in entry["reflection"]
 
 
 async def test_two_tickers_overlap_but_same_ticker_never_overlaps(

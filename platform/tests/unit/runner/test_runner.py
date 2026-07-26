@@ -1,10 +1,13 @@
 import json
 import uuid
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from tradingng_platform.assessments.contracts import MemoryMode
+from tradingng_platform.memory import MemoryCandidate, build_memory_snapshot
 from tradingng_platform.runner.callbacks import AuditCallback
 from tradingng_platform.runner.contracts import RunnerInput
 from tradingng_platform.runner.tradingagents import TradingAgentsRunner
@@ -71,6 +74,32 @@ class _FakeGraph:
 
 
 def _runner_input(tmp_path):
+    memory = build_memory_snapshot(
+        MemoryMode.HISTORICAL,
+        "NVDA",
+        date(2026, 7, 25),
+        [
+            MemoryCandidate(
+                source_run_id=uuid.UUID(int=2),
+                validation_id=uuid.UUID(int=3),
+                ticker="NVDA",
+                analysis_date=date(2026, 7, 1),
+                exit_session=date(2026, 7, 6),
+                horizon=5,
+                rating="Buy",
+                executive_summary="Earlier conclusion",
+                investment_thesis="Earlier thesis",
+                price_target=Decimal("200"),
+                time_horizon="6 months",
+                raw_return=Decimal("0.05"),
+                alpha=Decimal("0.02"),
+                max_adverse_excursion=Decimal("-0.03"),
+                max_favorable_excursion=Decimal("0.07"),
+                direction_correct=True,
+                price_target_hit=False,
+            )
+        ],
+    )
     return RunnerInput(
         run_id=uuid.UUID(int=1),
         ticker="NVDA",
@@ -86,6 +115,7 @@ def _runner_input(tmp_path):
         work_dir=tmp_path / "job",
         data_vendors={"core_stock_apis": "yfinance"},
         tool_vendors={"get_stock_data": "yfinance"},
+        memory=memory,
     )
 
 
@@ -129,6 +159,14 @@ def test_runner_isolated_config_artifacts_and_redaction(tmp_path):
     assert "must-not-leak" not in evidence
     assert evidence.count("[REDACTED]") == 2
     assert (runner_input.work_dir / "reports" / "complete_report.md").is_file()
+    memory_path = runner_input.work_dir / "memory" / "trading_memory.md"
+    memory_context_path = runner_input.work_dir / "working" / "memory_context.json"
+    assert "Earlier conclusion" in memory_path.read_text(encoding="utf-8")
+    assert (
+        json.loads(memory_context_path.read_text(encoding="utf-8"))["snapshot_sha256"]
+        == runner_input.memory.snapshot_sha256
+    )
+    assert "memory_context" in [event.name for event in events if event.type == "artifact"]
 
 
 def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path):

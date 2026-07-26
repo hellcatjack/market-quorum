@@ -4,6 +4,8 @@ from datetime import date
 
 import pytest
 
+from tradingng_platform.assessments.contracts import MemoryMode
+from tradingng_platform.memory import build_memory_snapshot
 from tradingng_platform.runner.contracts import DependencyHealthEvent, RunnerEvent
 from tradingng_platform.worker.repository import ClaimedRun
 from tradingng_platform.worker.service import RunnerProtocol, build_runner_input
@@ -81,6 +83,12 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
             },
             "data_vendors": {"core_stock_apis": "yfinance"},
             "tool_vendors": {},
+            "memory": build_memory_snapshot(
+                MemoryMode.INDEPENDENT,
+                "NVDA",
+                date(2026, 7, 25),
+                (),
+            ).model_dump(mode="json"),
         },
     )
 
@@ -94,6 +102,38 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
     assert runner_input.work_dir == tmp_path / "jobs" / str(run_id)
     assert runner_input.debate_rounds == 3
     assert runner_input.codex_reasoning_effort == "xhigh"
+    assert runner_input.memory.mode is MemoryMode.INDEPENDENT
+
+
+def test_old_claim_snapshot_without_memory_remains_independent(tmp_path):
+    claim = ClaimedRun(
+        run_id=uuid.UUID(int=2),
+        ticker="NVDA",
+        asset_type="stock",
+        analysis_date=date(2026, 7, 25),
+        snapshot={
+            "request": {
+                "analysts": ["market"],
+                "language": "Chinese",
+            },
+            "resolved": {"debate_rounds": 1, "risk_rounds": 1},
+            "gateway": {
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "xhigh",
+            },
+            "data_vendors": {},
+            "tool_vendors": {},
+        },
+    )
+
+    runner_input = build_runner_input(
+        claim,
+        job_dir=tmp_path / "jobs",
+        gateway_url="http://127.0.0.1:8000",
+    )
+
+    assert runner_input.memory.mode is MemoryMode.INDEPENDENT
+    assert runner_input.memory.entries == ()
 
 
 def test_dependency_health_event_requires_vendor_identity():

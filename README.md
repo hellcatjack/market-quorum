@@ -22,6 +22,8 @@ multi-user system.
   guards.
 - Immutable run history, complete reports, evidence, artifacts, LLM interaction
   metadata, comments, reviews, and performance validation.
+- Optional history-assisted assessments that use only same-ticker records whose
+  outcome validation completed before the new analysis date.
 - Versioned REST APIs, Streamable HTTP/stdio MCP, API credentials, SSE events,
   and signed outbound webhooks.
 - OIDC/PKCE browser authentication and role/scope authorization for internal
@@ -192,6 +194,23 @@ when the Gateway activity threshold is reached, CPU remains above its limit,
 available memory or disk is too low, a data vendor circuit is open, or the same
 canonical ticker is already active. Existing work is not cancelled when a
 guard closes admission.
+
+## Independent and history-assisted assessments
+
+New jobs default to `independent`, so an earlier conclusion cannot influence
+the new research. The Web form, REST API, and MCP tools can explicitly request
+`memory_mode=historical`. At admission time, the scheduler selects at most five
+prior assessments of the same ticker. It uses only the highest matured
+validation horizon from each prior run and requires its validation exit session
+to be strictly earlier than the new analysis date, preventing look-ahead.
+
+Source run and validation IDs, returns, alpha, and content hashes are pinned in
+the immutable run snapshot and materialized into a TradingAgents memory file
+private to that job. Concurrent jobs never share memory files. Run details show
+the historical sources in a collapsed traceability view with links to the
+source runs. Existing jobs and legacy snapshots without memory metadata remain
+independent. This integration lives entirely in the platform layer and does not
+modify the TradingAgents submodule.
 
 ## REST, MCP, events, and webhooks
 

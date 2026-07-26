@@ -39,6 +39,17 @@ function MetadataValue({ value }: { value: string | null | undefined }) {
   return <dd title={value ?? undefined}>{value ?? "等待准入后固定"}</dd>;
 }
 
+function signedPercent(value: string): string {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return value;
+  return new Intl.NumberFormat("zh-CN", {
+    style: "percent",
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    signDisplay: "always",
+  }).format(parsed);
+}
+
 export function RunDetailPage() {
   const { runId = "" } = useParams<{ runId: string }>();
   const [, navigate] = useLocation();
@@ -121,6 +132,12 @@ export function RunDetailPage() {
   const completeReport = canReadArtifacts
     ? artifacts.data?.find((artifact) => artifact.kind === "report_18_complete_report") ?? null
     : null;
+  const memory = run.data.memory ?? {
+    mode: "independent" as const,
+    snapshot_sha256: null,
+    sources: [],
+  };
+  const memoryLabel = memory.mode === "historical" ? "历史辅助" : "独立评估";
 
   return (
     <section className="page-shell run-detail-page">
@@ -141,12 +158,35 @@ export function RunDetailPage() {
         <dl>
           <div><dt>Gateway 模型</dt><MetadataValue value={run.data.gateway_model} /></div>
           <div><dt>思考深度</dt><MetadataValue value={run.data.gateway_reasoning_effort} /></div>
+          <div><dt>评估模式</dt><MetadataValue value={memoryLabel} /></div>
+          <div><dt>历史经验</dt><MetadataValue value={`${memory.sources.length} 条`} /></div>
           <div><dt>配置哈希</dt><MetadataValue value={run.data.config_snapshot_sha256} /></div>
           <div><dt>TradingAgents</dt><MetadataValue value={run.data.tradingagents_commit} /></div>
           <div><dt>平台版本</dt><MetadataValue value={run.data.root_commit} /></div>
           <div><dt>Prompt Schema</dt><MetadataValue value={run.data.prompt_schema_version} /></div>
         </dl>
-        <details><summary>查看固定配置</summary><pre>{JSON.stringify({ request: run.data.request_config, resolved: run.data.resolved_config, data_vendors: run.data.data_vendors, tool_vendors: run.data.tool_vendors, gateway_snapshot_id: run.data.gateway_snapshot_id }, null, 2)}</pre></details>
+        {memory.mode === "historical" ? (
+          <details className="memory-sources">
+            <summary>历史经验 {memory.sources.length} 条</summary>
+            {memory.sources.length ? (
+              <ol>
+                {memory.sources.map((source) => (
+                  <li key={source.validation_id}>
+                    <div>
+                      <strong>{source.analysis_date} · {source.horizon} 个交易日验证</strong>
+                      <span>{source.rating} · 收益 {signedPercent(source.raw_return)} · Alpha {signedPercent(source.alpha)}</span>
+                    </div>
+                    <Link href={`/runs/${source.source_run_id}`}>查看来源评估</Link>
+                    <small>
+                      验证截止 {source.exit_session} · 条目哈希 {source.content_sha256}
+                    </small>
+                  </li>
+                ))}
+              </ol>
+            ) : <p>本次未找到满足时间约束的已验证旧记录。</p>}
+          </details>
+        ) : null}
+        <details><summary>查看固定配置</summary><pre>{JSON.stringify({ request: run.data.request_config, resolved: run.data.resolved_config, memory: { mode: memory.mode, source_count: memory.sources.length, snapshot_sha256: memory.snapshot_sha256 }, data_vendors: run.data.data_vendors, tool_vendors: run.data.tool_vendors, gateway_snapshot_id: run.data.gateway_snapshot_id }, null, 2)}</pre></details>
       </section>
       <div className="detail-grid">
         <DecisionPanel decision={decision.data ?? null} completeReport={completeReport} />

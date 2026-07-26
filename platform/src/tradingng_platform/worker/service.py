@@ -8,6 +8,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from tradingng_platform.artifacts.store import LocalArtifactStore
+from tradingng_platform.memory import MemorySnapshot, empty_memory_snapshot
 from tradingng_platform.runner.contracts import (
     DependencyHealthEvent,
     RunnerEvent,
@@ -94,6 +95,12 @@ def build_runner_input(
     request = claim.snapshot["request"]
     resolved = claim.snapshot["resolved"]
     gateway = claim.snapshot["gateway"]
+    memory_payload = claim.snapshot.get("memory")
+    memory = (
+        MemorySnapshot.model_validate(memory_payload)
+        if memory_payload is not None
+        else empty_memory_snapshot()
+    )
     return RunnerInput(
         run_id=claim.run_id,
         ticker=claim.ticker,
@@ -109,6 +116,7 @@ def build_runner_input(
         work_dir=job_dir / str(claim.run_id),
         data_vendors=claim.snapshot["data_vendors"],
         tool_vendors=claim.snapshot["tool_vendors"],
+        memory=memory,
     )
 
 

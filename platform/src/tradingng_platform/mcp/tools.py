@@ -12,6 +12,7 @@ from tradingng_platform.assessments.contracts import (
     ComparisonRequest,
     ComparisonView,
     Depth,
+    MemoryMode,
     RunDetailView,
     RunListFilters,
     RunPage,
@@ -69,6 +70,7 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
         analysis_date: date,
         idempotency_key: str,
         depth: Depth = Depth.DEEP,
+        memory_mode: MemoryMode = MemoryMode.INDEPENDENT,
         analysts: list[str] | None = None,
         language: str = "Chinese",
         asset_type: AssetType | None = None,
@@ -84,6 +86,7 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
             ],
             analysts=tuple(analysts or ("market", "social", "news", "fundamentals")),
             depth=depth,
+            memory_mode=memory_mode,
             language=language,
             idempotency_key=idempotency_key,
         )
@@ -98,6 +101,7 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
         items: Annotated[list[AssessmentItem], Field(min_length=1, max_length=100)],
         idempotency_key: Annotated[str, Field(min_length=8, max_length=128)],
         depth: Depth = Depth.DEEP,
+        memory_mode: MemoryMode = MemoryMode.INDEPENDENT,
         analysts: list[str] | None = None,
         language: str = "Chinese",
     ) -> BatchAccepted:
@@ -106,6 +110,7 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
             items=items,
             analysts=tuple(analysts or ("market", "social", "news", "fundamentals")),
             depth=depth,
+            memory_mode=memory_mode,
             language=language,
             idempotency_key=idempotency_key,
         )

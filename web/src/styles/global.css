@@ -722,6 +722,44 @@ h1 {
   cursor: pointer;
 }
 
+.memory-sources ol {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-sources li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 5px 18px;
+  padding: 13px 15px;
+  border: 1px solid #c9d2d8;
+  border-radius: 8px;
+  background: rgb(255 255 255 / 58%);
+}
+
+.memory-sources li div {
+  display: grid;
+  gap: 3px;
+}
+
+.memory-sources li span,
+.memory-sources li small {
+  color: var(--ink-muted);
+}
+
+.memory-sources li a {
+  align-self: center;
+  color: var(--action);
+  font-weight: 700;
+}
+
+.memory-sources li small {
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
+}
+
 pre {
   max-width: 100%;
   overflow: auto;

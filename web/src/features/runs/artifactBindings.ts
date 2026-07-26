@@ -13,6 +13,7 @@ interface EventMatcher {
 
 const ARTIFACT_MATCHERS: Record<string, EventMatcher> = {
   run_config: { eventType: "assessment.starting" },
+  memory_context: { eventType: "assessment.starting" },
   report_2_fundamentals: {
     eventType: "runner.stage.running_analysts",
     progressKey: "fundamentals_report",

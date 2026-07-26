@@ -100,6 +100,7 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
             "depth": "deep",
             "analysts": ["market", "social", "news", "fundamentals"],
             "language": "Chinese",
+            "memory_mode": "historical",
             "idempotency_key": "mcp-call-123456",
         },
     )
@@ -109,6 +110,7 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
     assert result["status"] == "queued"
     assert assessments.submit_calls[0][1].items[0].analysis_date == date(2026, 7, 25)
     assert assessments.submit_calls[0][1].items[0].asset_type is None
+    assert assessments.submit_calls[0][1].memory_mode.value == "historical"
     await _call(
         server,
         _principal("assessments:submit"),
