@@ -196,11 +196,40 @@ def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path
     callback.on_llm_end(response, run_id="llm-1")
 
     interaction = callback.llm_path.read_text(encoding="utf-8")
+    record = json.loads(interaction)
     assert "visible prompt" in interaction
     assert "visible response" in interaction
     assert "hidden chain" not in interaction
     assert "must-not-leak" not in interaction
     assert "[REDACTED]" in interaction
+    assert record["status"] == "completed"
+    assert record["completed_at"]
+    assert isinstance(record["duration_ms"], int)
+
+
+def test_callback_records_safe_failed_llm_interaction(tmp_path):
+    callback = AuditCallback(tmp_path, {}, {})
+    callback.on_chat_model_start(
+        {"name": "codex"},
+        [[HumanMessage(content="visible prompt")]],
+        run_id="llm-failed",
+    )
+    error_type = type("GatewayTimeoutError", (Exception,), {})
+
+    callback.on_llm_error(
+        error_type("authorization=must-not-leak"),
+        run_id="llm-failed",
+    )
+
+    interaction = callback.llm_path.read_text(encoding="utf-8")
+    record = json.loads(interaction)
+    assert record["status"] == "failed"
+    assert record["error_type"] == "GatewayTimeoutError"
+    assert record["error_code"] == "gateway_unavailable"
+    assert record["completed_at"]
+    assert isinstance(record["duration_ms"], int)
+    assert "authorization" not in interaction
+    assert "must-not-leak" not in interaction
 
 
 def test_callback_records_vendor_failure_as_safe_health_event(tmp_path):

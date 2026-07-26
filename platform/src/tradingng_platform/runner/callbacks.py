@@ -170,6 +170,7 @@ class AuditCallback(BaseCallbackHandler):
 
     def on_llm_end(self, response: Any, *, run_id: Any = None, **kwargs) -> None:
         pending = self._llm.pop(run_id, {})
+        duration_ms = _elapsed_ms(pending)
         visible = []
         for generations in getattr(response, "generations", ()):
             for generation in generations:
@@ -177,11 +178,13 @@ class AuditCallback(BaseCallbackHandler):
                 visible.append(_jsonable(message if message is not None else generation))
         usage = _jsonable(getattr(response, "llm_output", None) or {})
         record = {
-            **pending,
+            **_terminal_pending(pending),
+            "status": "completed",
             "response": redact(visible),
             "response_sha256": _content_hash(visible),
             "token_usage": redact(usage),
             "completed_at": datetime.now(timezone.utc).isoformat(),
+            "duration_ms": duration_ms,
             "retention_class": "raw_180d",
         }
         self._append(self.llm_path, record)
@@ -189,7 +192,7 @@ class AuditCallback(BaseCallbackHandler):
             {
                 "scope": "gateway",
                 "healthy": True,
-                "latency_ms": _elapsed_ms(pending),
+                "latency_ms": duration_ms,
                 "observed_at": datetime.now(timezone.utc).isoformat(),
                 "error_code": None,
                 "vendor": None,
@@ -199,13 +202,27 @@ class AuditCallback(BaseCallbackHandler):
 
     def on_llm_error(self, error: BaseException, *, run_id: Any = None, **kwargs) -> None:
         pending = self._llm.pop(run_id, {})
+        duration_ms = _elapsed_ms(pending)
+        error_code = _dependency_error_code(error, "gateway")
+        self._append(
+            self.llm_path,
+            {
+                **_terminal_pending(pending),
+                "status": "failed",
+                "error_type": type(error).__name__,
+                "error_code": error_code,
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+                "duration_ms": duration_ms,
+                "retention_class": "raw_180d",
+            },
+        )
         self._record_health(
             {
                 "scope": "gateway",
                 "healthy": False,
-                "latency_ms": _elapsed_ms(pending),
+                "latency_ms": duration_ms,
                 "observed_at": datetime.now(timezone.utc).isoformat(),
-                "error_code": _dependency_error_code(error, "gateway"),
+                "error_code": error_code,
                 "vendor": None,
                 "category": None,
             }
@@ -260,6 +277,10 @@ def _elapsed_ms(pending: dict) -> int:
     if not isinstance(started, (int, float)):
         return 0
     return max(0, int((time.monotonic() - started) * 1000))
+
+
+def _terminal_pending(pending: dict) -> dict:
+    return {key: value for key, value in pending.items() if key != "started_monotonic"}
 
 
 def _dependency_error_code(error: BaseException, scope: str) -> str:
