@@ -2,12 +2,15 @@ import copy
 import json
 import os
 import re
+from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
+from tradingagents.agents.analysts import sentiment_analyst
+from tradingagents.dataflows.interface import VENDOR_METHODS
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -22,6 +25,15 @@ _DECISION_LABEL = re.compile(
     re.IGNORECASE,
 )
 _RATINGS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
+_CURRENT_SNAPSHOT_METHODS = (
+    "get_fundamentals",
+    "get_insider_transactions",
+    "get_prediction_markets",
+)
+_CURRENT_SOCIAL_FETCHERS = (
+    "fetch_stocktwits_messages",
+    "fetch_reddit_posts",
+)
 
 
 @dataclass(frozen=True)
@@ -84,18 +96,19 @@ class TradingAgentsRunner:
             )
 
         config = self._build_config(directories)
-        graph = self.graph_factory(
-            selected_analysts=self.input.analysts,
-            debug=False,
-            config=config,
-            callbacks=[callback],
-            event_callback=on_chunk,
-        )
-        final_state, signal = graph.propagate(
-            self.input.ticker,
-            self.input.analysis_date.isoformat(),
-            asset_type=self.input.asset_type,
-        )
+        with _historical_point_in_time_guard(self.input.analysis_date):
+            graph = self.graph_factory(
+                selected_analysts=self.input.analysts,
+                debug=False,
+                config=config,
+                callbacks=[callback],
+                event_callback=on_chunk,
+            )
+            final_state, signal = graph.propagate(
+                self.input.ticker,
+                self.input.analysis_date.isoformat(),
+                asset_type=self.input.asset_type,
+            )
         report_dir = graph.save_reports(
             final_state,
             self.input.ticker,
@@ -183,6 +196,53 @@ class TradingAgentsRunner:
             }
         )
         return config
+
+
+@contextmanager
+def _historical_point_in_time_guard(analysis_date: date):
+    if analysis_date >= datetime.now(timezone.utc).date():
+        yield
+        return
+
+    original_routes = {method: dict(VENDOR_METHODS[method]) for method in _CURRENT_SNAPSHOT_METHODS}
+    original_social = {name: getattr(sentiment_analyst, name) for name in _CURRENT_SOCIAL_FETCHERS}
+    try:
+        for method, vendor_routes in original_routes.items():
+            unavailable = _point_in_time_unavailable(method, analysis_date)
+            VENDOR_METHODS[method] = dict.fromkeys(vendor_routes, unavailable)
+        for name in original_social:
+            setattr(
+                sentiment_analyst,
+                name,
+                _point_in_time_social_unavailable(name, analysis_date),
+            )
+        yield
+    finally:
+        for method, vendor_routes in original_routes.items():
+            VENDOR_METHODS[method] = vendor_routes
+        for name, fetcher in original_social.items():
+            setattr(sentiment_analyst, name, fetcher)
+
+
+def _point_in_time_unavailable(method: str, analysis_date: date):
+    def unavailable(*args, **kwargs) -> str:
+        return (
+            f"POINT_IN_TIME_DATA_UNAVAILABLE: {method} cannot guarantee data as of "
+            f"{analysis_date.isoformat()}. Proceed without it and do not use current "
+            "data, estimate, or fabricate values."
+        )
+
+    return unavailable
+
+
+def _point_in_time_social_unavailable(name: str, analysis_date: date):
+    def unavailable(*args, **kwargs) -> str:
+        return (
+            f"<point-in-time unavailable: {name} cannot guarantee data as of "
+            f"{analysis_date.isoformat()}; proceed without it and do not use current data>"
+        )
+
+    return unavailable
 
 
 def parse_decision(markdown: str) -> dict:

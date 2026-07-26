@@ -314,7 +314,15 @@ class ValidationWorker:
             price_target=claim.price_target,
             target_basis=claim.target_basis,
         )
-        await self._complete_v2(claim, instrument, benchmark, calculation, now)
+        await self._complete_v2(
+            claim,
+            instrument_raw,
+            benchmark_raw,
+            instrument,
+            benchmark,
+            calculation,
+            now,
+        )
 
     async def _claim(self, now: datetime) -> ClaimedValidation | None:
         async with self.sessions() as session, session.begin():
@@ -479,7 +487,16 @@ class ValidationWorker:
                 {"validation_id": str(claim.id), "horizon": claim.horizon},
             )
 
-    async def _complete_v2(self, claim, instrument, benchmark, calculation, now) -> None:
+    async def _complete_v2(
+        self,
+        claim,
+        instrument_raw,
+        benchmark_raw,
+        instrument,
+        benchmark,
+        calculation,
+        now,
+    ) -> None:
         def series_payload(series):
             payload = series.model_dump(mode="json")
             # The compatibility alias keeps existing charts readable while the v2
@@ -492,6 +509,10 @@ class ValidationWorker:
             "schema_version": "validation-prices.v2",
             "instrument": series_payload(instrument),
             "benchmark": series_payload(benchmark),
+            "provider_series": {
+                "instrument": instrument_raw.model_dump(mode="json"),
+                "benchmark": benchmark_raw.model_dump(mode="json"),
+            },
             "provenance": {
                 "provider_id": instrument.provider_id,
                 "instrument_provider_id": instrument.provider_id,

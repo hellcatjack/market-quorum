@@ -5,6 +5,8 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage
+from tradingagents.agents.analysts import sentiment_analyst
+from tradingagents.dataflows.interface import VENDOR_METHODS
 
 from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.memory import MemoryCandidate, build_memory_snapshot
@@ -71,6 +73,28 @@ class _FakeGraph:
         report = save_path / "complete_report.md"
         report.write_text("report", encoding="utf-8")
         return save_path
+
+
+class _TemporalProbeGraph(_FakeGraph):
+    observed_tools = None
+
+    def propagate(self, ticker, analysis_date, asset_type="stock"):
+        type(self).observed_tools = {
+            "get_fundamentals": VENDOR_METHODS["get_fundamentals"]["yfinance"](
+                ticker, analysis_date
+            ),
+            "get_insider_transactions": VENDOR_METHODS["get_insider_transactions"]["yfinance"](
+                ticker
+            ),
+            "get_prediction_markets": VENDOR_METHODS["get_prediction_markets"]["polymarket"](
+                ticker, 5
+            ),
+            "fetch_stocktwits_messages": sentiment_analyst.fetch_stocktwits_messages(
+                ticker, limit=30
+            ),
+            "fetch_reddit_posts": sentiment_analyst.fetch_reddit_posts(ticker),
+        }
+        return super().propagate(ticker, analysis_date, asset_type)
 
 
 def _runner_input(tmp_path):
@@ -167,6 +191,47 @@ def test_runner_isolated_config_artifacts_and_redaction(tmp_path):
         == runner_input.memory.snapshot_sha256
     )
     assert "memory_context" in [event.name for event in events if event.type == "artifact"]
+
+
+def test_historical_runner_blocks_current_snapshot_tools_and_restores_routes(tmp_path, monkeypatch):
+    current_snapshots = {
+        (method, vendor): (lambda *args, _method=method: f"CURRENT_DATA: {_method}")
+        for method, vendor in (
+            ("get_fundamentals", "yfinance"),
+            ("get_insider_transactions", "yfinance"),
+            ("get_prediction_markets", "polymarket"),
+        )
+    }
+    for (method, vendor), current_snapshot in current_snapshots.items():
+        monkeypatch.setitem(VENDOR_METHODS[method], vendor, current_snapshot)
+    current_social = {
+        "fetch_stocktwits_messages": lambda *args, **kwargs: "CURRENT_STOCKTWITS_DATA",
+        "fetch_reddit_posts": lambda *args, **kwargs: "CURRENT_REDDIT_DATA",
+    }
+    for name, current_snapshot in current_social.items():
+        monkeypatch.setattr(sentiment_analyst, name, current_snapshot)
+    runner_input = _runner_input(tmp_path).model_copy(update={"analysis_date": date(2000, 1, 3)})
+
+    TradingAgentsRunner(runner_input, graph_factory=_TemporalProbeGraph).run()
+
+    for method in (
+        "get_fundamentals",
+        "get_insider_transactions",
+        "get_prediction_markets",
+    ):
+        assert _TemporalProbeGraph.observed_tools[method] == (
+            f"POINT_IN_TIME_DATA_UNAVAILABLE: {method} cannot guarantee data as "
+            "of 2000-01-03. Proceed without it and do not use current data, "
+            "estimate, or fabricate values."
+        )
+    for (method, vendor), current_snapshot in current_snapshots.items():
+        assert VENDOR_METHODS[method][vendor] is current_snapshot
+    for name, current_snapshot in current_social.items():
+        assert _TemporalProbeGraph.observed_tools[name] == (
+            f"<point-in-time unavailable: {name} cannot guarantee data as of "
+            "2000-01-03; proceed without it and do not use current data>"
+        )
+        assert getattr(sentiment_analyst, name) is current_snapshot
 
 
 def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path):

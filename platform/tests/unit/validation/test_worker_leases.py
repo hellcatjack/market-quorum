@@ -39,7 +39,7 @@ class _V2Prices:
             provider_adapter_version="fixture.v2",
             request_fingerprint=("e" if benchmark else "f") * 64,
             ohlc_basis=OhlcBasis.SPLIT_NORMALIZED,
-            capabilities=frozenset({"cash_dividends"}),
+            capabilities=frozenset({"cash_dividends", "splits"}),
             currency="USD",
             timezone="America/New_York",
             sessions=[date(2026, 1, 5), date(2026, 1, 6)],
@@ -49,7 +49,7 @@ class _V2Prices:
             close=closes,
             adjusted_close=[200, 200] if benchmark else [100, 100],
             cash_distributions=[0, 0] if benchmark else [0, 1],
-            split_coefficient=[1, 1],
+            split_coefficient=[1, 1] if benchmark else [1, 10],
             collected_at=datetime(2026, 1, 7, tzinfo=timezone.utc),
         )
 
@@ -227,6 +227,10 @@ async def test_v2_worker_persists_dual_returns_and_minimal_provenance_artifact(t
         assert payload["schema_version"] == "validation-prices.v2"
         assert payload["instrument"]["sessions"] == ["2026-01-05", "2026-01-06"]
         assert payload["provenance"]["provider_id"] == "fixture-v2"
+        assert payload["provider_series"]["instrument"]["ohlc_basis"] == "split_normalized"
+        assert payload["provider_series"]["instrument"]["split_coefficient"] == ["1", "10"]
+        assert payload["provider_series"]["instrument"]["cash_distributions"] == ["0", "1"]
+        assert payload["provider_series"]["benchmark"]["split_coefficient"] == ["1", "1"]
     finally:
         await engine.dispose()
 
