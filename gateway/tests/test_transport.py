@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import sys
 from pathlib import Path
 
@@ -359,6 +360,38 @@ async def test_discards_large_newline_free_stderr_without_blocking_stdout():
             transport.request("stderr", {"size": 2_000_000, "value": "ok"}), timeout=3
         )
         assert result == {"value": "ok"}
+    finally:
+        await transport.stop()
+
+
+@pytest.mark.asyncio
+async def test_logs_bounded_redacted_stderr_without_blocking_stdout(caplog):
+    caplog.set_level(logging.WARNING, logger="codex_gateway.transport")
+    transport = AppServerTransport([sys.executable, str(FAKE_SERVER)])
+    await transport.start()
+    try:
+        text = (
+            "authorization=Bearer must-not-leak\n"
+            "api_key=also-secret\n"
+            f"diagnostic={'x' * 20_000}\n"
+        )
+        result = await asyncio.wait_for(
+            transport.request("stderr", {"text": text, "value": "ok"}), timeout=3
+        )
+        await asyncio.wait_for(
+            wait_until(lambda: "codex_app_server_stderr" in caplog.text), timeout=1
+        )
+        assert result == {"value": "ok"}
+        assert "must-not-leak" not in caplog.text
+        assert "also-secret" not in caplog.text
+        assert "[REDACTED]" in caplog.text
+        diagnostics = [
+            record.getMessage()
+            for record in caplog.records
+            if "codex_app_server_stderr" in record.getMessage()
+        ]
+        assert diagnostics
+        assert max(map(len, diagnostics)) < 8500
     finally:
         await transport.stop()
 

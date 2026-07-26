@@ -29,7 +29,10 @@ def respond(message: dict) -> None:
     elif message["method"] == "large":
         emit({"id": message["id"], "result": {"value": "x" * int(params["size"])}})
     elif message["method"] == "stderr":
-        sys.stderr.write("x" * int(params["size"]))
+        payload = params.get("text")
+        if payload is None:
+            payload = "x" * int(params["size"])
+        sys.stderr.write(payload)
         sys.stderr.flush()
         emit({"id": message["id"], "result": {"value": params.get("value")}})
     elif message["method"] == "malformed":

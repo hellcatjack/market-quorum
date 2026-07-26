@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
+import re
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
@@ -12,6 +14,13 @@ ExitHandler = Callable[[BaseException], Awaitable[None]]
 # Codex responses can contain long tool results, so retain several MiB per JSONL record.
 STREAM_READER_LIMIT = 4 * 1024 * 1024
 STDERR_READ_SIZE = 64 * 1024
+STDERR_LOG_LIMIT = 8 * 1024
+
+logger = logging.getLogger(__name__)
+_SECRET_ASSIGNMENT = re.compile(
+    r'''(?i)(["']?(?:authorization|api[-_]?key|access[-_]?token|token|secret|password)'''
+    r'''["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|(?:Bearer\s+)?[^\s,;]+)'''
+)
 
 
 async def _ignore_notification(method: str, params: dict[str, Any]) -> None:
@@ -117,7 +126,7 @@ class AppServerTransport:
             self._process = process
             self._notification_queue = queue
             self._reader_task = self._create_task(self._read_stdout(process, queue))
-            self._stderr_task = self._create_task(self._discard_stderr(process))
+            self._stderr_task = self._create_task(self._read_stderr(process))
             self._notification_task = self._create_task(self._dispatch_notifications(queue))
         except BaseException:
             if process is not None:
@@ -213,15 +222,57 @@ class AppServerTransport:
         finally:
             self._begin_terminal(process, error)
 
-    async def _discard_stderr(self, process: asyncio.subprocess.Process) -> None:
+    async def _read_stderr(self, process: asyncio.subprocess.Process) -> None:
+        pending = bytearray()
+        discarding_line = False
         try:
             assert process.stderr is not None
-            while await process.stderr.read(STDERR_READ_SIZE):
-                pass
+            while chunk := await process.stderr.read(STDERR_READ_SIZE):
+                offset = 0
+                while offset < len(chunk):
+                    if discarding_line:
+                        newline = chunk.find(b"\n", offset)
+                        if newline < 0:
+                            break
+                        offset = newline + 1
+                        discarding_line = False
+                        continue
+
+                    newline = chunk.find(b"\n", offset)
+                    end = len(chunk) if newline < 0 else newline
+                    segment = chunk[offset:end]
+                    capacity = STDERR_LOG_LIMIT - len(pending)
+                    if len(segment) > capacity:
+                        pending.extend(segment[:capacity])
+                        self._log_stderr(bytes(pending), truncated=True)
+                        pending.clear()
+                        if newline < 0:
+                            discarding_line = True
+                            break
+                        offset = newline + 1
+                        continue
+
+                    pending.extend(segment)
+                    if newline < 0:
+                        break
+                    self._log_stderr(bytes(pending), truncated=False)
+                    pending.clear()
+                    offset = newline + 1
+            if pending:
+                self._log_stderr(bytes(pending), truncated=False)
         except asyncio.CancelledError:
             raise
         except BaseException as exc:
             self._begin_terminal(process, TransportClosed(f"app-server stderr failed: {exc}"))
+
+    @staticmethod
+    def _log_stderr(raw: bytes, *, truncated: bool) -> None:
+        if not raw:
+            return
+        message = raw.decode("utf-8", errors="replace")
+        redacted = _SECRET_ASSIGNMENT.sub(r"\1[REDACTED]", message)
+        suffix = " [TRUNCATED]" if truncated else ""
+        logger.warning("codex_app_server_stderr %s%s", redacted, suffix)
 
     async def _dispatch_notifications(
         self, queue: asyncio.Queue[tuple[str, dict[str, Any]]]
