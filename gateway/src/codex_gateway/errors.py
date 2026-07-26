@@ -40,6 +40,12 @@ class RequestTooLarge(GatewayError):
     code = "request_too_large"
 
 
+class CodexContextLimit(GatewayError):
+    status_code = 400
+    error_type = "invalid_request_error"
+    code = "codex_context_limit"
+
+
 class CodexRateLimit(GatewayError):
     status_code = 429
     error_type = "rate_limit_error"
@@ -49,6 +55,11 @@ class CodexRateLimit(GatewayError):
 class CodexRuntimeFailure(GatewayError):
     status_code = 502
     code = "codex_runtime_error"
+
+
+class CodexInterrupted(GatewayError):
+    status_code = 502
+    code = "codex_interrupted"
 
 
 class CodexUnavailable(GatewayError):

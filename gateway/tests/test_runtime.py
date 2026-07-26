@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import json
+import logging
 from collections import deque
 from pathlib import Path
 
@@ -10,6 +11,8 @@ import codex_gateway.runtime as runtime_module
 from codex_gateway.config import Settings
 from codex_gateway.effective_config import EffectiveCodexConfig
 from codex_gateway.errors import (
+    CodexContextLimit,
+    CodexInterrupted,
     CodexRateLimit,
     CodexRuntimeFailure,
     CodexTimeout,
@@ -115,16 +118,20 @@ class ScriptedTransport:
 def runtime_factory():
     transports = []
 
-    def build(timeout=1):
+    def build(timeout=1, *, clock=None):
         def factory(on_notification, on_exit):
             transport = ScriptedTransport(on_notification, on_exit)
             transports.append(transport)
             return transport
 
+        kwargs = {}
+        if clock is not None:
+            kwargs["clock"] = clock
         runtime = CodexRuntime(
             Settings(request_timeout_seconds=timeout),
             transport_factory=factory,
             validate_environment=False,
+            **kwargs,
         )
         return runtime, transports
 
@@ -339,6 +346,57 @@ async def test_no_application_concurrency_limit(runtime_factory):
 
 
 @pytest.mark.asyncio
+async def test_activity_snapshot_tracks_turn_age_and_notification_progress(runtime_factory):
+    now = [100.0]
+    runtime, transports = runtime_factory(timeout=None, clock=lambda: now[0])
+    await runtime.start()
+    transport = transports[0]
+    task = asyncio.create_task(runtime.complete("prompt", {"type": "object"}))
+    await transport.turn_started.wait()
+
+    now[0] = 110.0
+    await transport.on_notification(
+        "item/started",
+        {"threadId": "thread-1", "turnId": "turn-1", "item": {"type": "reasoning"}},
+    )
+    now[0] = 112.0
+    snapshot = runtime.activity_snapshot()
+    assert snapshot.active_completions == 1
+    assert snapshot.oldest_active_seconds == 12.0
+    assert snapshot.stalest_progress_seconds == 2.0
+
+    transport.release_turns.set()
+    await task
+    assert runtime.activity_snapshot().active_completions == 0
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_turn_lifecycle_logs_correlation_without_prompt(runtime_factory, caplog):
+    runtime, transports = runtime_factory(timeout=None)
+    await runtime.start()
+    caplog.set_level(logging.INFO, logger="codex_gateway.runtime")
+    transports[0].release_turns.set()
+
+    await runtime.complete(
+        "secret prompt must not be logged",
+        {"type": "object"},
+        request_id="request-123",
+        run_id="run-456",
+        retry_count=2,
+    )
+
+    messages = "\n".join(record.getMessage() for record in caplog.records)
+    assert "codex_turn_started" in messages
+    assert "codex_turn_terminal" in messages
+    assert "request-123" in messages
+    assert "run-456" in messages
+    assert "retry_count=2" in messages
+    assert "secret prompt" not in messages
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
 async def test_unbounded_completion_waits_until_turn_finishes(runtime_factory):
     runtime, transports = runtime_factory(timeout=None)
     await runtime.start()
@@ -419,6 +477,42 @@ async def test_failed_turn_maps_unauthorized(runtime_factory):
     with pytest.raises(CodexUnavailable):
         await runtime.complete("prompt", {"type": "object"})
     assert not runtime.ready
+    await runtime.stop()
+
+
+@pytest.mark.parametrize(
+    ("status", "info", "expected"),
+    [
+        ("interrupted", None, CodexInterrupted),
+        ("failed", {"ContextWindowExceeded": {}}, CodexContextLimit),
+        ("failed", {"ResponseStreamDisconnected": {}}, CodexRuntimeFailure),
+        ("failed", "UsageLimitExceeded", CodexRateLimit),
+        ("failed", {"Unauthorized": {}}, CodexUnavailable),
+    ],
+)
+@pytest.mark.asyncio
+async def test_terminal_turn_errors_are_classified(runtime_factory, status, info, expected):
+    runtime, transports = runtime_factory()
+    await runtime.start()
+    transport = transports[0]
+
+    async def finish_with_error(thread_id, turn_id):
+        await transport.on_notification(
+            "turn/completed",
+            {
+                "threadId": thread_id,
+                "turn": {
+                    "id": turn_id,
+                    "items": [],
+                    "status": status,
+                    "error": {"message": "safe failure", "codexErrorInfo": info},
+                },
+            },
+        )
+
+    transport.finish = finish_with_error
+    with pytest.raises(expected):
+        await runtime.complete("prompt", {"type": "object"})
     await runtime.stop()
 
 

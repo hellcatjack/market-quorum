@@ -3,7 +3,9 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import re
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
@@ -11,6 +13,8 @@ from typing import Any, Protocol
 from codex_gateway.config import Settings, parse_codex_version
 from codex_gateway.effective_config import EffectiveCodexConfig
 from codex_gateway.errors import (
+    CodexContextLimit,
+    CodexInterrupted,
     CodexRateLimit,
     CodexRuntimeFailure,
     CodexTimeout,
@@ -20,7 +24,9 @@ from codex_gateway.models import CodexTurnResult, TokenUsage
 from codex_gateway.transport import AppServerTransport, JsonRpcError, TransportClosed
 
 logger = logging.getLogger(__name__)
-_RATE_LIMIT_CODES = {"usageLimitExceeded", "serverOverloaded", "sessionBudgetExceeded"}
+_RATE_LIMIT_CODES = {"usagelimitexceeded", "serveroverloaded", "sessionbudgetexceeded"}
+_UNAUTHORIZED_CODES = {"unauthorized"}
+_CONTEXT_LIMIT_CODES = {"contextwindowexceeded"}
 _RESTART_DELAYS = (0.5, 1.0, 2.0, 4.0, 5.0)
 _APP_SERVER_CONFIG_OVERRIDES = ("mcp_servers.playwright.enabled=false",)
 
@@ -38,11 +44,40 @@ class TransportLike(Protocol):
 
 
 @dataclass
+class _CompletionActivity:
+    started_at: float
+    last_progress_at: float
+    request_id: str | None = None
+    run_id: str | None = None
+    retry_count: int = 0
+    thread_id: str | None = None
+    turn_id: str | None = None
+
+
+@dataclass
 class _TurnState:
     future: asyncio.Future
-    turn_id: str | None = None
+    activity: _CompletionActivity
     final_message: str | None = None
     usage: TokenUsage = field(default_factory=TokenUsage)
+
+
+@dataclass(frozen=True)
+class RuntimeActivity:
+    accepting: bool
+    active_completions: int
+    oldest_active_seconds: float | None
+    stalest_progress_seconds: float | None
+
+
+def _normalize_error_info(info: Any) -> str | None:
+    if isinstance(info, str):
+        raw = info
+    elif isinstance(info, dict) and info:
+        raw = next(iter(info))
+    else:
+        return None
+    return re.sub(r"[^a-z0-9]", "", str(raw).casefold()) or None
 
 
 class CodexRuntime:
@@ -52,18 +87,21 @@ class CodexRuntime:
         *,
         transport_factory=None,
         validate_environment: bool = True,
+        clock=time.monotonic,
     ):
         self.settings = settings
         self._validate_environment_enabled = validate_environment
         self._transport_factory = transport_factory or self._default_transport_factory
+        self._clock = clock
         self._transport: TransportLike | None = None
         self._turns: dict[str, _TurnState] = {}
+        self._activities: dict[int, _CompletionActivity] = {}
+        self._next_activity_id = 1
         self._ready = False
         self._stopping = False
         self._restart_task: asyncio.Task | None = None
         self._lifecycle_lock = asyncio.Lock()
         self._last_error = "not started"
-        self._active_completions = 0
 
     @property
     def ready(self) -> bool:
@@ -75,7 +113,26 @@ class CodexRuntime:
 
     @property
     def active_completions(self) -> int:
-        return self._active_completions
+        return len(self._activities)
+
+    def activity_snapshot(self) -> RuntimeActivity:
+        activities = tuple(self._activities.values())
+        if not activities:
+            return RuntimeActivity(
+                accepting=self._ready and not self._stopping,
+                active_completions=0,
+                oldest_active_seconds=None,
+                stalest_progress_seconds=None,
+            )
+        now = self._clock()
+        return RuntimeActivity(
+            accepting=self._ready and not self._stopping,
+            active_completions=len(activities),
+            oldest_active_seconds=max(max(0.0, now - item.started_at) for item in activities),
+            stalest_progress_seconds=max(
+                max(0.0, now - item.last_progress_at) for item in activities
+            ),
+        )
 
     def _require_transport(self) -> TransportLike:
         if not self._ready or self._transport is None:
@@ -224,9 +281,22 @@ class CodexRuntime:
         output_schema: dict,
         *,
         pinned_config: EffectiveCodexConfig | None = None,
+        request_id: str | None = None,
+        run_id: str | None = None,
+        retry_count: int = 0,
     ) -> CodexTurnResult:
         self._require_transport()
-        self._active_completions += 1
+        activity_id = self._next_activity_id
+        self._next_activity_id += 1
+        now = self._clock()
+        activity = _CompletionActivity(
+            started_at=now,
+            last_progress_at=now,
+            request_id=request_id,
+            run_id=run_id,
+            retry_count=retry_count,
+        )
+        self._activities[activity_id] = activity
         try:
             with tempfile.TemporaryDirectory(prefix="tradingng-codex-") as cwd:
                 turn = self._run_turn(
@@ -234,6 +304,7 @@ class CodexRuntime:
                     output_schema,
                     Path(cwd),
                     pinned_config=pinned_config,
+                    activity=activity,
                 )
                 timeout = self.settings.request_timeout_seconds
                 if timeout is None:
@@ -243,7 +314,7 @@ class CodexRuntime:
                 except asyncio.TimeoutError as exc:
                     raise CodexTimeout(f"Codex request exceeded {timeout} seconds") from exc
         finally:
-            self._active_completions -= 1
+            self._activities.pop(activity_id, None)
 
     async def _run_turn(
         self,
@@ -252,6 +323,7 @@ class CodexRuntime:
         cwd: Path,
         *,
         pinned_config: EffectiveCodexConfig | None = None,
+        activity: _CompletionActivity,
     ) -> CodexTurnResult:
         transport = self._transport
         if transport is None:
@@ -279,7 +351,9 @@ class CodexRuntime:
                 thread_params["model"] = effective.model
             started = await transport.request("thread/start", thread_params)
             thread_id = started["thread"]["id"]
-            state = _TurnState(asyncio.get_running_loop().create_future())
+            activity.thread_id = thread_id
+            activity.last_progress_at = self._clock()
+            state = _TurnState(asyncio.get_running_loop().create_future(), activity)
             self._turns[thread_id] = state
             turn_params = {
                 "threadId": thread_id,
@@ -291,15 +365,25 @@ class CodexRuntime:
             if effective.reasoning_effort is not None:
                 turn_params["effort"] = effective.reasoning_effort
             turn = await transport.request("turn/start", turn_params)
-            state.turn_id = turn["turn"]["id"]
+            activity.turn_id = turn["turn"]["id"]
+            activity.last_progress_at = self._clock()
+            logger.info(
+                "codex_turn_started request_id=%s tradingng_run_id=%s retry_count=%d "
+                "thread_id=%s turn_id=%s",
+                activity.request_id or "<none>",
+                activity.run_id or "<none>",
+                activity.retry_count,
+                activity.thread_id,
+                activity.turn_id,
+            )
             return await state.future
         except asyncio.CancelledError:
-            if thread_id and state and state.turn_id:
+            if thread_id and state and activity.turn_id:
                 with contextlib.suppress(Exception):
                     await asyncio.wait_for(
                         transport.request(
                             "turn/interrupt",
-                            {"threadId": thread_id, "turnId": state.turn_id},
+                            {"threadId": thread_id, "turnId": activity.turn_id},
                         ),
                         timeout=2,
                     )
@@ -327,6 +411,7 @@ class CodexRuntime:
         state = self._turns.get(params.get("threadId"))
         if state is None:
             return
+        state.activity.last_progress_at = self._clock()
         try:
             self._apply_notification(state, method, params)
         except (AttributeError, IndexError, KeyError, TypeError, ValueError):
@@ -356,20 +441,36 @@ class CodexRuntime:
                 if item.get("type") == "agentMessage":
                     state.final_message = item.get("text")
                     break
-        if turn.get("status") == "completed" and state.final_message is not None:
+        error = turn.get("error") or {}
+        status = turn.get("status")
+        info_code = _normalize_error_info(error.get("codexErrorInfo"))
+        logger.info(
+            "codex_turn_terminal request_id=%s tradingng_run_id=%s retry_count=%d "
+            "thread_id=%s turn_id=%s status=%s codex_error_code=%s duration_ms=%d",
+            state.activity.request_id or "<none>",
+            state.activity.run_id or "<none>",
+            state.activity.retry_count,
+            state.activity.thread_id,
+            state.activity.turn_id,
+            status or "unknown",
+            info_code or "<none>",
+            int((self._clock() - state.activity.started_at) * 1000),
+        )
+        if status == "completed" and state.final_message is not None:
             state.future.set_result(CodexTurnResult(state.final_message, state.usage))
             return
-        error = turn.get("error") or {}
-        info = error.get("codexErrorInfo")
-        info_code = info if isinstance(info, str) else next(iter(info), None) if info else None
         if info_code in _RATE_LIMIT_CODES:
-            exception = CodexRateLimit(error.get("message", "Codex rate limit reached"))
-        elif info_code == "unauthorized":
+            exception = CodexRateLimit("Codex capacity or session budget was exceeded")
+        elif info_code in _UNAUTHORIZED_CODES:
             self._ready = False
-            self._last_error = error.get("message", "Codex authentication is unavailable")
+            self._last_error = "Codex authentication is unavailable"
             exception = CodexUnavailable(self._last_error)
+        elif info_code in _CONTEXT_LIMIT_CODES:
+            exception = CodexContextLimit("Codex context window was exceeded")
+        elif status == "interrupted":
+            exception = CodexInterrupted("Codex turn was interrupted")
         else:
-            exception = CodexRuntimeFailure(error.get("message", "Codex turn failed"))
+            exception = CodexRuntimeFailure("Codex turn failed")
         state.future.set_exception(exception)
 
     async def _handle_exit(self, transport: TransportLike, error: BaseException) -> None:
