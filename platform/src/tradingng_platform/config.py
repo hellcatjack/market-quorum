@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     webhook_private_host_allowlist: Annotated[tuple[str, ...], NoDecode] = ()
     max_running_validation: int = 2
+    validation_price_providers: Annotated[tuple[str, ...], NoDecode] = ("yfinance",)
+    alpha_vantage_api_key: SecretStr | None = Field(default=None, repr=False)
+    validation_provider_timeout_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
+    alpha_vantage_requests_per_minute: int = Field(default=75, ge=1, le=10000)
 
     @model_validator(mode="after")
     def resolve_database_url(self):
@@ -98,6 +102,7 @@ class Settings(BaseSettings):
         "allowed_origins",
         "mcp_allowed_origins",
         "webhook_private_host_allowlist",
+        "validation_price_providers",
         mode="before",
     )
     @classmethod
@@ -105,6 +110,17 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return tuple(item.strip().rstrip("/") for item in value.split(",") if item.strip())
         return value
+
+    @field_validator("validation_price_providers")
+    @classmethod
+    def validate_price_providers(cls, value):
+        normalized = tuple(item.strip().lower() for item in value if item.strip())
+        allowed = {"yfinance", "alphavantage"}
+        if not normalized or len(set(normalized)) != len(normalized):
+            raise ValueError("validation price providers must be unique and non-empty")
+        if any(item not in allowed for item in normalized):
+            raise ValueError("unsupported validation price provider")
+        return normalized
 
     @computed_field
     @property

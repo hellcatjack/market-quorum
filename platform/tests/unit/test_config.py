@@ -73,6 +73,22 @@ def test_public_identity_and_mcp_defaults_use_the_canonical_origin():
 
     assert str(settings.oidc_issuer) == ("https://ushome.amycat.com/realms/tradingng")
     assert str(settings.mcp_resource_uri) == "https://ushome.amycat.com/mcp"
+    assert settings.validation_price_providers == ("yfinance",)
+    assert settings.alpha_vantage_api_key is None
+
+
+def test_validation_provider_order_and_alpha_key_are_secret(monkeypatch):
+    monkeypatch.setenv("TRADINGNG_VALIDATION_PRICE_PROVIDERS", "alphavantage,yfinance")
+    monkeypatch.setenv("TRADINGNG_ALPHA_VANTAGE_API_KEY", "premium-secret")
+
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+    )
+
+    assert settings.validation_price_providers == ("alphavantage", "yfinance")
+    assert settings.alpha_vantage_api_key.get_secret_value() == "premium-secret"
+    assert "premium-secret" not in repr(settings)
 
 
 @pytest.mark.parametrize("name", ["tradingNG;DROP", "../tradingNG", "trading-NG"])
