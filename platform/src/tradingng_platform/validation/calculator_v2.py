@@ -81,9 +81,7 @@ def calculate_outcome_v2(
         raise ValueError("validation exit session precedes entry session")
 
     price_return = _return(instrument.close, entry_index, exit_index)
-    benchmark_price_return = _return(
-        benchmark.close, benchmark_entry_index, benchmark_exit_index
-    )
+    benchmark_price_return = _return(benchmark.close, benchmark_entry_index, benchmark_exit_index)
     total_return = _return(instrument.total_return_index, entry_index, exit_index)
     benchmark_total_return = _return(
         benchmark.total_return_index,

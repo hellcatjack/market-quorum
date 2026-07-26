@@ -90,9 +90,7 @@ async def test_yfinance_v2_maps_actions_and_declares_split_normalized(monkeypatc
 
     monkeypatch.setattr("tradingng_platform.validation.providers.yf.download", download)
 
-    series = await YFinancePriceProviderV2().history(
-        "NVDA", date(2026, 1, 5), date(2026, 1, 6)
-    )
+    series = await YFinancePriceProviderV2().history("NVDA", date(2026, 1, 5), date(2026, 1, 6))
 
     assert observed["auto_adjust"] is False
     assert observed["actions"] is True

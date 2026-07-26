@@ -24,13 +24,13 @@ class ValidationTriggerResults(BaseModel):
     exit_price: Decimal | None = None
     entry_session: date | None = None
     exit_session: date | None = None
-    price_target_status: Literal[
-        "not_set", "basis_pending", "basis_unavailable", "evaluated"
-    ] | None = None
+    price_target_status: (
+        Literal["not_set", "basis_pending", "basis_unavailable", "evaluated"] | None
+    ) = None
     rebased_price_target: Decimal | None = None
-    data_quality_status: Literal[
-        "matched", "minor_difference", "material_difference", "not_available"
-    ] | None = None
+    data_quality_status: (
+        Literal["matched", "minor_difference", "material_difference", "not_available"] | None
+    ) = None
 
 
 class ValidationView(BaseModel):

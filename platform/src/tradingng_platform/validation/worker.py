@@ -106,9 +106,7 @@ class ValidationWorker:
         except InsufficientSessions:
             await self._retry(claim.id, observed_now, next_day=True, code="future_sessions")
         except ProviderUnavailable:
-            await self._retry(
-                claim.id, observed_now, next_day=False, code="provider_unavailable"
-            )
+            await self._retry(claim.id, observed_now, next_day=False, code="provider_unavailable")
         except ProviderInvalidData:
             await self._terminal_error(claim.id, "unavailable", "invalid_market_data")
         except (httpx.HTTPError, OSError, TimeoutError):
@@ -302,9 +300,7 @@ class ValidationWorker:
             matures_at=claim.matures_at,
         )
         start = claim.analysis_date - timedelta(days=14)
-        instrument_raw = await self.v2_provider.history(
-            claim.ticker, start, schedule.exit_session
-        )
+        instrument_raw = await self.v2_provider.history(claim.ticker, start, schedule.exit_session)
         benchmark_raw = await self.v2_provider.history(
             claim.benchmark_ticker, start, schedule.exit_session
         )
@@ -509,9 +505,7 @@ class ValidationWorker:
                 "normalization_version": instrument.normalization_version,
                 "instrument_data_quality_status": instrument.data_quality_status,
                 "benchmark_data_quality_status": benchmark.data_quality_status,
-                "collected_at": max(
-                    instrument.collected_at, benchmark.collected_at
-                ).isoformat(),
+                "collected_at": max(instrument.collected_at, benchmark.collected_at).isoformat(),
             },
         }
         with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8") as source:

@@ -17,6 +17,7 @@ from tradingng_platform.models import (
     RunEvent,
     Validation,
 )
+from tradingng_platform.validation.calendars import MarketCalendarResolver
 from tradingng_platform.validation.price_contracts import OhlcBasis, ProviderPriceSeries
 from tradingng_platform.validation.prices import PriceSeries
 from tradingng_platform.validation.repository import ValidationRepository
@@ -66,10 +67,7 @@ class _PricesV2:
 
     async def history(self, ticker, start, end):
         calendar = xcals.get_calendar("XNYS")
-        sessions = [
-            value.date()
-            for value in calendar.sessions_in_range(start, end)
-        ]
+        sessions = [value.date() for value in calendar.sessions_in_range(start, end)]
         base = Decimal("200") if ticker == "SPY" else Decimal("100")
         closes = [base + index for index in range(len(sessions))]
         return ProviderPriceSeries(
@@ -184,7 +182,10 @@ async def test_validation_worker_completes_three_horizons_without_rewriting_run(
     assert twenty_day.trigger_results.direction == "bullish"
     assert twenty_day.trigger_results.direction_correct is True
     assert twenty_day.trigger_results.entry_session == date(2026, 7, 1)
-    assert twenty_day.trigger_results.exit_session == date(2026, 7, 30)
+    expected_exit = (
+        MarketCalendarResolver().schedule("stock", "TEST", date(2026, 7, 1), 20).exit_session
+    )
+    assert twenty_day.trigger_results.exit_session == expected_exit
     assert twenty_day.error_code is None
     assert twenty_day.calculation_version == "validation.v2"
     assert twenty_day.normalization_version == "prices.v1"

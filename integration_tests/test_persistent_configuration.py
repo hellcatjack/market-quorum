@@ -35,3 +35,15 @@ def test_tradingagents_example_connects_directly_to_gateway():
 def test_active_dotenv_is_git_ignored():
     patterns = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
     assert ".env" in patterns
+
+
+def test_validation_provider_template_is_safe_by_default():
+    values = _assignments(ROOT / ".env.platform.example")
+    assert values["TRADINGNG_VALIDATION_PRICE_PROVIDERS"] == "yfinance"
+    assert values["TRADINGNG_ALPHA_VANTAGE_API_KEY"] == ""
+    assert values["TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE"] == "75"
+
+
+def test_offline_verification_checks_validation_worker_service():
+    script = (ROOT / "scripts/verify_platform.sh").read_text(encoding="utf-8")
+    assert "is-active --quiet tradingng-platform-validation.service" in script

@@ -36,6 +36,7 @@ systemctl --user is-active --quiet tradingng-codex-gateway.service
 if systemctl --user list-unit-files 'tradingng-platform-api.service' --no-legend 2>/dev/null | grep -q tradingng; then
   systemctl --user is-active --quiet tradingng-platform-api.service
   systemctl --user is-active --quiet tradingng-platform-scheduler.service
+  systemctl --user is-active --quiet tradingng-platform-validation.service
 fi
 
 .venv/bin/pytest TradingAgents/tests/test_platform_events.py -q

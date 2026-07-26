@@ -52,9 +52,7 @@ class Validation(UuidPrimaryKey, Timestamped, Base):
 class DecisionPriceBasis(UuidPrimaryKey, Timestamped, Base):
     __tablename__ = "decision_price_bases"
 
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("assessment_runs.id"), unique=True
-    )
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assessment_runs.id"), unique=True)
     status: Mapped[str] = mapped_column(String(32), default="pending", index=True)
     target_price: Mapped[Decimal] = mapped_column(Numeric(20, 6))
     reference_session: Mapped[date | None] = mapped_column(Date)

@@ -60,9 +60,7 @@ class ProviderPriceSeries(BaseModel):
             raise ValueError("cash distributions must be finite and non-negative")
         if any(not value.is_finite() or value <= 0 for value in self.split_coefficient):
             raise ValueError("split coefficients must be finite and positive")
-        for open_, high, low, close in zip(
-            self.open, self.high, self.low, self.close, strict=True
-        ):
+        for open_, high, low, close in zip(self.open, self.high, self.low, self.close, strict=True):
             if high < max(open_, close) or low > min(open_, close) or high < low:
                 raise ValueError("OHLC values are inconsistent")
         return self
@@ -90,4 +88,3 @@ class CanonicalPriceSeries(BaseModel):
     ]
     provider_total_return: Decimal | None
     collected_at: datetime
-

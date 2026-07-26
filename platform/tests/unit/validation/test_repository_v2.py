@@ -85,6 +85,7 @@ async def _seed_run(sessions, *, status="succeeded", price_target=None):
 async def test_v2_schedule_creates_one_non_blocking_target_basis(monkeypatch):
     engine, sessions = await _database()
     try:
+
         def plain_insert(dialect, model, values, conflict_columns):
             del dialect, conflict_columns
             return insert(model).values(**values)

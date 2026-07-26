@@ -38,9 +38,7 @@ def _canonical(
             low=[Decimal(value) for value in (lows or closes)],
             close=values,
             adjusted_close=None,
-            cash_distributions=[
-                Decimal(value) for value in (distributions or ["0"] * len(values))
-            ],
+            cash_distributions=[Decimal(value) for value in (distributions or ["0"] * len(values))],
             split_coefficient=[Decimal("1")] * len(values),
             collected_at=datetime(2026, 1, 7, tzinfo=timezone.utc),
         )

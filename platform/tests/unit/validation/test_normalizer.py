@@ -32,12 +32,8 @@ def _series(
         high=values,
         low=values,
         close=values,
-        adjusted_close=(
-            [Decimal(value) for value in adjusted] if adjusted is not None else None
-        ),
-        cash_distributions=[
-            Decimal(value) for value in (distributions or ["0"] * len(values))
-        ],
+        adjusted_close=([Decimal(value) for value in adjusted] if adjusted is not None else None),
+        cash_distributions=[Decimal(value) for value in (distributions or ["0"] * len(values))],
         split_coefficient=[Decimal(value) for value in (splits or ["1"] * len(values))],
         collected_at=datetime(2026, 1, 20, tzinfo=timezone.utc),
     )
@@ -58,11 +54,15 @@ def test_as_traded_and_split_normalized_sources_produce_the_same_price_path():
     alpha_normalized = normalize_prices(alpha)
     yahoo_normalized = normalize_prices(yahoo)
 
-    assert alpha_normalized.close == yahoo_normalized.close == [
-        Decimal("50"),
-        Decimal("50"),
-        Decimal("55"),
-    ]
+    assert (
+        alpha_normalized.close
+        == yahoo_normalized.close
+        == [
+            Decimal("50"),
+            Decimal("50"),
+            Decimal("55"),
+        ]
+    )
     assert alpha_normalized.price_index == yahoo_normalized.price_index
     assert alpha_normalized.price_index[-1] == Decimal("110.0")
 
