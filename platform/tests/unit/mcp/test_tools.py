@@ -10,6 +10,7 @@ from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.mcp.context import reset_principal, set_principal
 from tradingng_platform.mcp.server import create_mcp_server
 from tradingng_platform.mcp.services import McpServices
+from tradingng_platform.validation.contracts import ValidationView
 
 
 class _View:
@@ -55,6 +56,29 @@ class _System:
         return _View(admission_allowed=True)
 
 
+class _Validation:
+    def __init__(self):
+        self.retry_calls = []
+
+    async def retry(self, principal, validation_id, request_id):
+        principal.require("validations:write")
+        self.retry_calls.append((validation_id, request_id))
+        return ValidationView(
+            id=validation_id,
+            run_id=uuid.uuid4(),
+            horizon=20,
+            status="scheduled",
+            scheduled_for=datetime(2026, 7, 26, tzinfo=timezone.utc),
+            observed_at=None,
+            raw_return=None,
+            benchmark_return=None,
+            alpha=None,
+            max_adverse_excursion=None,
+            max_favorable_excursion=None,
+            calculation_version="validation.v2",
+        )
+
+
 def _principal(*scopes):
     return Principal(
         issuer="https://issuer.example",
@@ -75,7 +99,8 @@ async def _call(server, principal, name, arguments):
 @pytest.mark.asyncio
 async def test_tool_inventory_and_submit_use_existing_application_command():
     assessments = _Assessments()
-    server = create_mcp_server(McpServices(assessments, _Records(), _System()))
+    validation = _Validation()
+    server = create_mcp_server(McpServices(assessments, _Records(), _System(), validation))
 
     assert {tool.name for tool in server._tool_manager.list_tools()} == {
         "submit_assessment",
@@ -88,6 +113,7 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
         "get_instrument_summary",
         "get_system_capacity",
         "schedule_validation",
+        "retry_validation",
     }
 
     result = await _call(
@@ -124,6 +150,16 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
     )
     assert assessments.submit_calls[1][1].items[0].asset_type.value == "stock"
     assert assessments.wait_calls == 0
+
+    validation_id = uuid.uuid4()
+    retried = await _call(
+        server,
+        _principal("validations:write"),
+        "retry_validation",
+        {"validation_id": str(validation_id)},
+    )
+    assert retried.model_dump(mode="json")["status"] == "scheduled"
+    assert validation.retry_calls[0][0] == validation_id
 
 
 @pytest.mark.asyncio

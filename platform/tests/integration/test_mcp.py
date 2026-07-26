@@ -154,6 +154,7 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                             "get_instrument_summary",
                             "get_system_capacity",
                             "schedule_validation",
+                            "retry_validation",
                         }
                         templates = await session.list_resource_templates()
                         assert len(templates.resourceTemplates) == 5

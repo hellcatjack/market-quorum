@@ -13,6 +13,7 @@ from tradingng_platform.models import (
     AssessmentRun,
     Base,
     Decision,
+    DecisionPriceBasis,
     Instrument,
     RunEvent,
     Validation,
@@ -226,5 +227,71 @@ async def test_v2_worker_persists_dual_returns_and_minimal_provenance_artifact(t
         assert payload["schema_version"] == "validation-prices.v2"
         assert payload["instrument"]["sessions"] == ["2026-01-05", "2026-01-06"]
         assert payload["provenance"]["provider_id"] == "fixture-v2"
+    finally:
+        await engine.dispose()
+
+
+async def test_worker_prepares_target_basis_independently_of_horizon_jobs(tmp_path):
+    engine, sessions = await _database()
+    now = datetime(2026, 1, 7, tzinfo=timezone.utc)
+    run_id = uuid.uuid4()
+    request_id = uuid.uuid4()
+    instrument_id = uuid.uuid4()
+    try:
+        async with sessions() as session, session.begin():
+            session.add(
+                Instrument(
+                    id=instrument_id,
+                    canonical_ticker="TEST",
+                    asset_type="stock",
+                    exchange="NMS",
+                    metadata_json={},
+                )
+            )
+            session.add(
+                AssessmentRequest(
+                    id=request_id,
+                    batch_id=uuid.uuid4(),
+                    instrument_id=instrument_id,
+                    analysis_date=date(2026, 1, 5),
+                    requested_config_json={},
+                )
+            )
+            session.add(
+                AssessmentRun(
+                    id=run_id,
+                    request_id=request_id,
+                    attempt=1,
+                    status="succeeded",
+                    version=1,
+                )
+            )
+            session.add(
+                DecisionPriceBasis(
+                    run_id=run_id,
+                    status="pending",
+                    target_price=Decimal("110"),
+                    attempts=0,
+                )
+            )
+        worker = ValidationWorker(
+            sessions,
+            _UnusedPrices(),
+            LocalArtifactStore(tmp_path / "artifacts"),
+            v2_provider=_V2Prices(),
+            worker_instance="test-worker",
+        )
+
+        assert await worker.run_once(now)
+
+        async with sessions() as session:
+            basis = await session.scalar(select(DecisionPriceBasis))
+        assert basis.status == "completed"
+        assert basis.reference_session == date(2026, 1, 5)
+        assert basis.reference_close == Decimal("100.0000000000")
+        assert basis.target_multiple == Decimal("1.1000000000")
+        assert basis.provider_id == "fixture-v2"
+        assert basis.claimed_at is None
+        assert basis.lease_expires_at is None
     finally:
         await engine.dispose()

@@ -26,6 +26,7 @@ from tradingng_platform.models import (
     RunConfigSnapshot,
     Validation,
 )
+from tradingng_platform.validation.bases import prepare_target_basis
 from tradingng_platform.validation.calculator import InsufficientSessions, calculate_outcome
 from tradingng_platform.validation.calculator_v2 import (
     TargetPriceBasis,
@@ -62,6 +63,15 @@ class ClaimedValidation:
     target_basis: TargetPriceBasis | None
 
 
+@dataclass(frozen=True)
+class ClaimedPriceBasis:
+    id: uuid.UUID
+    run_id: uuid.UUID
+    ticker: str
+    analysis_date: date
+    target_price: Decimal
+
+
 class ValidationWorker:
     def __init__(
         self,
@@ -81,6 +91,10 @@ class ValidationWorker:
 
     async def run_once(self, now: datetime | None = None) -> bool:
         observed_now = now or datetime.now(timezone.utc)
+        basis_claim = await self._claim_basis(observed_now)
+        if basis_claim is not None:
+            await self._run_basis(basis_claim, observed_now)
+            return True
         claim = await self._claim(observed_now)
         if claim is None:
             return False
@@ -104,6 +118,154 @@ class ValidationWorker:
         except Exception:
             await self._terminal_error(claim.id, "failed", "calculation_error")
         return True
+
+    async def _run_basis(self, claim: ClaimedPriceBasis, now: datetime) -> None:
+        try:
+            if self.v2_provider is None:
+                raise RuntimeError("validation.v2 price provider is not configured")
+            raw = await self.v2_provider.history(
+                claim.ticker,
+                claim.analysis_date - timedelta(days=14),
+                claim.analysis_date,
+            )
+            prices = normalize_prices(raw)
+            prepared = prepare_target_basis(
+                claim.target_price,
+                claim.analysis_date,
+                prices,
+            )
+            await self._complete_basis(claim.id, prices, prepared)
+        except ProviderUnavailable:
+            await self._retry_basis(claim.id, now, "provider_unavailable")
+        except (httpx.HTTPError, OSError, TimeoutError):
+            await self._retry_basis(claim.id, now, "provider_unavailable")
+        except (ProviderInvalidData, ValueError):
+            await self._terminal_basis(claim.id, "invalid_market_data")
+        except Exception:
+            await self._terminal_basis(claim.id, "basis_calculation_error")
+
+    async def _claim_basis(self, now: datetime) -> ClaimedPriceBasis | None:
+        async with self.sessions() as session, session.begin():
+            expired = list(
+                await session.scalars(
+                    select(DecisionPriceBasis)
+                    .where(
+                        DecisionPriceBasis.status == "running",
+                        or_(
+                            DecisionPriceBasis.lease_expires_at.is_(None),
+                            DecisionPriceBasis.lease_expires_at <= now,
+                        ),
+                    )
+                    .with_for_update(skip_locked=True)
+                )
+            )
+            for item in expired:
+                item.status = "pending"
+                item.claimed_at = None
+                item.lease_expires_at = None
+                item.worker_instance = None
+                item.next_attempt_at = None
+                item.error_code = "lease_expired"
+                await AssessmentRepository(session).append_event(
+                    item.run_id,
+                    "validation.price_basis_recovered",
+                    {"price_basis_id": str(item.id)},
+                )
+            row = (
+                await session.execute(
+                    select(
+                        DecisionPriceBasis,
+                        AssessmentRequest,
+                        Instrument,
+                    )
+                    .join(
+                        AssessmentRun,
+                        DecisionPriceBasis.run_id == AssessmentRun.id,
+                    )
+                    .join(
+                        AssessmentRequest,
+                        AssessmentRun.request_id == AssessmentRequest.id,
+                    )
+                    .join(Instrument, AssessmentRequest.instrument_id == Instrument.id)
+                    .where(
+                        or_(
+                            DecisionPriceBasis.status == "pending",
+                            (DecisionPriceBasis.status == "retry_wait")
+                            & (DecisionPriceBasis.next_attempt_at <= now),
+                        )
+                    )
+                    .order_by(DecisionPriceBasis.created_at, DecisionPriceBasis.id)
+                    .with_for_update(of=DecisionPriceBasis, skip_locked=True)
+                    .limit(1)
+                )
+            ).one_or_none()
+            if row is None:
+                return None
+            item, request, instrument = row
+            item.status = "running"
+            item.attempts += 1
+            item.next_attempt_at = None
+            item.claimed_at = now
+            item.lease_expires_at = now + _LEASE_DURATION
+            item.worker_instance = self.worker_instance
+            return ClaimedPriceBasis(
+                id=item.id,
+                run_id=item.run_id,
+                ticker=instrument.canonical_ticker,
+                analysis_date=request.analysis_date,
+                target_price=item.target_price,
+            )
+
+    async def _complete_basis(self, basis_id, prices, prepared) -> None:
+        async with self.sessions() as session, session.begin():
+            item = await session.get(DecisionPriceBasis, basis_id, with_for_update=True)
+            if item is None or item.status != "running":
+                raise RuntimeError("claimed target-price basis is no longer running")
+            item.status = "completed"
+            item.reference_session = prepared.reference_session
+            item.reference_close = prepared.reference_close
+            item.target_multiple = prepared.target_multiple
+            item.currency = prices.currency
+            item.provider_id = prices.provider_id
+            item.provider_adapter_version = prices.provider_adapter_version
+            item.normalization_version = prices.normalization_version
+            item.collected_at = prices.collected_at
+            item.next_attempt_at = None
+            item.error_code = None
+            item.claimed_at = None
+            item.lease_expires_at = None
+            item.worker_instance = None
+            await AssessmentRepository(session).append_event(
+                item.run_id,
+                "validation.price_basis_completed",
+                {
+                    "price_basis_id": str(item.id),
+                    "reference_session": prepared.reference_session.isoformat(),
+                },
+            )
+
+    async def _retry_basis(self, basis_id, now: datetime, code: str) -> None:
+        async with self.sessions() as session, session.begin():
+            item = await session.get(DecisionPriceBasis, basis_id, with_for_update=True)
+            if item is None:
+                return
+            delay = _RETRY_MINUTES[min(max(item.attempts - 1, 0), len(_RETRY_MINUTES) - 1)]
+            item.status = "retry_wait"
+            item.next_attempt_at = now + timedelta(minutes=delay)
+            item.error_code = code
+            item.claimed_at = None
+            item.lease_expires_at = None
+            item.worker_instance = None
+
+    async def _terminal_basis(self, basis_id, code: str) -> None:
+        async with self.sessions() as session, session.begin():
+            item = await session.get(DecisionPriceBasis, basis_id, with_for_update=True)
+            if item is not None:
+                item.status = "unavailable"
+                item.error_code = code
+                item.claimed_at = None
+                item.lease_expires_at = None
+                item.worker_instance = None
 
     async def _run_v1(self, claim: ClaimedValidation, now: datetime) -> None:
         start = claim.analysis_date - timedelta(days=7)

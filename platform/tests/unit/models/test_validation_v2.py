@@ -22,8 +22,13 @@ def test_validation_v2_columns_and_price_basis_table_are_available():
         "total_return",
         "provider_id",
     } <= validation_columns
-    assert "decision_price_bases" == DecisionPriceBasis.__tablename__
+    assert DecisionPriceBasis.__tablename__ == "decision_price_bases"
     assert DecisionPriceBasis.__table__.columns["run_id"].unique is True
+    assert {
+        "claimed_at",
+        "lease_expires_at",
+        "worker_instance",
+    } <= set(DecisionPriceBasis.__table__.columns.keys())
 
 
 def test_v1_view_exposes_legacy_returns_as_total_return_aliases():

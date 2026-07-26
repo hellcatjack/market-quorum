@@ -48,6 +48,19 @@ class ValidationService:
             raise ValueError("validation limit must be between 1 and 200")
         return await self.repository.list(status=status, limit=limit)
 
+    async def retry(
+        self,
+        principal: Principal,
+        validation_id: uuid.UUID,
+        request_id: str | None = None,
+    ):
+        principal.require("validations:write")
+        return await self.repository.retry(
+            validation_id,
+            principal,
+            request_id or f"validation-retry-{uuid.uuid4().hex}",
+        )
+
     @staticmethod
     def _horizons(horizons: list[int] | None) -> tuple[int, ...]:
         resolved = tuple(sorted(set(horizons or _HORIZONS)))

@@ -92,6 +92,9 @@ def upgrade() -> None:
         sa.Column("attempts", sa.Integer(), nullable=False),
         sa.Column("next_attempt_at", datetime_type(), nullable=True),
         sa.Column("error_code", sa.String(length=64), nullable=True),
+        sa.Column("claimed_at", datetime_type(), nullable=True),
+        sa.Column("lease_expires_at", datetime_type(), nullable=True),
+        sa.Column("worker_instance", sa.String(length=128), nullable=True),
         sa.Column("id", sa.Uuid(), nullable=False),
         sa.Column("created_at", datetime_type(), nullable=False),
         sa.ForeignKeyConstraint(
@@ -120,9 +123,19 @@ def upgrade() -> None:
         ["next_attempt_at"],
         unique=False,
     )
+    op.create_index(
+        op.f("ix_decision_price_bases_lease_expires_at"),
+        "decision_price_bases",
+        ["lease_expires_at"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:
+    op.drop_index(
+        op.f("ix_decision_price_bases_lease_expires_at"),
+        table_name="decision_price_bases",
+    )
     op.drop_index(
         op.f("ix_decision_price_bases_next_attempt_at"),
         table_name="decision_price_bases",

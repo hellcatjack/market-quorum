@@ -62,3 +62,28 @@ async def list_assessment_validations(
     principal: Annotated[Principal, Depends(require_scopes("validations:read"))],
 ) -> list[ValidationView]:
     return await request.app.state.validation.list_for_run(principal, run_id)
+
+
+@router.post(
+    "/validations/{validation_id}/retry",
+    response_model=ValidationView,
+    status_code=status.HTTP_202_ACCEPTED,
+    operation_id="retry_validation",
+)
+async def retry_validation(
+    validation_id: uuid.UUID,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scopes("validations:write"))],
+) -> ValidationView:
+    try:
+        return await request.app.state.validation.retry(
+            principal,
+            validation_id,
+            request_id_for(request),
+        )
+    except ValueError:
+        raise ApiError(
+            409,
+            "validation_retry_not_allowed",
+            "Validation cannot be retried",
+        ) from None

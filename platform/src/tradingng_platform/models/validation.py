@@ -68,3 +68,6 @@ class DecisionPriceBasis(UuidPrimaryKey, Timestamped, Base):
     attempts: Mapped[int] = mapped_column(default=0)
     next_attempt_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME, index=True)
     error_code: Mapped[str | None] = mapped_column(String(64))
+    claimed_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME, index=True)
+    worker_instance: Mapped[str | None] = mapped_column(String(128))

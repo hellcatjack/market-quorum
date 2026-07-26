@@ -26,7 +26,7 @@ from tradingng_platform.mcp.errors import safe_tool
 from tradingng_platform.mcp.services import McpServices
 from tradingng_platform.records.contracts import InstrumentSummaryView
 from tradingng_platform.system.contracts import CapacityView
-from tradingng_platform.validation.contracts import ValidationScheduleResult
+from tradingng_platform.validation.contracts import ValidationScheduleResult, ValidationView
 
 
 class JobAccepted(BaseModel):
@@ -214,3 +214,15 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
             _request_id(),
         )
         return ValidationScheduleResult(items=items)
+
+    @server.tool(structured_output=True)
+    @safe_tool
+    async def retry_validation(validation_id: uuid.UUID) -> ValidationView:
+        """Retry a failed, unavailable, or expired outcome-validation job."""
+        if services.validation is None:
+            raise RuntimeError("validation service is unavailable")
+        return await services.validation.retry(
+            current_principal(),
+            validation_id,
+            _request_id(),
+        )

@@ -7,6 +7,7 @@ from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.validation.prices import YFinancePriceProvider
+from tradingng_platform.validation.providers import build_price_provider
 from tradingng_platform.validation.worker import ValidationWorker
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ async def run_validation_worker() -> None:
         YFinancePriceProvider(),
         LocalArtifactStore(settings.artifact_dir),
         settings.max_running_validation,
+        v2_provider=build_price_provider(settings),
     )
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()

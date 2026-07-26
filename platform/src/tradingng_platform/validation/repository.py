@@ -9,7 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
-from tradingng_platform.models import AssessmentRequest, AssessmentRun, Instrument, Validation
+from tradingng_platform.models import (
+    AssessmentRequest,
+    AssessmentRun,
+    Decision,
+    DecisionPriceBasis,
+    Instrument,
+    Validation,
+)
 from tradingng_platform.persistence.upsert import insert_ignore, session_dialect
 from tradingng_platform.validation.calendars import MarketCalendarResolver
 from tradingng_platform.validation.contracts import ValidationView
@@ -57,6 +64,46 @@ class ValidationRepository:
             rows = list(await session.scalars(statement.limit(limit)))
             return [self._view(item) for item in rows]
 
+    async def retry(
+        self,
+        validation_id: uuid.UUID,
+        principal: Principal,
+        request_id: str,
+        now: datetime | None = None,
+    ) -> ValidationView:
+        observed_now = now or datetime.now(timezone.utc)
+        async with self.sessions() as session, session.begin():
+            item = await session.get(Validation, validation_id, with_for_update=True)
+            if item is None:
+                raise ValueError("validation was not found")
+            expired_running = item.status == "running" and (
+                item.lease_expires_at is None or item.lease_expires_at <= observed_now
+            )
+            if item.status not in {"failed", "unavailable"} and not expired_running:
+                raise ValueError("validation is not eligible for retry")
+            item.status = "scheduled"
+            item.scheduled_for = observed_now
+            item.next_attempt_at = None
+            item.error_code = None
+            item.claimed_at = None
+            item.lease_expires_at = None
+            item.worker_instance = None
+            await AssessmentRepository(session).append_event(
+                item.run_id,
+                "validation.retry_requested",
+                {"validation_id": str(item.id), "horizon": item.horizon},
+            )
+            await AssessmentRepository(session).append_audit(
+                principal,
+                "validation.retry",
+                "validation",
+                str(item.id),
+                request_id,
+                {"horizon": item.horizon, "attempts": item.attempts},
+            )
+            await session.flush()
+            return self._view(item)
+
     @staticmethod
     def _view(item: Validation) -> ValidationView:
         return ValidationView.model_validate(item, from_attributes=True)
@@ -73,18 +120,34 @@ async def schedule_validations(
 ) -> list[Validation]:
     row = (
         await session.execute(
-            select(AssessmentRun, AssessmentRequest, Instrument)
+            select(AssessmentRun, AssessmentRequest, Instrument, Decision)
             .join(AssessmentRequest, AssessmentRun.request_id == AssessmentRequest.id)
             .join(Instrument, AssessmentRequest.instrument_id == Instrument.id)
+            .join(Decision, Decision.run_id == AssessmentRun.id)
             .where(AssessmentRun.id == run_id)
             .with_for_update()
         )
     ).one_or_none()
     if row is None:
         raise ValueError("assessment run was not found")
-    run, request, instrument = row
+    run, request, instrument, decision = row
     if run.status != RunStatus.SUCCEEDED.value:
         raise ValueError("only a successful run can be validated")
+
+    if calculation_version == "validation.v2" and decision.price_target is not None:
+        await session.execute(
+            insert_ignore(
+                session_dialect(session),
+                DecisionPriceBasis,
+                {
+                    "run_id": run_id,
+                    "status": "pending",
+                    "target_price": decision.price_target,
+                    "attempts": 0,
+                },
+                [DecisionPriceBasis.run_id],
+            )
+        )
 
     for horizon in horizons:
         if calculation_version == "validation.v2":
