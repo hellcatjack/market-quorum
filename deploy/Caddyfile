@@ -50,6 +50,10 @@ https://ushome.amycat.com:8443 {
 		reverse_proxy 127.0.0.1:8010
 	}
 
+	handle /favicon.ico {
+		respond "" 204
+	}
+
 	@noSession {
 		not header Cookie *__Host-tradingng=*
 	}

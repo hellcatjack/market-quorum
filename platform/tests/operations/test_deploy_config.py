@@ -149,6 +149,18 @@ def test_oauth2_proxy_uses_pkce_secure_cookie_and_bearer_passthrough():
     assert "openssl rand -hex 16" in example
 
 
+def test_parallel_login_flows_keep_independent_bounded_csrf_cookies():
+    oauth2_proxy = (ROOT / "deploy/oauth2-proxy.cfg").read_text()
+    assert "cookie_csrf_per_request = true" in oauth2_proxy
+    assert "cookie_csrf_per_request_limit = 16" in oauth2_proxy
+
+    for relative_path in ("deploy/Caddyfile", "deploy/caddy/tradingng.caddy"):
+        caddy = (ROOT / relative_path).read_text()
+        favicon_handler = 'handle /favicon.ico {\n\t\trespond "" 204\n\t}'
+        assert favicon_handler in caddy
+        assert caddy.index(favicon_handler) < caddy.index("@noSession")
+
+
 def test_oauth2_proxy_logs_out_the_keycloak_session_before_clearing_its_cookie():
     compose = yaml.safe_load((ROOT / "deploy/compose.prod.yml").read_text())
     assert compose["services"]["oauth2-proxy"]["image"] == (
