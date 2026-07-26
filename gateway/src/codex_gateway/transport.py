@@ -18,8 +18,8 @@ STDERR_LOG_LIMIT = 8 * 1024
 
 logger = logging.getLogger(__name__)
 _SECRET_ASSIGNMENT = re.compile(
-    r'''(?i)(["']?(?:authorization|api[-_]?key|access[-_]?token|token|secret|password)'''
-    r'''["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|(?:Bearer\s+)?[^\s,;]+)'''
+    r"""(?i)(["']?(?:authorization|api[-_]?key|access[-_]?token|token|secret|password)"""
+    r"""["']?\s*[:=]\s*)(?:"[^"\r\n]*"|'[^'\r\n]*'|(?:Bearer\s+)?[^\s,;]+)"""
 )
 
 

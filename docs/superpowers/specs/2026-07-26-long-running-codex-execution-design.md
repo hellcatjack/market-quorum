@@ -137,4 +137,3 @@ No test connects to or restarts the live Gateway.
 - Durable Gateway-owned jobs and `thread/resume` are deferred until Gateway must survive independently of the platform Runner or serve remote clients.
 - A per-job App Server pool is deferred until measurements show the shared process is a capacity or isolation bottleneck.
 - Automatic idle-turn termination is intentionally omitted; alerting should precede any destructive watchdog policy.
-

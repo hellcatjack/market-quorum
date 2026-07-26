@@ -371,9 +371,7 @@ async def test_logs_bounded_redacted_stderr_without_blocking_stdout(caplog):
     await transport.start()
     try:
         text = (
-            "authorization=Bearer must-not-leak\n"
-            "api_key=also-secret\n"
-            f"diagnostic={'x' * 20_000}\n"
+            f"authorization=Bearer must-not-leak\napi_key=also-secret\ndiagnostic={'x' * 20_000}\n"
         )
         result = await asyncio.wait_for(
             transport.request("stderr", {"text": text, "value": "ok"}), timeout=3
