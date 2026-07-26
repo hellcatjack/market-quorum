@@ -93,7 +93,10 @@ class ChatCompletionRequest(BaseModel):
 
 class GatewayStatus(BaseModel):
     status: Literal["ok"] = "ok"
+    accepting: bool = True
     active_completions: int = Field(ge=0)
+    oldest_active_seconds: float | None = Field(default=None, ge=0)
+    stalest_progress_seconds: float | None = Field(default=None, ge=0)
     model: str
     reasoning_effort: str
     snapshot_id: str

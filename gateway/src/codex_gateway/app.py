@@ -27,6 +27,18 @@ from codex_gateway.runtime import CodexRuntime
 
 logger = logging.getLogger(__name__)
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_RETRY_COUNT = re.compile(r"^[0-9]{1,3}$")
+
+
+def _parse_retry_count(raw: str | None) -> int:
+    if raw is None:
+        return 0
+    if not _RETRY_COUNT.fullmatch(raw):
+        raise InvalidRequest("x-stainless-retry-count is invalid")
+    value = int(raw)
+    if value > 100:
+        raise InvalidRequest("x-stainless-retry-count is invalid")
+    return value
 
 
 class BodyLimitMiddleware:
@@ -117,9 +129,13 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
     @app.get("/internal/status", response_model=GatewayStatus)
     async def internal_status():
         effective = (await runtime.effective_config()).require_complete()
+        activity = runtime.activity_snapshot()
         return GatewayStatus(
             status="ok",
-            active_completions=runtime.active_completions,
+            accepting=activity.accepting,
+            active_completions=activity.active_completions,
+            oldest_active_seconds=activity.oldest_active_seconds,
+            stalest_progress_seconds=activity.stalest_progress_seconds,
             model=effective.model,
             reasoning_effort=effective.reasoning_effort,
             snapshot_id=effective.snapshot_id,
@@ -137,10 +153,15 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
             str | None,
             Header(alias="X-TradingNG-Codex-Reasoning-Effort"),
         ] = None,
+        x_stainless_retry_count: Annotated[
+            str | None,
+            Header(alias="x-stainless-retry-count"),
+        ] = None,
     ):
         request_id = uuid.uuid4().hex
         started = time.monotonic()
         try:
+            retry_count = _parse_retry_count(x_stainless_retry_count)
             if body.model != "codex":
                 raise ModelNotFound(body.model)
             pin_values = (tradingng_run_id, codex_model, codex_reasoning_effort)
@@ -163,14 +184,14 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                     pinned_config.snapshot_id,
                 )
             adapted = build_codex_prompt(body)
-            if pinned_config is None:
-                result = await runtime.complete(adapted.text, adapted.output_schema)
-            else:
-                result = await runtime.complete(
-                    adapted.text,
-                    adapted.output_schema,
-                    pinned_config=pinned_config,
-                )
+            result = await runtime.complete(
+                adapted.text,
+                adapted.output_schema,
+                pinned_config=pinned_config,
+                request_id=request_id,
+                run_id=tradingng_run_id,
+                retry_count=retry_count,
+            )
             response = to_chat_completion(body, adapted, result)
             logger.info(
                 "request_id=%s status=200 duration_ms=%d tool_calls=%d total_tokens=%d",
