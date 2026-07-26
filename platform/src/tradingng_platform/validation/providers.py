@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import time
+from collections import deque
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Protocol
@@ -37,6 +39,28 @@ class ProviderProtocol(Protocol):
     provider_id: str
 
     async def history(self, ticker: str, start: date, end: date) -> ProviderPriceSeries: ...
+
+
+class SlidingWindowRateLimiter:
+    def __init__(self, requests_per_minute: int):
+        if requests_per_minute < 1:
+            raise ValueError("requests per minute must be positive")
+        self.requests_per_minute = requests_per_minute
+        self._observed: deque[float] = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        while True:
+            async with self._lock:
+                observed_now = time.monotonic()
+                cutoff = observed_now - 60
+                while self._observed and self._observed[0] <= cutoff:
+                    self._observed.popleft()
+                if len(self._observed) < self.requests_per_minute:
+                    self._observed.append(observed_now)
+                    return
+                delay = max(self._observed[0] + 60 - observed_now, 0.001)
+            await asyncio.sleep(delay)
 
 
 def _fingerprint(provider: str, ticker: str, start: date, end: date, options: dict) -> str:
@@ -146,14 +170,18 @@ class AlphaVantagePriceProvider:
         *,
         client: httpx.AsyncClient | None = None,
         timeout: float = 15.0,
+        requests_per_minute: int = 75,
     ):
         if not api_key:
             raise ValueError("Alpha Vantage API key is required")
         self._api_key = api_key
         self._client = client
         self._timeout = timeout
+        self.requests_per_minute = requests_per_minute
+        self._rate_limiter = SlidingWindowRateLimiter(requests_per_minute)
 
     async def history(self, ticker: str, start: date, end: date) -> ProviderPriceSeries:
+        await self._rate_limiter.acquire()
         params = {
             "function": "TIME_SERIES_DAILY_ADJUSTED",
             "symbol": ticker.upper(),
@@ -263,6 +291,7 @@ def build_price_provider(settings: Settings) -> PriceProviderRouter:
                 AlphaVantagePriceProvider(
                     settings.alpha_vantage_api_key.get_secret_value(),
                     timeout=settings.validation_provider_timeout_seconds,
+                    requests_per_minute=settings.alpha_vantage_requests_per_minute,
                 )
             )
         elif provider_id == "yfinance":

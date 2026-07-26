@@ -113,3 +113,18 @@ def test_provider_router_skips_alpha_vantage_when_key_is_absent():
     router = build_price_provider(settings)
 
     assert router.provider_ids == ("yfinance",)
+
+
+def test_provider_router_applies_configured_alpha_vantage_rate_limit():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+        validation_price_providers=("alphavantage", "yfinance"),
+        alpha_vantage_api_key="premium-secret-key",
+        alpha_vantage_requests_per_minute=17,
+    )
+
+    router = build_price_provider(settings)
+
+    assert router.provider_ids == ("alphavantage", "yfinance")
+    assert router.providers[0].requests_per_minute == 17

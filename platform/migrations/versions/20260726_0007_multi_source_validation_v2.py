@@ -106,12 +106,6 @@ def upgrade() -> None:
         sa.UniqueConstraint("run_id", name=op.f("uq_decision_price_bases_run_id")),
     )
     op.create_index(
-        op.f("ix_decision_price_bases_run_id"),
-        "decision_price_bases",
-        ["run_id"],
-        unique=True,
-    )
-    op.create_index(
         op.f("ix_decision_price_bases_status"),
         "decision_price_bases",
         ["status"],
@@ -141,7 +135,6 @@ def downgrade() -> None:
         table_name="decision_price_bases",
     )
     op.drop_index(op.f("ix_decision_price_bases_status"), table_name="decision_price_bases")
-    op.drop_index(op.f("ix_decision_price_bases_run_id"), table_name="decision_price_bases")
     op.drop_table("decision_price_bases")
     op.drop_index(op.f("ix_validations_lease_expires_at"), table_name="validations")
     op.drop_index(op.f("ix_validations_matures_at"), table_name="validations")

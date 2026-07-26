@@ -178,6 +178,28 @@ npm --prefix web run dev
 API 默认监听 `127.0.0.1:8010`。存活与就绪检查分别位于 `/health/live` 和
 `/health/ready`；需要身份认证的业务接口使用 `/api/v1`。
 
+### 表现验证数据源
+
+新安排的表现验证使用 `validation.v2`：系统按交易所日历固化精确入场、退出和成熟
+时间，分别保存价格回报与包含现金分配的总回报，并记录供应商、请求指纹、适配器版本、
+标准化版本和数据质量核对结果。旧记录继续保持 `validation.v1`，不会被自动重算。
+
+默认数据源为 yfinance。未来启用支持 `TIME_SERIES_DAILY_ADJUSTED` 的 Alpha Vantage
+方案时，只需在 `.env.platform` 中配置，不需要修改 TradingAgents：
+
+```dotenv
+TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
+TRADINGNG_ALPHA_VANTAGE_API_KEY=replace-with-secret
+TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE=75
+TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
+```
+
+Alpha Vantage 适配器读取未复权 OHLC、拆股系数和现金分配，再进入统一的
+`prices.v1` 标准化层；yfinance 经过同一标准合约，因此切换或回退供应商不会改变
+验证计算规则。请求限流在适配器层共享执行，API Key 不写入日志、产物或请求指纹。
+显式重试可通过 `POST /api/v1/validations/{validation_id}/retry` 或 MCP 工具
+`retry_validation` 发起。
+
 ## 调度与并发
 
 新安装环境默认同时运行两个评估。管理员可以在“系统状态”页面把最大并发设置为

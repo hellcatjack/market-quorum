@@ -195,6 +195,34 @@ The API listens on `127.0.0.1:8010`. Liveness and readiness are available at
 `/health/live` and `/health/ready`; authenticated business routes use
 `/api/v1`.
 
+### Outcome-validation providers
+
+New validation jobs use `validation.v2`. Exact entry, exit, and maturity times
+are frozen from the market calendar; price returns and total returns including
+cash distributions are stored separately with provider, request fingerprint,
+adapter, normalization, and data-quality provenance. Existing rows remain
+`validation.v1` and are never silently recalculated.
+
+yfinance is the default provider. A future Alpha Vantage plan that supports
+`TIME_SERIES_DAILY_ADJUSTED` can be enabled entirely in `.env.platform`, without
+modifying TradingAgents:
+
+```dotenv
+TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
+TRADINGNG_ALPHA_VANTAGE_API_KEY=replace-with-secret
+TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE=75
+TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
+```
+
+The Alpha Vantage adapter reads as-traded OHLC, split coefficients, and cash
+distributions before entering the common `prices.v1` normalization boundary.
+yfinance implements the same provider contract, so provider changes and
+fallback do not change calculation semantics. Adapter-level rate limiting is
+shared across requests, and the API key is never stored in logs, artifacts, or
+request fingerprints. Explicit retries are available through
+`POST /api/v1/validations/{validation_id}/retry` and the MCP
+`retry_validation` tool.
+
 ## Scheduling and concurrency
 
 New installations default to two concurrent assessments. An administrator can
