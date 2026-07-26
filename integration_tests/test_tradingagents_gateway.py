@@ -45,7 +45,17 @@ class ScriptedRuntime:
     async def stop(self):
         return None
 
-    async def complete(self, prompt, output_schema):
+    async def complete(
+        self,
+        prompt,
+        output_schema,
+        *,
+        pinned_config=None,
+        request_id=None,
+        run_id=None,
+        retry_count=0,
+    ):
+        del pinned_config, request_id, run_id, retry_count
         self.prompts.append((prompt, output_schema))
         message = next(self.messages)
         Draft7Validator(output_schema).validate(message)
