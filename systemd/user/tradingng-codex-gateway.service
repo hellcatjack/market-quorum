@@ -7,6 +7,7 @@ Type=simple
 WorkingDirectory=/app/devs/TradingNG
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/hellcat/.nvm/versions/node/v22.21.1/bin:/app/devs/TradingNG/.venv/bin:/home/hellcat/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=CODEX_GATEWAY_REQUEST_TIMEOUT_SECONDS=1200
 ExecStart=/app/devs/TradingNG/.venv/bin/python -m codex_gateway
 Restart=always
 RestartSec=5
