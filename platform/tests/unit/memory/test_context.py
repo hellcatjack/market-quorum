@@ -108,6 +108,8 @@ def test_independent_snapshot_stays_empty_and_historical_snapshot_renders_for_tr
     assert "[2026-07-01 | NVDA | Buy | +5.0% | +2.0% | 5d]" in rendered
     assert "DECISION:\nRating: Buy" in rendered
     assert "REFLECTION:\nValidated after 5 sessions" in rendered
+    assert "Historical ratings are calibration observations, not votes." in rendered
+    assert "Derive the current rating from current-date evidence first" in rendered
     assert "<!-- ENTRY_END -->" in rendered
 
 

@@ -24,13 +24,27 @@ logger = logging.getLogger(__name__)
 
 
 def _commit(path: Path) -> str:
-    result = subprocess.run(
+    revision = subprocess.run(
         ["git", "-C", str(path), "rev-parse", "HEAD"],
         capture_output=True,
         check=True,
         text=True,
     )
-    return result.stdout.strip()
+    status = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(path),
+            "status",
+            "--porcelain",
+            "--untracked-files=no",
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    suffix = "-dirty" if status.stdout.strip() else ""
+    return revision.stdout.strip() + suffix
 
 
 def _execution_metadata() -> ExecutionMetadata:

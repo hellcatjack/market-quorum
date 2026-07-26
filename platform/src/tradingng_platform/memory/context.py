@@ -108,7 +108,10 @@ def _reflection(candidate: MemoryCandidate) -> str:
         f"maximum adverse excursion {candidate.max_adverse_excursion:+.1%}; "
         f"maximum favorable excursion {candidate.max_favorable_excursion:+.1%}; "
         f"price target {target}. Treat this as retrospective calibration, not as "
-        "current market evidence."
+        "current market evidence. Historical ratings are calibration observations, "
+        "not votes. Derive the current rating from current-date evidence first; use "
+        "this record only to check rating semantics, sizing, and risk controls. "
+        "Regime changes can invalidate even a previously correct direction."
     )
 
 
