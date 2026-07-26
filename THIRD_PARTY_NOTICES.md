@@ -1,12 +1,17 @@
 # Third-Party Notices
 
+MarketQuorum is licensed under the MIT License. That license covers the
+MarketQuorum repository's original work, but it does not replace or override
+the licenses of bundled or referenced third-party components.
+
 ## TradingAgents
 
 MarketQuorum integrates
 [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents)
-as a pinned Git dependency. TradingAgents is distributed under the Apache
-License 2.0; its copyright and license remain with its respective authors. The
-applicable upstream license is the Apache License 2.0.
+as a pinned Git dependency.
+TradingAgents is distributed under the Apache License 2.0; its copyright and
+license remain with its respective authors. The applicable upstream license is
+the Apache License 2.0.
 
 The pinned revision contains a small MarketQuorum integration commit that
 exposes platform execution events. It remains an independent Git history and

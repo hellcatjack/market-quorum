@@ -292,6 +292,12 @@ See [SECURITY.md](SECURITY.md) for private vulnerability reporting and
 examples contain placeholders only. Never commit authentication files, tokens,
 cookies, private keys, databases, backups, or assessment artifacts.
 
+## License
+
+MarketQuorum is released under the [MIT License](LICENSE). Third-party
+components retain their own licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
 ## Upstream attribution
 
 MarketQuorum is built around

@@ -81,6 +81,24 @@ def test_publication_docs_define_privacy_and_contribution_boundaries():
     assert "Apache License 2.0" in notices
 
 
+def test_marketquorum_uses_mit_without_relicensing_tradingagents():
+    license_path = ROOT / "LICENSE"
+    assert license_path.is_file(), "the repository must publish a root MIT license"
+
+    license_text = license_path.read_text(encoding="utf-8")
+    english = (ROOT / "README.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+
+    assert license_text.startswith("MIT License\n")
+    assert "Copyright (c) 2026 hellcatjack" in license_text
+    assert "Permission is hereby granted, free of charge" in license_text
+    assert "[MIT License](LICENSE)" in english
+    assert "[MIT 许可证](LICENSE)" in chinese
+    assert "MarketQuorum is licensed under the MIT License" in notices
+    assert "TradingAgents is distributed under the Apache License 2.0" in notices
+
+
 def test_example_env_has_only_local_placeholder_key():
     env = (ROOT / ".env.tradingagents.example").read_text(encoding="utf-8")
     assert "OPENAI_COMPATIBLE_API_KEY=local" in env

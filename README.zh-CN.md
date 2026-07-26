@@ -268,6 +268,11 @@ systemd-analyze --user verify systemd/user/*.service systemd/user/*.target
 [CONTRIBUTING.md](CONTRIBUTING.md)。公开示例只能包含占位符，禁止提交认证文件、
 Token、Cookie、私钥、数据库、备份或评估产物。
 
+## 许可证
+
+MarketQuorum 使用 [MIT 许可证](LICENSE) 开源。第三方组件继续遵循各自的许可证，
+详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 上游致谢
 
 MarketQuorum 基于
