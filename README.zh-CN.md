@@ -110,6 +110,17 @@ Codex 以只读文件系统沙箱和 `networkAccess=true` 执行研究。网络�
 只读权限并不意味着原本可读取的文件会自动保密，因此凭据必须放在 Codex 无法读取的
 位置。
 
+Gateway turn 的墙钟时限由 `CODEX_GATEWAY_REQUEST_TIMEOUT_SECONDS` 控制。未设置或
+设为 `0` 时，健康 turn 可以无限期执行；设置正整数时，该数值作为显式的应急上限。
+`/internal/status` 会返回最老活动任务的时长和最久无进展时长，便于运维告警而不误杀
+合法的高思考深度任务。Gateway journal 会保存带关联 ID 的 turn 生命周期，以及经过
+脱敏和长度限制的 app-server 诊断：
+
+```bash
+curl http://127.0.0.1:8000/internal/status
+journalctl --user-unit tradingng-codex-gateway.service --follow
+```
+
 ## 连接 TradingAgents
 
 把本地 Gateway 示例复制为被忽略的实际环境文件：
@@ -236,6 +247,17 @@ systemctl --user enable --now tradingng-platform-validation.service
 ```
 
 Gateway 仍是独立的本机回环服务，不会被公开 Caddy 路由。备份和恢复必须显式执行：
+
+重新加载或重启 Gateway 前，必须确认不存在评估 Runner，并连续两次确认状态中的
+`active_completions` 为 `0`。参考 unit 使用 `TimeoutStopSec=infinity`，使普通
+systemd 停止操作等待执行中的请求，而不是在默认停止时限到达后杀死进程。任一活动
+检查不为零时，不得激活新版 Gateway。
+
+```bash
+ps -eo pid,cmd | rg 'tradingng_platform.runner.cli' | rg -v 'rg '
+curl http://127.0.0.1:8000/internal/status
+curl http://127.0.0.1:8000/internal/status
+```
 
 ```bash
 ./scripts/backup_platform.sh

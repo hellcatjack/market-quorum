@@ -276,6 +276,12 @@ def test_public_caddy_installer_is_domain_and_mode_guarded():
     assert "tradingng-codex-gateway" not in installer
 
 
+def test_gateway_service_supports_unbounded_turns_and_graceful_drain():
+    service = (ROOT / "systemd/user/tradingng-codex-gateway.service").read_text()
+    assert "Environment=CODEX_GATEWAY_REQUEST_TIMEOUT_SECONDS=0" in service
+    assert "TimeoutStopSec=infinity" in service
+
+
 def test_offline_compose_gate_supplies_every_required_bootstrap_variable():
     script = (ROOT / "scripts/verify_platform.sh").read_text()
     assert "TRADINGNG_POSTGRES_PASSWORD" in script

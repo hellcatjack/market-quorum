@@ -123,6 +123,19 @@ research. Network content is untrusted; read-only filesystem access does not
 make otherwise readable files secret. Keep credentials outside any path the
 Codex account can read.
 
+Gateway turn deadlines are controlled by
+`CODEX_GATEWAY_REQUEST_TIMEOUT_SECONDS`. An unset value or `0` allows a healthy
+turn to run without a wall-clock deadline; a positive integer enables an
+explicit emergency limit. `/internal/status` reports the oldest active turn and
+the longest time since progress so operators can alert on inactivity without
+interrupting legitimate high-reasoning work. Correlated turn lifecycle and
+redacted, bounded app-server diagnostics are available in the Gateway journal:
+
+```bash
+curl http://127.0.0.1:8000/internal/status
+journalctl --user-unit tradingng-codex-gateway.service --follow
+```
+
 ## Connect TradingAgents
 
 Copy the local Gateway example into the ignored active environment file:
@@ -263,6 +276,19 @@ systemctl --user enable --now tradingng-platform-validation.service
 
 The Gateway remains a separate loopback-only service and is not routed by
 public Caddy. Backups and restores are explicit:
+
+Before reloading or restarting the Gateway, wait until no assessment Runner is
+present and two consecutive status snapshots report `active_completions: 0`.
+The reference unit uses `TimeoutStopSec=infinity` so an ordinary systemd stop
+can wait for an in-flight request instead of killing it at the default stop
+deadline. Do not activate new Gateway code while either activity check is
+nonzero.
+
+```bash
+ps -eo pid,cmd | rg 'tradingng_platform.runner.cli' | rg -v 'rg '
+curl http://127.0.0.1:8000/internal/status
+curl http://127.0.0.1:8000/internal/status
+```
 
 ```bash
 ./scripts/backup_platform.sh
