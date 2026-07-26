@@ -10,6 +10,7 @@ export type Review = components["schemas"]["ReviewView"];
 export type Comment = components["schemas"]["CommentView"];
 export type InstrumentSummary = components["schemas"]["InstrumentSummaryView"];
 export type InstrumentHistoryItem = components["schemas"]["InstrumentHistoryItem"];
+export type Validation = components["schemas"]["ValidationView"];
 
 export interface CurrentUser {
   subject: string;
@@ -29,6 +30,8 @@ export const getEvidence = (runId: string) =>
   apiRequest<Evidence[]>(`/api/v1/assessments/${encodeURIComponent(runId)}/evidence`);
 export const getArtifacts = (runId: string) =>
   apiRequest<Artifact[]>(`/api/v1/assessments/${encodeURIComponent(runId)}/artifacts`);
+export const getValidations = (runId: string) =>
+  apiRequest<Validation[]>(`/api/v1/assessments/${encodeURIComponent(runId)}/validations`);
 export const getArtifactContent = (artifactId: string) =>
   apiTextRequest(`/api/v1/artifacts/${encodeURIComponent(artifactId)}`);
 export const getReviews = (runId: string) =>

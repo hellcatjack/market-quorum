@@ -13,12 +13,14 @@ import {
   getReviews,
   getRun,
   getSteps,
+  getValidations,
   retryRun,
 } from "../../api/records";
 import { ApiClientError } from "../../api/client";
 import { DecisionPanel } from "./DecisionPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { RunTimeline } from "./RunTimeline";
+import { ValidationReplayPanel } from "./ValidationReplayPanel";
 
 const CANCELLABLE = new Set([
   "queued", "admitted", "starting", "running_analysts", "research_debate", "trader_plan",
@@ -84,6 +86,12 @@ export function RunDetailPage() {
   const artifacts = useQuery({
     queryKey: ["run-artifacts", runId], queryFn: () => getArtifacts(runId), enabled: Boolean(runId) && Boolean(user.data?.scopes.includes("artifacts:read")), retry: false,
   });
+  const validations = useQuery({
+    queryKey: ["run-validations", runId],
+    queryFn: () => getValidations(runId),
+    enabled: Boolean(runId) && Boolean(user.data?.scopes.includes("validations:read")),
+    retry: false,
+  });
   const collaboration = useQuery({
     queryKey: ["run-collaboration", runId],
     queryFn: async () => {
@@ -107,6 +115,10 @@ export function RunDetailPage() {
         if (event.event_type.startsWith("assessment.")) {
           void queryClient.invalidateQueries({ queryKey: ["run-decision", runId] });
           void queryClient.invalidateQueries({ queryKey: ["run-evidence", runId] });
+          void queryClient.invalidateQueries({ queryKey: ["run-artifacts", runId] });
+        }
+        if (event.event_type.startsWith("validation.")) {
+          void queryClient.invalidateQueries({ queryKey: ["run-validations", runId] });
           void queryClient.invalidateQueries({ queryKey: ["run-artifacts", runId] });
         }
       },
@@ -197,7 +209,15 @@ export function RunDetailPage() {
           artifacts={artifacts.data ?? []}
           canReadArtifacts={canReadArtifacts}
         />
-        <section className="detail-panel"><div className="section-heading"><p className="eyebrow">后续验证</p><h2>表现验证</h2></div><p className="section-empty">验证引擎将在下一阶段写入结果；当前评估记录保持不可变。</p></section>
+        <ValidationReplayPanel
+          ticker={run.data.ticker}
+          exchange={run.data.exchange ?? null}
+          analysisDate={run.data.analysis_date}
+          priceTarget={decision.data?.price_target ?? null}
+          validations={validations.data ?? []}
+          artifacts={artifacts.data ?? []}
+          canReadArtifacts={canReadArtifacts}
+        />
         <ReviewPanel runId={runId} reviews={collaboration.data?.reviews ?? []} comments={collaboration.data?.comments ?? []} canReview={Boolean(user.data?.scopes.includes("assessments:review"))} />
       </div>
     </section>

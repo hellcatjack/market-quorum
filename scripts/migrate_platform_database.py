@@ -20,7 +20,7 @@ from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.config import Settings
 from tradingng_platform.models import Artifact, Base, CoordinationLock
 
-_EXPECTED_REVISION = "20260725_0005"
+_EXPECTED_REVISION = "20260726_0006"
 _COORDINATION_SEEDS = {
     "global:admission",
     "global:archive",

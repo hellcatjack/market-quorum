@@ -1,7 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.assessments.contracts import AssessmentItem, SubmitAssessments
@@ -122,11 +122,10 @@ async def test_validation_worker_completes_three_horizons_without_rewriting_run(
             )
         )
         persisted = await session.get(AssessmentRun, run.id)
-        artifact_count = int(
-            await session.scalar(
-                select(func.count()).select_from(Artifact).where(Artifact.run_id == run.id)
+        artifacts = list(
+            await session.scalars(
+                select(Artifact).where(Artifact.run_id == run.id).order_by(Artifact.kind)
             )
-            or 0
         )
         events = list(
             await session.scalars(select(RunEvent.event_type).where(RunEvent.run_id == run.id))
@@ -134,5 +133,17 @@ async def test_validation_worker_completes_three_horizons_without_rewriting_run(
     assert [item.status for item in validations] == ["completed", "completed", "completed"]
     assert validations[1].raw_return == Decimal("0.0500000000")
     assert persisted.status == RunStatus.SUCCEEDED.value
-    assert artifact_count == 3
+    assert len(artifacts) == 3
+    assert {artifact.retention_class for artifact in artifacts} == {"permanent"}
     assert events.count("validation.completed") == 3
+
+    views = await service.list_for_run(principal, run.id)
+    twenty_day = next(item for item in views if item.horizon == 20)
+    assert twenty_day.data_artifact_id == validations[2].data_artifact_id
+    assert twenty_day.trigger_results.rating == "Buy"
+    assert twenty_day.trigger_results.direction == "bullish"
+    assert twenty_day.trigger_results.direction_correct is True
+    assert twenty_day.trigger_results.entry_session == date(2026, 7, 1)
+    assert twenty_day.trigger_results.exit_session == date(2026, 7, 21)
+    assert twenty_day.error_code is None
+    assert twenty_day.calculation_version == "validation.v1"

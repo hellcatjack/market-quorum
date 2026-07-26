@@ -56,6 +56,7 @@ def test_every_migration_revision_can_be_imported():
     scripts = ScriptDirectory.from_config(Config(str(platform_root / "alembic.ini")))
 
     assert [revision.revision for revision in scripts.walk_revisions()] == [
+        "20260726_0006",
         "20260725_0005",
         "20260725_0004",
         "20260725_0003",

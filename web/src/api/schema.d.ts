@@ -1094,12 +1094,41 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** ValidationTriggerResults */
+        ValidationTriggerResults: {
+            /** Direction */
+            direction?: ("bullish" | "bearish" | "neutral") | null;
+            /** Direction Correct */
+            direction_correct?: boolean | null;
+            /** Entry Price */
+            entry_price?: string | null;
+            /** Entry Session */
+            entry_session?: string | null;
+            /** Exit Price */
+            exit_price?: string | null;
+            /** Exit Session */
+            exit_session?: string | null;
+            /** Price Target Hit */
+            price_target_hit?: boolean | null;
+            /** Rating */
+            rating?: string | null;
+        };
         /** ValidationView */
         ValidationView: {
             /** Alpha */
             alpha: string | null;
             /** Benchmark Return */
             benchmark_return: string | null;
+            /**
+             * Calculation Version
+             * @default validation.v1
+             * @constant
+             */
+            calculation_version: "validation.v1";
+            /** Data Artifact Id */
+            data_artifact_id?: string | null;
+            /** Error Code */
+            error_code?: string | null;
             /**
              * Horizon
              * @enum {integer}
@@ -1133,6 +1162,7 @@ export interface components {
              * @enum {string}
              */
             status: "scheduled" | "running" | "completed" | "retry_wait" | "unavailable" | "failed";
+            trigger_results?: components["schemas"]["ValidationTriggerResults"];
         };
         /** WebhookView */
         WebhookView: {

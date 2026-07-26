@@ -173,7 +173,7 @@ class ValidationWorker:
                 sha256=stored.sha256,
                 storage_key=stored.storage_key,
                 redacted=True,
-                retention_class="raw_180d",
+                retention_class="permanent",
                 metadata_json={"validation_id": str(claim.id)},
             )
             session.add(artifact)

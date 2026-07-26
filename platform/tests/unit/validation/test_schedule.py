@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
@@ -73,3 +74,44 @@ async def test_user_scheduling_requires_write_scope_and_bounded_horizons():
         await service.schedule(viewer, run_id)
     with pytest.raises(ValueError, match="horizons"):
         await service.schedule_system(run_id, [2])
+
+
+def test_validation_view_exposes_typed_audit_metadata():
+    artifact_id = uuid.uuid4()
+    view = ValidationView.model_validate(
+        SimpleNamespace(
+            id=uuid.uuid4(),
+            run_id=uuid.uuid4(),
+            horizon=20,
+            status="completed",
+            scheduled_for=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            observed_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
+            raw_return="0.05",
+            benchmark_return="0.02",
+            alpha="0.03",
+            max_adverse_excursion="-0.01",
+            max_favorable_excursion="0.07",
+            trigger_results_json={
+                "rating": "Buy",
+                "direction": "bullish",
+                "direction_correct": True,
+                "price_target_hit": False,
+                "entry_price": "100",
+                "exit_price": "105",
+                "entry_session": "2026-07-01",
+                "exit_session": "2026-07-21",
+            },
+            data_artifact_id=artifact_id,
+            error_code=None,
+        ),
+        from_attributes=True,
+    )
+
+    assert view.trigger_results.rating == "Buy"
+    assert view.trigger_results.direction_correct is True
+    assert view.data_artifact_id == artifact_id
+    assert view.error_code is None
+    assert view.calculation_version == "validation.v1"
+    payload = view.model_dump(mode="json")
+    assert payload["trigger_results"]["entry_session"] == "2026-07-01"
+    assert "trigger_results_json" not in payload

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.4",
+    "lightweight-charts": "^5.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "wouter": "^3.9.0"

@@ -5,6 +5,17 @@ import { memoryLocation } from "wouter/memory-location";
 
 import { RunDetailPage } from "./RunDetailPage";
 
+vi.mock("./ValidationChart", () => ({
+  ValidationChart: ({ instrumentTicker, benchmarkTicker }: {
+    instrumentTicker: string;
+    benchmarkTicker: string;
+  }) => (
+    <div data-testid="validation-chart">
+      {instrumentTicker} 对比 {benchmarkTicker}
+    </div>
+  ),
+}));
+
 class SilentEventSource {
   onmessage: ((event: MessageEvent<string>) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
@@ -26,7 +37,7 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
       return json({
         subject: "analyst",
         display_name: "分析员",
-        scopes: ["assessments:read", "assessments:cancel", "assessments:review", "artifacts:read"],
+        scopes: ["assessments:read", "assessments:cancel", "assessments:review", "artifacts:read", "validations:read"],
         roles: ["Analyst"],
       });
     }
@@ -40,7 +51,59 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
       return json([{ id: "evidence-1", source: "yfinance", tool_name: "get_stock_data", arguments: { ticker: "SPCX" }, collected_at: "2026-07-25T12:02:00Z", effective_at: "2026-07-25T00:00:00Z", freshness: "fresh", content_hash: "abc123" }]);
     }
     if (path.endsWith("/artifacts")) {
-      return json([{ id: "artifact-1", run_id: "run-123", kind: "report_18_complete_report", media_type: "text/markdown", size: 512, sha256: "def456", created_at: "2026-07-25T12:03:00Z" }]);
+      return json([
+        { id: "artifact-1", run_id: "run-123", kind: "report_18_complete_report", media_type: "text/markdown", size: 512, sha256: "def456", created_at: "2026-07-25T12:03:00Z" },
+        { id: "artifact-validation-20", run_id: "run-123", kind: "validation_20_prices", media_type: "application/json", size: 2048, sha256: "a".repeat(64), created_at: "2026-07-26T12:00:00Z" },
+      ]);
+    }
+    if (path.endsWith("/validations")) {
+      return json([{
+        id: "validation-20",
+        run_id: "run-123",
+        horizon: 20,
+        status: "completed",
+        scheduled_for: "2026-07-25T00:00:00Z",
+        observed_at: "2026-07-26T12:00:00Z",
+        raw_return: "0.0842",
+        benchmark_return: "0.0217",
+        alpha: "0.0625",
+        max_adverse_excursion: "-0.0310",
+        max_favorable_excursion: "0.1020",
+        trigger_results: {
+          rating: "Buy",
+          direction: "bullish",
+          direction_correct: true,
+          price_target_hit: false,
+          entry_price: "100",
+          exit_price: "108.42",
+          entry_session: "2026-07-01",
+          exit_session: "2026-07-21",
+        },
+        data_artifact_id: "artifact-validation-20",
+        error_code: null,
+        calculation_version: "validation.v1",
+      }]);
+    }
+    if (path.endsWith("/api/v1/artifacts/artifact-validation-20")) {
+      const sessions = Array.from({ length: 21 }, (_, index) =>
+        `2026-07-${String(index + 1).padStart(2, "0")}`,
+      );
+      const series = (ticker: string, start: number) => {
+        const prices = sessions.map((_, index) => start + index);
+        return {
+          ticker,
+          currency: "USD",
+          sessions,
+          open: prices,
+          high: prices.map((value) => value + 1),
+          low: prices.map((value) => value - 1),
+          close: prices,
+          adjusted_close: prices,
+          source: "yfinance",
+          collected_at: "2026-07-26T12:00:00Z",
+        };
+      };
+      return json({ instrument: series("SPCX", 100), benchmark: series("SPY", 200) });
     }
     if (path.endsWith("/reviews")) {
       return json([{ id: "review-1", run_id: "run-123", reviewer: "复核员", verdict: "approved", comment: "证据充分", created_at: "2026-07-25T13:00:00Z" }]);
@@ -51,6 +114,7 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
       id: "run-123",
       request_id: "request-123",
       ticker: "SPCX",
+      exchange: "NMS",
       asset_type: "stock",
       analysis_date: "2026-07-25",
       status: "succeeded",
@@ -117,6 +181,15 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
     decisionHeading.compareDocumentPosition(timelineHeading)
       & Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+  const validationHeading = await screen.findByRole("heading", { name: "表现验证" });
+  expect(validationHeading.closest("section")).toHaveClass("detail-panel--wide");
+  expect(
+    timelineHeading.compareDocumentPosition(validationHeading)
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.queryByText(/验证引擎将在下一阶段写入结果/)).not.toBeInTheDocument();
+  expect(await screen.findByTestId("validation-chart")).toHaveTextContent("SPCX 对比 SPY");
+  expect(screen.getByText(/共有 21 个价格节点/)).toBeInTheDocument();
   expect(
     screen.queryByRole("heading", { name: "证据与工具调用" }),
   ).not.toBeInTheDocument();
