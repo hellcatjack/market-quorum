@@ -9,8 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
-from tradingng_platform.models import AssessmentRequest, AssessmentRun, Validation
+from tradingng_platform.models import AssessmentRequest, AssessmentRun, Instrument, Validation
 from tradingng_platform.persistence.upsert import insert_ignore, session_dialect
+from tradingng_platform.validation.calendars import MarketCalendarResolver
 from tradingng_platform.validation.contracts import ValidationView
 
 
@@ -67,27 +68,47 @@ async def schedule_validations(
     horizons: tuple[int, ...],
     principal: Principal,
     request_id: str,
+    calculation_version: str = "validation.v2",
+    calendar_resolver: MarketCalendarResolver | None = None,
 ) -> list[Validation]:
     row = (
         await session.execute(
-            select(AssessmentRun, AssessmentRequest)
+            select(AssessmentRun, AssessmentRequest, Instrument)
             .join(AssessmentRequest, AssessmentRun.request_id == AssessmentRequest.id)
+            .join(Instrument, AssessmentRequest.instrument_id == Instrument.id)
             .where(AssessmentRun.id == run_id)
             .with_for_update()
         )
     ).one_or_none()
     if row is None:
         raise ValueError("assessment run was not found")
-    run, request = row
+    run, request, instrument = row
     if run.status != RunStatus.SUCCEEDED.value:
         raise ValueError("only a successful run can be validated")
 
     for horizon in horizons:
-        scheduled_for = datetime.combine(
-            request.analysis_date + timedelta(days=horizon),
-            time.min,
-            timezone.utc,
-        )
+        if calculation_version == "validation.v2":
+            schedule = (calendar_resolver or MarketCalendarResolver()).schedule(
+                instrument.asset_type,
+                instrument.exchange,
+                request.analysis_date,
+                horizon,
+            )
+            scheduled_for = schedule.matures_at
+            version_values = {
+                "calculation_version": calculation_version,
+                "calendar_code": schedule.calendar_code,
+                "entry_session": schedule.entry_session,
+                "exit_session": schedule.exit_session,
+                "matures_at": schedule.matures_at,
+            }
+        else:
+            scheduled_for = datetime.combine(
+                request.analysis_date + timedelta(days=horizon),
+                time.min,
+                timezone.utc,
+            )
+            version_values = {"calculation_version": "validation.v1"}
         await session.execute(
             insert_ignore(
                 session_dialect(session),
@@ -99,6 +120,7 @@ async def schedule_validations(
                     "scheduled_for": scheduled_for,
                     "trigger_results_json": {},
                     "attempts": 0,
+                    **version_values,
                 },
                 [Validation.run_id, Validation.horizon],
             )
