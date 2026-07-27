@@ -6,10 +6,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
 from tradingagents.agents.analysts import sentiment_analyst
+from tradingagents.dataflows import fred
 from tradingagents.dataflows.interface import VENDOR_METHODS
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -205,11 +207,22 @@ def _historical_point_in_time_guard(analysis_date: date):
         return
 
     original_routes = {method: dict(VENDOR_METHODS[method]) for method in _CURRENT_SNAPSHOT_METHODS}
+    original_macro_routes = dict(VENDOR_METHODS["get_macro_indicators"])
     original_social = {name: getattr(sentiment_analyst, name) for name in _CURRENT_SOCIAL_FETCHERS}
+    original_fred_request = fred._request
     try:
         for method, vendor_routes in original_routes.items():
             unavailable = _point_in_time_unavailable(method, analysis_date)
             VENDOR_METHODS[method] = dict.fromkeys(vendor_routes, unavailable)
+        fred._request = _point_in_time_fred_request(original_fred_request, analysis_date)
+        VENDOR_METHODS["get_macro_indicators"] = {
+            vendor: (
+                _point_in_time_fred_route(route, analysis_date)
+                if vendor == "fred"
+                else _point_in_time_unavailable(f"get_macro_indicators via {vendor}", analysis_date)
+            )
+            for vendor, route in original_macro_routes.items()
+        }
         for name in original_social:
             setattr(
                 sentiment_analyst,
@@ -220,6 +233,8 @@ def _historical_point_in_time_guard(analysis_date: date):
     finally:
         for method, vendor_routes in original_routes.items():
             VENDOR_METHODS[method] = vendor_routes
+        VENDOR_METHODS["get_macro_indicators"] = original_macro_routes
+        fred._request = original_fred_request
         for name, fetcher in original_social.items():
             setattr(sentiment_analyst, name, fetcher)
 
@@ -243,6 +258,40 @@ def _point_in_time_social_unavailable(name: str, analysis_date: date):
         )
 
     return unavailable
+
+
+def _point_in_time_fred_request(request, analysis_date: date):
+    @wraps(request)
+    def vintage_request(path: str, params: dict) -> dict:
+        guarded_params = dict(params)
+        if path == "series/observations":
+            guarded_params.update(
+                {
+                    "realtime_start": analysis_date.isoformat(),
+                    "realtime_end": analysis_date.isoformat(),
+                }
+            )
+        return request(path, guarded_params)
+
+    return vintage_request
+
+
+def _point_in_time_fred_route(route, analysis_date: date):
+    @wraps(route)
+    def vintage_route(
+        indicator: str,
+        curr_date: str,
+        look_back_days: int | None = None,
+    ) -> str:
+        report = route(indicator, analysis_date.isoformat(), look_back_days)
+        return (
+            "POINT_IN_TIME_VINTAGE: FRED observations are limited to values "
+            f"available on {analysis_date.isoformat()}. Later releases and revisions "
+            "are excluded.\n\n"
+            f"{report}"
+        )
+
+    return vintage_route
 
 
 def parse_decision(markdown: str) -> dict:

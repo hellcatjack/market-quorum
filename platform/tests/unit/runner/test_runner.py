@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from langchain_core.messages import AIMessage, HumanMessage
 from tradingagents.agents.analysts import sentiment_analyst
+from tradingagents.dataflows import fred
 from tradingagents.dataflows.interface import VENDOR_METHODS
 
 from tradingng_platform.assessments.contracts import MemoryMode
@@ -94,6 +95,16 @@ class _TemporalProbeGraph(_FakeGraph):
             ),
             "fetch_reddit_posts": sentiment_analyst.fetch_reddit_posts(ticker),
         }
+        return super().propagate(ticker, analysis_date, asset_type)
+
+
+class _FredTemporalProbeGraph(_FakeGraph):
+    observed_macro = None
+
+    def propagate(self, ticker, analysis_date, asset_type="stock"):
+        type(self).observed_macro = VENDOR_METHODS["get_macro_indicators"]["fred"](
+            "cpi", "2099-12-31", 365
+        )
         return super().propagate(ticker, analysis_date, asset_type)
 
 
@@ -232,6 +243,45 @@ def test_historical_runner_blocks_current_snapshot_tools_and_restores_routes(tmp
             "2000-01-03; proceed without it and do not use current data>"
         )
         assert getattr(sentiment_analyst, name) is current_snapshot
+
+
+def test_historical_runner_uses_fred_vintage_available_on_analysis_date(tmp_path, monkeypatch):
+    requests = []
+
+    def fake_fred_request(path, params):
+        requests.append((path, dict(params)))
+        if path == "series":
+            return {
+                "seriess": [
+                    {
+                        "title": "Consumer Price Index",
+                        "units_short": "Index",
+                        "frequency": "Monthly",
+                        "seasonal_adjustment_short": "SA",
+                    }
+                ]
+            }
+        return {
+            "observations": [
+                {"date": "1999-12-01", "value": "100.0"},
+                {"date": "2000-01-01", "value": "101.0"},
+            ]
+        }
+
+    original_route = VENDOR_METHODS["get_macro_indicators"]["fred"]
+    monkeypatch.setattr(fred, "_request", fake_fred_request)
+    runner_input = _runner_input(tmp_path).model_copy(update={"analysis_date": date(2000, 1, 3)})
+
+    TradingAgentsRunner(runner_input, graph_factory=_FredTemporalProbeGraph).run()
+
+    observation_request = next(params for path, params in requests if path == "series/observations")
+    assert observation_request["observation_end"] == "2000-01-03"
+    assert observation_request["realtime_start"] == "2000-01-03"
+    assert observation_request["realtime_end"] == "2000-01-03"
+    assert _FredTemporalProbeGraph.observed_macro.startswith(
+        "POINT_IN_TIME_VINTAGE: FRED observations are limited to values available on 2000-01-03."
+    )
+    assert VENDOR_METHODS["get_macro_indicators"]["fred"] is original_route
 
 
 def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path):
