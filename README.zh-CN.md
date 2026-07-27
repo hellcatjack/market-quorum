@@ -180,10 +180,11 @@ API 默认监听 `127.0.0.1:8010`。存活与就绪检查分别位于 `/health/l
 
 ### Alpha Vantage 研究数据源
 
-新准入的评估默认在行情、技术指标、基本面和新闻四类研究中优先使用 Alpha Vantage，
-并在未配置、限流或无数据时回退到 yfinance。宏观数据继续使用 FRED，预测市场继续
-使用 Polymarket。该顺序由 TradingNG 外部调度层写入不可变运行快照，不修改
-TradingAgents：
+配置 Alpha Vantage 研究 Key 后，新准入的评估会在行情、技术指标、基本面、新闻和
+确定性行情核对快照中独占使用 Alpha Vantage。遇到限流时，系统延时后重试同一个
+Alpha 请求，不会回退到 Yahoo；只有没有配置 Alpha 研究 Key 的安装环境才保留其显式
+备用配置。宏观数据继续使用 FRED，预测市场继续使用 Polymarket。实际路由由
+TradingNG 外部调度层写入不可变运行快照，不修改 TradingAgents：
 
 ```dotenv
 ALPHA_VANTAGE_API_KEY=replace-with-secret
@@ -192,7 +193,8 @@ TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
 
 `ALPHA_VANTAGE_API_KEY` 由 TradingAgents 研究 Worker 读取；修改配置后需要重启
 调度器和 Worker，且只影响之后准入的任务。运行详情中的数据源快照会保留实际配置，
-便于追溯和复现。
+便于追溯和复现。跨进程请求闸门会协调本机所有使用同一 Key 的 Worker，并统一处理
+供应商限流后的延时重试。
 
 ### 表现验证数据源
 
@@ -207,13 +209,17 @@ Alpha Vantage 方案可在 `.env.platform` 中启用：
 TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
 TRADINGNG_ALPHA_VANTAGE_API_KEY=replace-with-secret
 TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE=75
+TRADINGNG_ALPHA_VANTAGE_RETRY_ATTEMPTS=6
+TRADINGNG_ALPHA_VANTAGE_RETRY_BASE_SECONDS=5
+TRADINGNG_ALPHA_VANTAGE_RETRY_MAX_SECONDS=60
 TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
 ```
 
 Alpha Vantage 适配器读取未复权 OHLC、拆股系数和现金分配，再进入统一的
-`prices.v1` 标准化层；yfinance 经过同一标准合约，因此切换或回退供应商不会改变
-验证计算规则。请求限流在适配器层共享执行，API Key 不写入日志、产物或请求指纹。
-显式重试可通过 `POST /api/v1/validations/{validation_id}/retry` 或 MCP 工具
+`prices.v1` 标准化层。配置验证 Key 后，新旧两代验证入口都独占使用该适配器；研究与
+验证共用按 Key 隔离的请求闸门，限流响应按有上限的指数退避重试，不会切换到 Yahoo。
+API Key 不写入日志、产物、运行快照或请求指纹。显式重试可通过
+`POST /api/v1/validations/{validation_id}/retry` 或 MCP 工具
 `retry_validation` 发起。
 
 ## 调度与并发

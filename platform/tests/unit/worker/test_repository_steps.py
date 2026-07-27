@@ -88,9 +88,7 @@ async def test_stage_transition_and_result_complete_every_step(monkeypatch):
                 assert all(step.status == "completed" for step in steps[:-1])
 
             await repository.persist_runner_event(run.id, _result(6))
-            steps = list(
-                await session.scalars(select(RunStep).where(RunStep.run_id == run.id))
-            )
+            steps = list(await session.scalars(select(RunStep).where(RunStep.run_id == run.id)))
 
         assert len(steps) == 5
         assert all(step.status == "completed" for step in steps)

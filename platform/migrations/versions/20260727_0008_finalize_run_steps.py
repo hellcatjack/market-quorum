@@ -2,11 +2,21 @@
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.dialects import mysql, postgresql
+from sqlalchemy.types import TypeEngine
 
 revision: str = "20260727_0008"
 down_revision: str | None = "20260726_0007"
 branch_labels: str | None = None
 depends_on: str | None = None
+
+
+def datetime_type() -> TypeEngine:
+    return sa.DateTime(timezone=True).with_variant(mysql.DATETIME(fsp=6), "mysql")
+
+
+def json_type() -> TypeEngine:
+    return sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 
 
 def upgrade() -> None:
@@ -16,14 +26,18 @@ def upgrade() -> None:
         ("cancelled", "cancelled", False),
     )
     for run_status, step_status, copy_error in terminal_mappings:
-        error_assignment = """
+        error_assignment = (
+            """
             error_code = COALESCE(
                 run_steps.error_code,
                 (SELECT assessment_runs.error_code
                  FROM assessment_runs
                  WHERE assessment_runs.id = run_steps.run_id)
             ),
-        """ if copy_error else ""
+        """
+            if copy_error
+            else ""
+        )
         op.execute(
             sa.text(
                 f"""

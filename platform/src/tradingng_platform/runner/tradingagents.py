@@ -128,8 +128,9 @@ class TradingAgentsRunner:
             )
 
         config = self._build_config(directories)
-        with _alpha_vantage_run_guard(self.input), _historical_point_in_time_guard(
-            self.input.analysis_date
+        with (
+            _alpha_vantage_run_guard(self.input),
+            _historical_point_in_time_guard(self.input.analysis_date),
         ):
             graph = self.graph_factory(
                 selected_analysts=self.input.analysts,
@@ -371,9 +372,7 @@ def _alpha_vantage_run_guard(runner_input: RunnerInput):
         alpha_vantage_news,
         alpha_vantage_stock,
     )
-    original_module_requests = {
-        module: module._make_api_request for module in request_modules
-    }
+    original_module_requests = {module: module._make_api_request for module in request_modules}
     original_loader = market_data_validator.load_ohlcv
     try:
         for module in request_modules:

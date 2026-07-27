@@ -232,13 +232,20 @@ class WorkerRepository:
         *,
         error_code: str | None = None,
     ) -> None:
+        step_ids = list(
+            await self.session.scalars(
+                select(RunStep.id).where(
+                    RunStep.run_id == run.id,
+                    RunStep.attempt == run.attempt,
+                    RunStep.status == "running",
+                )
+            )
+        )
+        if not step_ids:
+            return
         await self.session.execute(
             update(RunStep)
-            .where(
-                RunStep.run_id == run.id,
-                RunStep.attempt == run.attempt,
-                RunStep.status == "running",
-            )
+            .where(RunStep.id.in_(step_ids), RunStep.status == "running")
             .values(
                 status=status,
                 finished_at=datetime.now(timezone.utc),

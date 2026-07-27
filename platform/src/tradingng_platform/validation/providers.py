@@ -278,18 +278,14 @@ class AlphaVantagePriceProvider:
                     classification = classify_alpha_payload(payload)
                     if classification is None:
                         if not isinstance(payload, dict):
-                            raise ProviderInvalidData(
-                                "Alpha Vantage response is not an object"
-                            )
+                            raise ProviderInvalidData("Alpha Vantage response is not an object")
                         return payload
                     if classification == "authentication":
                         raise ProviderUnavailable(
                             "Alpha Vantage rejected the configured credentials"
                         )
                     if classification != "rate_limit":
-                        raise ProviderInvalidData(
-                            "Alpha Vantage returned an invalid response"
-                        )
+                        raise ProviderInvalidData("Alpha Vantage returned an invalid response")
             except ProviderUnavailable:
                 raise
             except ProviderInvalidData:

@@ -197,11 +197,14 @@ The API listens on `127.0.0.1:8010`. Liveness and readiness are available at
 
 ### Alpha Vantage research providers
 
-Newly admitted assessments prefer Alpha Vantage for core prices, technical
-indicators, fundamentals, and news, then fall back to yfinance when the primary
-vendor is unconfigured, rate-limited, or has no data. Macro data remains on FRED
-and prediction markets remain on Polymarket. TradingNG freezes this external
-overlay into every immutable run snapshot without modifying TradingAgents:
+When an Alpha Vantage research key is configured, newly admitted assessments use
+Alpha Vantage exclusively for core prices, technical indicators, fundamentals,
+news, and the deterministic verified-market snapshot. A rate limit delays and
+retries the same Alpha request; it never falls back to Yahoo. Installations with
+no Alpha research key may still use their explicit fallback configuration. Macro
+data remains on FRED and prediction markets remain on Polymarket. TradingNG
+freezes this external overlay into every immutable run snapshot without modifying
+TradingAgents:
 
 ```dotenv
 ALPHA_VANTAGE_API_KEY=replace-with-secret
@@ -211,7 +214,8 @@ TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
 TradingAgents research Workers read `ALPHA_VANTAGE_API_KEY`. Restart the
 scheduler and Workers after changing it; only subsequently admitted runs are
 affected. Run details retain the configured vendor snapshot for audit and
-reproduction.
+reproduction. A cross-process request gate coordinates every local Worker using
+the same key, including delayed retries after provider throttling.
 
 ### Outcome-validation providers
 
@@ -229,15 +233,19 @@ be enabled in `.env.platform`:
 TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
 TRADINGNG_ALPHA_VANTAGE_API_KEY=replace-with-secret
 TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE=75
+TRADINGNG_ALPHA_VANTAGE_RETRY_ATTEMPTS=6
+TRADINGNG_ALPHA_VANTAGE_RETRY_BASE_SECONDS=5
+TRADINGNG_ALPHA_VANTAGE_RETRY_MAX_SECONDS=60
 TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
 ```
 
 The Alpha Vantage adapter reads as-traded OHLC, split coefficients, and cash
 distributions before entering the common `prices.v1` normalization boundary.
-yfinance implements the same provider contract, so provider changes and
-fallback do not change calculation semantics. Adapter-level rate limiting is
-shared across requests, and the API key is never stored in logs, artifacts, or
-request fingerprints. Explicit retries are available through
+With a validation key present, both validation generations use this adapter
+exclusively. Research and validation coordinate through the same per-key request
+gate; rate-limit responses are retried with bounded exponential delay and never
+switch to Yahoo. The API key is never stored in logs, artifacts, snapshots, or
+request fingerprints. Explicit validation retries are available through
 `POST /api/v1/validations/{validation_id}/retry` and the MCP
 `retry_validation` tool.
 

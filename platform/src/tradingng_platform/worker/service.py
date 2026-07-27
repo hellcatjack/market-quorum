@@ -101,9 +101,7 @@ def build_runner_input(
         if memory_payload is not None
         else empty_memory_snapshot()
     )
-    alpha_policy = dict(
-        (claim.snapshot.get("vendor_policies") or {}).get("alpha_vantage") or {}
-    )
+    alpha_policy = dict((claim.snapshot.get("vendor_policies") or {}).get("alpha_vantage") or {})
     return RunnerInput(
         run_id=claim.run_id,
         ticker=claim.ticker,
