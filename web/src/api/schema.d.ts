@@ -1277,8 +1277,12 @@ export interface components {
             data_quality_status?: ("matched" | "minor_difference" | "material_difference" | "not_available") | null;
             /** Direction */
             direction?: ("bullish" | "bearish" | "neutral") | null;
+            /** Direction Basis */
+            direction_basis?: ("instrument_total_return" | "benchmark_total_alpha") | null;
             /** Direction Correct */
             direction_correct?: boolean | null;
+            /** Direction Rule Version */
+            direction_rule_version?: "rating-direction.v2" | null;
             /** Entry Price */
             entry_price?: string | null;
             /** Entry Session */

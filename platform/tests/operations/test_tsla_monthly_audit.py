@@ -82,6 +82,10 @@ def valid_checkpoint():
                 "normalization_version": "prices.v1",
                 "entry_session": "2025-08-29",
                 "exit_session": exit_session,
+                "trigger_results": {
+                    "direction_basis": "instrument_total_return",
+                    "direction_rule_version": "rating-direction.v2",
+                },
             }
             for horizon, exit_session in (
                 (1, "2025-09-02"),
@@ -165,6 +169,14 @@ def test_checkpoint_rejects_incomplete_or_nonalpha_validation(valid_checkpoint):
     invalid["validations"][2]["provider_id"] = "yfinance"
 
     with pytest.raises(AuditFailure, match="Alpha Vantage"):
+        validate_checkpoint(invalid)
+
+
+def test_checkpoint_rejects_legacy_direction_semantics(valid_checkpoint):
+    invalid = deepcopy(valid_checkpoint)
+    invalid["validations"][0]["trigger_results"].pop("direction_rule_version")
+
+    with pytest.raises(AuditFailure, match="direction semantics"):
         validate_checkpoint(invalid)
 
 

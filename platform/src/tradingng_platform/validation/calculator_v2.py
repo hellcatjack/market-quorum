@@ -7,6 +7,10 @@ from pydantic import BaseModel
 
 from tradingng_platform.validation.calculator import InsufficientSessions
 from tradingng_platform.validation.calendars import ValidationSchedule
+from tradingng_platform.validation.directions import (
+    DIRECTION_RULE_VERSION,
+    evaluate_rating_direction,
+)
 from tradingng_platform.validation.price_contracts import CanonicalPriceSeries
 
 _QUANTUM = Decimal("0.0000000001")
@@ -94,14 +98,13 @@ def calculate_outcome_v2(
     mae = min(value / entry_close - Decimal("1") for value in lows)
     mfe = max(value / entry_close - Decimal("1") for value in highs)
 
+    total_alpha = total_return - benchmark_total_return
     bullish = rating in {"Buy", "Overweight"}
     bearish = rating in {"Sell", "Underweight"}
-    direction_correct = (
-        total_return > 0
-        if bullish
-        else total_return < 0
-        if bearish
-        else abs(total_return) <= Decimal("0.03")
+    direction = evaluate_rating_direction(
+        rating,
+        total_return=total_return,
+        total_alpha=total_alpha,
     )
     price_target_hit = None
     rebased_price_target = None
@@ -125,13 +128,15 @@ def calculate_outcome_v2(
         price_alpha=_quantize(price_return - benchmark_price_return),
         total_return=_quantize(total_return),
         benchmark_total_return=_quantize(benchmark_total_return),
-        total_alpha=_quantize(total_return - benchmark_total_return),
+        total_alpha=_quantize(total_alpha),
         max_adverse_excursion=_quantize(mae),
         max_favorable_excursion=_quantize(mfe),
         trigger_results={
             "rating": rating,
-            "direction": "bullish" if bullish else "bearish" if bearish else "neutral",
-            "direction_correct": direction_correct,
+            "direction": direction.direction,
+            "direction_correct": direction.direction_correct,
+            "direction_basis": direction.direction_basis,
+            "direction_rule_version": DIRECTION_RULE_VERSION,
             "price_target_hit": price_target_hit,
             "price_target_status": price_target_status,
             "rebased_price_target": (

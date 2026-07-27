@@ -95,6 +95,8 @@ def test_validation_view_exposes_typed_audit_metadata():
                 "rating": "Buy",
                 "direction": "bullish",
                 "direction_correct": True,
+                "direction_basis": "instrument_total_return",
+                "direction_rule_version": "rating-direction.v2",
                 "price_target_hit": False,
                 "entry_price": "100",
                 "exit_price": "105",
@@ -109,6 +111,8 @@ def test_validation_view_exposes_typed_audit_metadata():
 
     assert view.trigger_results.rating == "Buy"
     assert view.trigger_results.direction_correct is True
+    assert view.trigger_results.direction_basis == "instrument_total_return"
+    assert view.trigger_results.direction_rule_version == "rating-direction.v2"
     assert view.data_artifact_id == artifact_id
     assert view.error_code is None
     assert view.calculation_version == "validation.v1"

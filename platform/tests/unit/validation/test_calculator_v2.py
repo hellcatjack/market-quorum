@@ -120,3 +120,64 @@ def test_target_without_frozen_basis_fails_closed_without_blocking_returns():
     assert result.total_return == Decimal("0.1000000000")
     assert result.trigger_results["price_target_hit"] is None
     assert result.trigger_results["price_target_status"] == "basis_unavailable"
+
+
+def test_underweight_is_correct_when_instrument_rises_but_underperforms_benchmark():
+    result = calculate_outcome_v2(
+        _canonical("TEST", ["100", "105"]),
+        _canonical("SPY", ["200", "220"]),
+        schedule=_schedule(),
+        rating="Underweight",
+        price_target=None,
+        target_basis=None,
+    )
+
+    assert result.total_return == Decimal("0.0500000000")
+    assert result.total_alpha == Decimal("-0.0500000000")
+    assert result.trigger_results["direction_correct"] is True
+    assert result.trigger_results["direction_basis"] == "benchmark_total_alpha"
+    assert result.trigger_results["direction_rule_version"] == "rating-direction.v2"
+
+
+def test_underweight_is_incorrect_when_instrument_falls_but_outperforms_benchmark():
+    result = calculate_outcome_v2(
+        _canonical("TEST", ["100", "95"]),
+        _canonical("SPY", ["200", "180"]),
+        schedule=_schedule(),
+        rating="Underweight",
+        price_target=None,
+        target_basis=None,
+    )
+
+    assert result.total_return == Decimal("-0.0500000000")
+    assert result.total_alpha == Decimal("0.0500000000")
+    assert result.trigger_results["direction_correct"] is False
+    assert result.trigger_results["direction_basis"] == "benchmark_total_alpha"
+
+
+def test_overweight_is_correct_when_instrument_falls_less_than_benchmark():
+    result = calculate_outcome_v2(
+        _canonical("TEST", ["100", "95"]),
+        _canonical("SPY", ["200", "180"]),
+        schedule=_schedule(),
+        rating="Overweight",
+        price_target=None,
+        target_basis=None,
+    )
+
+    assert result.trigger_results["direction_correct"] is True
+    assert result.trigger_results["direction_basis"] == "benchmark_total_alpha"
+
+
+def test_sell_remains_an_absolute_return_call():
+    result = calculate_outcome_v2(
+        _canonical("TEST", ["100", "95"]),
+        _canonical("SPY", ["200", "180"]),
+        schedule=_schedule(),
+        rating="Sell",
+        price_target=None,
+        target_basis=None,
+    )
+
+    assert result.trigger_results["direction_correct"] is True
+    assert result.trigger_results["direction_basis"] == "instrument_total_return"

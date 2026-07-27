@@ -19,6 +19,8 @@ class ValidationTriggerResults(BaseModel):
     rating: str | None = None
     direction: Literal["bullish", "bearish", "neutral"] | None = None
     direction_correct: bool | None = None
+    direction_basis: Literal["instrument_total_return", "benchmark_total_alpha"] | None = None
+    direction_rule_version: Literal["rating-direction.v2"] | None = None
     price_target_hit: bool | None = None
     entry_price: Decimal | None = None
     exit_price: Decimal | None = None

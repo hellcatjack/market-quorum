@@ -275,6 +275,21 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> dict[str, Any]:
         ),
         "assessment validation metadata is incomplete",
     )
+    expected_direction_basis = (
+        "benchmark_total_alpha"
+        if decision.get("rating") in {"Overweight", "Underweight"}
+        else "instrument_total_return"
+    )
+    _require(
+        all(
+            (item.get("trigger_results") or {}).get("direction_rule_version")
+            == "rating-direction.v2"
+            and (item.get("trigger_results") or {}).get("direction_basis")
+            == expected_direction_basis
+            for item in validations
+        ),
+        "assessment validation direction semantics are incomplete",
+    )
 
     artifacts = list(checkpoint.get("artifacts") or [])
     _require(artifacts, "assessment has no artifacts")

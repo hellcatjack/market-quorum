@@ -20,6 +20,10 @@ from tradingng_platform.models import (
 from tradingng_platform.persistence.upsert import insert_ignore, session_dialect
 from tradingng_platform.validation.calendars import MarketCalendarResolver
 from tradingng_platform.validation.contracts import ValidationView
+from tradingng_platform.validation.directions import (
+    DIRECTION_RULE_VERSION,
+    evaluate_rating_direction,
+)
 
 
 class ValidationRepository:
@@ -103,6 +107,76 @@ class ValidationRepository:
             )
             await session.flush()
             return self._view(item)
+
+    async def recompute_directions(
+        self,
+        run_ids: tuple[uuid.UUID, ...],
+        principal: Principal,
+        request_id: str,
+    ) -> int:
+        if not run_ids:
+            return 0
+        changed = 0
+        async with self.sessions() as session, session.begin():
+            rows = list(
+                (
+                    await session.execute(
+                        select(Validation, Decision)
+                        .join(Decision, Decision.run_id == Validation.run_id)
+                        .where(
+                            Validation.run_id.in_(run_ids),
+                            Validation.status == "completed",
+                            Validation.calculation_version == "validation.v2",
+                            Validation.total_return.is_not(None),
+                            Validation.total_alpha.is_not(None),
+                        )
+                        .order_by(Validation.run_id, Validation.horizon)
+                        .with_for_update(of=Validation)
+                    )
+                ).all()
+            )
+            repository = AssessmentRepository(session)
+            for item, decision in rows:
+                evaluation = evaluate_rating_direction(
+                    decision.rating,
+                    total_return=item.total_return,
+                    total_alpha=item.total_alpha,
+                )
+                previous = dict(item.trigger_results_json or {})
+                updated = {
+                    **previous,
+                    "rating": decision.rating,
+                    "direction": evaluation.direction,
+                    "direction_correct": evaluation.direction_correct,
+                    "direction_basis": evaluation.direction_basis,
+                    "direction_rule_version": DIRECTION_RULE_VERSION,
+                }
+                if updated == previous:
+                    continue
+                item.trigger_results_json = updated
+                changed += 1
+                metadata = {
+                    "validation_id": str(item.id),
+                    "horizon": item.horizon,
+                    "previous_direction_correct": previous.get("direction_correct"),
+                    "direction_correct": evaluation.direction_correct,
+                    "direction_basis": evaluation.direction_basis,
+                    "direction_rule_version": DIRECTION_RULE_VERSION,
+                }
+                await repository.append_event(
+                    item.run_id,
+                    "validation.direction_recomputed",
+                    metadata,
+                )
+                await repository.append_audit(
+                    principal,
+                    "validation.direction_recompute",
+                    "validation",
+                    str(item.id),
+                    request_id,
+                    metadata,
+                )
+        return changed
 
     @staticmethod
     def _view(item: Validation) -> ValidationView:

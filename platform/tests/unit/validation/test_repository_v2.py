@@ -37,7 +37,13 @@ async def _database():
     return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def _seed_run(sessions, *, status="succeeded", price_target=None):
+async def _seed_run(
+    sessions,
+    *,
+    status="succeeded",
+    price_target=None,
+    rating="Buy",
+):
     run_id = uuid.uuid4()
     request_id = uuid.uuid4()
     instrument_id = uuid.uuid4()
@@ -72,7 +78,7 @@ async def _seed_run(sessions, *, status="succeeded", price_target=None):
         session.add(
             Decision(
                 run_id=run_id,
-                rating="Buy",
+                rating=rating,
                 executive_summary="fixture",
                 investment_thesis="fixture",
                 price_target=price_target,
@@ -159,5 +165,51 @@ async def test_retry_preserves_attempts_and_rejects_active_lease():
         assert audits == ["validation.retry"]
         with pytest.raises(ValueError, match="eligible"):
             await repository.retry(active_id, _principal(), "retry-2", now)
+    finally:
+        await engine.dispose()
+
+
+async def test_recompute_directions_updates_completed_v2_results_with_audit_trail():
+    engine, sessions = await _database()
+    try:
+        run_id = await _seed_run(sessions, rating="Underweight")
+        validation_id = uuid.uuid4()
+        async with sessions() as session, session.begin():
+            session.add(
+                Validation(
+                    id=validation_id,
+                    run_id=run_id,
+                    horizon=20,
+                    status="completed",
+                    scheduled_for=datetime(2026, 7, 26, tzinfo=timezone.utc),
+                    observed_at=datetime(2026, 7, 26, tzinfo=timezone.utc),
+                    calculation_version="validation.v2",
+                    total_return=Decimal("0.05"),
+                    total_alpha=Decimal("-0.05"),
+                    trigger_results_json={
+                        "rating": "Underweight",
+                        "direction": "bearish",
+                        "direction_correct": False,
+                    },
+                    attempts=1,
+                )
+            )
+
+        changed = await ValidationRepository(sessions).recompute_directions(
+            (run_id,),
+            _principal(),
+            "recompute-1",
+        )
+
+        assert changed == 1
+        async with sessions() as session:
+            validation = await session.get(Validation, validation_id)
+            events = list(await session.scalars(select(RunEvent)))
+            audits = list(await session.scalars(select(AuditEvent)))
+        assert validation.trigger_results_json["direction_correct"] is True
+        assert validation.trigger_results_json["direction_basis"] == "benchmark_total_alpha"
+        assert validation.trigger_results_json["direction_rule_version"] == "rating-direction.v2"
+        assert events[-1].event_type == "validation.direction_recomputed"
+        assert audits[-1].action == "validation.direction_recompute"
     finally:
         await engine.dispose()
