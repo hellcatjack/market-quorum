@@ -1,6 +1,7 @@
 import hashlib
 from copy import deepcopy
 from datetime import date
+from pathlib import Path
 
 import httpx
 import pytest
@@ -554,3 +555,10 @@ def test_parse_args_supports_resumable_and_verify_only_paths(tmp_path):
     assert options.env_file == tmp_path / ".env.platform"
     assert options.state_dir == tmp_path / "audit"
     assert options.verify_only is True
+
+
+def test_script_entrypoint_runs_after_every_function_definition():
+    script = Path(__file__).resolve().parents[3] / "scripts" / "tsla_monthly_audit.py"
+    source = script.read_text(encoding="utf-8")
+
+    assert source.rfind('if __name__ == "__main__":') > source.rfind("def save_state(")

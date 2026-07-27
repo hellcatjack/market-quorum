@@ -606,10 +606,6 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def _contains_secret(value: object) -> bool:
     if isinstance(value, dict):
         for key, nested in value.items():
@@ -648,3 +644,7 @@ def save_state(path: Path, state: dict[str, Any]) -> None:
         temporary.replace(path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
