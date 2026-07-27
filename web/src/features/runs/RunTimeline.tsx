@@ -26,6 +26,7 @@ type TimelineItem =
       stableKey: string;
       timestamp: string;
       record: LlmInteraction;
+      phase: string | null;
     }
   | {
       kind: "step";
@@ -122,6 +123,7 @@ function normalizeTimeline({
       stableKey: String(record.sequence).padStart(12, "0"),
       timestamp: record.started_at,
       record,
+      phase: phaseForTimestamp(record.started_at, steps),
     })),
     ...evidence.map((record) => ({
       kind: "evidence" as const,
@@ -237,6 +239,7 @@ function LlmEntry({ item }: { item: Extract<TimelineItem, { kind: "llm" }> }) {
         <strong>{modelRouteLabel(record.route, locale)}</strong>
         <span>{stepStatusLabel(record.status, locale)}</span>
       </div>
+      <TimePhase phase={item.phase} />
       <dl className="timeline-entry__facts timeline-entry__facts--llm">
         <div><dt>{t("实际模型")}</dt><dd>{record.physical_model ?? "—"}</dd></div>
         <div><dt>{t("思考深度")}</dt><dd>{reasoningEffortLabel(record.reasoning_effort, locale)}</dd></div>

@@ -180,7 +180,17 @@ test("shows artifacts without a matching event in one explicit fallback group", 
 test("places model calls on the timeline with readable route and status labels", () => {
   render(
     <RunTimeline
-      steps={[]}
+      steps={[
+        {
+          name: "portfolio_decision",
+          status: "running",
+          attempt: 1,
+          started_at: "2026-07-25T12:00:30Z",
+          finished_at: null,
+          error_code: null,
+          summary: null,
+        },
+      ]}
       events={[{
         sequence: 1,
         event_type: "assessment.admitted",
@@ -207,6 +217,7 @@ test("places model calls on the timeline with readable route and status labels",
 
   expect(screen.getAllByTestId("timeline-entry").map((node) => node.dataset.timelineId)).toEqual([
     "event-1",
+    "step-portfolio_decision-1",
     "llm-1",
   ]);
   expect(screen.getByTestId("event-1")).toHaveTextContent("任务准入");
@@ -214,5 +225,6 @@ test("places model calls on the timeline with readable route and status labels",
   expect(screen.getByTestId("llm-1")).toHaveTextContent("gpt-5.6-sol");
   expect(screen.getByTestId("llm-1")).toHaveTextContent("很高");
   expect(screen.getByTestId("llm-1")).toHaveTextContent("已完成");
+  expect(screen.getByTestId("llm-1")).toHaveTextContent("时间归属：组合决策");
   expect(screen.getByTestId("llm-1")).not.toHaveTextContent("completed");
 });
