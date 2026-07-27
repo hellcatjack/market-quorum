@@ -1,9 +1,14 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
+from tradingng_platform.models import AssessmentRequest, AssessmentRun, Decision, Instrument
 from tradingng_platform.records.contracts import InstrumentValidationView
-from tradingng_platform.records.service import _preferred_validation, _validation_stats
+from tradingng_platform.records.service import (
+    _build_overview_items,
+    _preferred_validation,
+    _validation_stats,
+)
 
 
 def _validation(
@@ -63,3 +68,74 @@ def test_validation_stats_exclude_non_completed_and_missing_direction():
     assert by_horizon[5].direction_observed == 0
     assert by_horizon[5].accuracy is None
     assert by_horizon[1].completed == 0
+
+
+def test_overview_items_keep_latest_successful_decision_when_latest_run_failed():
+    instrument_id = uuid.uuid4()
+    instrument = Instrument(
+        id=instrument_id,
+        canonical_ticker="NVDA",
+        asset_type="stock",
+        exchange="NASDAQ",
+        name="英伟达",
+        metadata_json={},
+    )
+    successful_request = AssessmentRequest(
+        id=uuid.uuid4(),
+        batch_id=uuid.uuid4(),
+        instrument_id=instrument_id,
+        analysis_date=date(2026, 6, 1),
+        requested_config_json={},
+    )
+    failed_request = AssessmentRequest(
+        id=uuid.uuid4(),
+        batch_id=uuid.uuid4(),
+        instrument_id=instrument_id,
+        analysis_date=date(2026, 7, 20),
+        requested_config_json={},
+    )
+    created_at = datetime(2026, 7, 26, 12, tzinfo=timezone.utc)
+    successful = AssessmentRun(
+        id=uuid.uuid4(),
+        request_id=successful_request.id,
+        attempt=1,
+        status="succeeded",
+        created_at=created_at - timedelta(days=1),
+    )
+    failed = AssessmentRun(
+        id=uuid.uuid4(),
+        request_id=failed_request.id,
+        attempt=1,
+        status="failed",
+        created_at=created_at,
+    )
+    decision = Decision(
+        id=uuid.uuid4(),
+        run_id=successful.id,
+        rating="Underweight",
+        executive_summary="Valuation risk.",
+        investment_thesis="Expect underperformance.",
+        price_target=Decimal("110"),
+        time_horizon="20 trading days",
+        structured_json={},
+    )
+    completed = _validation(horizon=20, status="completed", direction_correct=True)
+    completed.run_id = successful.id
+
+    items = _build_overview_items(
+        [
+            (failed, failed_request, instrument, None, None),
+            (successful, successful_request, instrument, decision, None),
+        ],
+        {successful.id: [completed]},
+    )
+
+    assert len(items) == 1
+    overview = items[0]
+    assert overview.latest_run.id == failed.id
+    assert overview.latest_successful_run.id == successful.id
+    assert overview.latest_decision.rating == "Underweight"
+    assert overview.preferred_validation == completed
+    assert overview.run_counts.total == 2
+    assert overview.run_counts.succeeded == 1
+    assert overview.run_counts.anomalous == 1

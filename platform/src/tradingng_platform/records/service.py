@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tradingng_platform.artifacts.store import LocalArtifactStore
+from tradingng_platform.assessments.contracts import decode_run_cursor, encode_run_cursor
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.instruments import canonicalize_ticker
@@ -20,6 +21,7 @@ from tradingng_platform.models import (
     Review,
     RunConfigSnapshot,
     User,
+    Validation,
 )
 from tradingng_platform.records.contracts import (
     ArtifactView,
@@ -27,12 +29,33 @@ from tradingng_platform.records.contracts import (
     DecisionView,
     EvidenceView,
     InstrumentHistoryItem,
+    InstrumentIdentityView,
+    InstrumentOverviewFilters,
+    InstrumentOverviewItem,
+    InstrumentOverviewPage,
+    InstrumentRunCounts,
     InstrumentSummaryView,
     InstrumentValidationStats,
     InstrumentValidationView,
     OpenedArtifact,
     ReviewView,
 )
+
+_ACTIVE_STATUSES = frozenset(
+    {
+        "admitted",
+        "starting",
+        "running_analysts",
+        "research_debate",
+        "trader_plan",
+        "risk_debate",
+        "portfolio_decision",
+        "finalizing",
+        "cancel_requested",
+        "cancelling",
+    }
+)
+_ANOMALOUS_STATUSES = frozenset({"failed", "needs_attention"})
 
 
 def _preferred_validation(
@@ -68,6 +91,145 @@ def _validation_stats(
             )
         )
     return result
+
+
+def _instrument_validation_view(validation: Validation) -> InstrumentValidationView:
+    triggers = dict(validation.trigger_results_json or {})
+    direction_correct = triggers.get("direction_correct")
+    price_target_hit = triggers.get("price_target_hit")
+    return InstrumentValidationView(
+        id=validation.id,
+        run_id=validation.run_id,
+        horizon=validation.horizon,
+        status=validation.status,
+        scheduled_for=validation.scheduled_for,
+        matures_at=validation.matures_at,
+        exit_session=validation.exit_session,
+        total_return=(
+            validation.total_return
+            if validation.total_return is not None
+            else validation.raw_return
+        ),
+        total_alpha=(
+            validation.total_alpha if validation.total_alpha is not None else validation.alpha
+        ),
+        direction_correct=(direction_correct if isinstance(direction_correct, bool) else None),
+        price_target_hit=(price_target_hit if isinstance(price_target_hit, bool) else None),
+        error_code=validation.error_code,
+    )
+
+
+def _decision_view(decision: Decision) -> DecisionView:
+    return DecisionView(
+        run_id=decision.run_id,
+        rating=decision.rating,
+        executive_summary=decision.executive_summary,
+        investment_thesis=decision.investment_thesis,
+        price_target=decision.price_target,
+        time_horizon=decision.time_horizon,
+        structured=dict(decision.structured_json or {}),
+    )
+
+
+def _run_counts(rows: list[tuple]) -> InstrumentRunCounts:
+    statuses = [row[0].status for row in rows]
+    return InstrumentRunCounts(
+        total=len(statuses),
+        queued=statuses.count("queued"),
+        active=sum(status in _ACTIVE_STATUSES for status in statuses),
+        succeeded=statuses.count("succeeded"),
+        anomalous=sum(status in _ANOMALOUS_STATUSES for status in statuses),
+    )
+
+
+def _build_overview_items(
+    rows: list[tuple],
+    validations_by_run: dict[uuid.UUID, list[InstrumentValidationView]],
+) -> list[InstrumentOverviewItem]:
+    grouped: dict[uuid.UUID, list[tuple]] = defaultdict(list)
+    for row in rows:
+        grouped[row[2].id].append(row)
+
+    items: list[InstrumentOverviewItem] = []
+    for instrument_rows in grouped.values():
+        instrument_rows.sort(
+            key=lambda row: (row[0].created_at, row[0].id),
+            reverse=True,
+        )
+        latest_run, latest_request, instrument, _, _ = instrument_rows[0]
+        successful_rows = [
+            row for row in instrument_rows if row[0].status == "succeeded" and row[3] is not None
+        ]
+        latest_successful = successful_rows[0] if successful_rows else None
+        latest_successful_validations = (
+            validations_by_run.get(latest_successful[0].id, [])
+            if latest_successful is not None
+            else []
+        )
+        all_validations = [
+            item
+            for row in instrument_rows
+            for item in validations_by_run.get(row[0].id, [])
+        ]
+        items.append(
+            InstrumentOverviewItem(
+                instrument=InstrumentIdentityView(
+                    id=instrument.id,
+                    ticker=instrument.canonical_ticker,
+                    name=instrument.name,
+                    exchange=instrument.exchange,
+                    asset_type=instrument.asset_type,
+                ),
+                latest_run=AssessmentRepository._run_view(
+                    latest_run,
+                    latest_request,
+                    instrument,
+                ),
+                latest_successful_run=(
+                    AssessmentRepository._run_view(
+                        latest_successful[0],
+                        latest_successful[1],
+                        instrument,
+                    )
+                    if latest_successful is not None
+                    else None
+                ),
+                latest_decision=(
+                    _decision_view(latest_successful[3])
+                    if latest_successful is not None
+                    else None
+                ),
+                previous_rating=(
+                    successful_rows[1][3].rating if len(successful_rows) > 1 else None
+                ),
+                preferred_validation=_preferred_validation(latest_successful_validations),
+                validation_stats=_validation_stats(all_validations),
+                run_counts=_run_counts(instrument_rows),
+            )
+        )
+    items.sort(key=lambda item: (item.latest_run.created_at, item.latest_run.id), reverse=True)
+    return items
+
+
+def _validation_outcome(validation: InstrumentValidationView | None) -> str | None:
+    if validation is None:
+        return None
+    prefix = f"{validation.horizon}D"
+    if validation.status == "completed":
+        performance = (
+            f"{validation.total_return * 100:.2f}%"
+            if validation.total_return is not None
+            else "收益待补"
+        )
+        direction = {
+            True: "方向正确",
+            False: "方向错误",
+            None: "方向未判定",
+        }[validation.direction_correct]
+        return f"{prefix} · {performance} · {direction}"
+    if validation.status in {"failed", "unavailable"}:
+        return f"{prefix} · 验证异常"
+    return f"{prefix} · 待验证"
 
 
 class RecordNotFound(Exception):
@@ -300,7 +462,15 @@ class RecordService:
                 .order_by(AssessmentRun.created_at.desc(), AssessmentRun.id.desc())
             )
             rows = (await session.execute(statement)).all()
-            latest_run, latest_rating = rows[0]
+            latest_run, _ = rows[0]
+            latest_rating = next(
+                (
+                    rating
+                    for run, rating in rows
+                    if run.status == "succeeded" and rating is not None
+                ),
+                None,
+            )
             return InstrumentSummaryView(
                 ticker=ticker,
                 asset_types=asset_types,
@@ -308,6 +478,101 @@ class RecordService:
                 latest_run_id=latest_run.id,
                 latest_rating=latest_rating,
                 latest_created_at=latest_run.created_at,
+            )
+
+    async def instrument_overviews(
+        self,
+        principal: Principal,
+        filters: InstrumentOverviewFilters,
+    ) -> InstrumentOverviewPage:
+        principal.require("assessments:read")
+        validations_visible = "validations:read" in principal.scopes
+        async with self.sessions() as session:
+            statement = (
+                select(
+                    AssessmentRun,
+                    AssessmentRequest,
+                    Instrument,
+                    Decision,
+                    RunConfigSnapshot,
+                )
+                .join(AssessmentRequest, AssessmentRun.request_id == AssessmentRequest.id)
+                .join(Instrument, AssessmentRequest.instrument_id == Instrument.id)
+                .outerjoin(Decision, Decision.run_id == AssessmentRun.id)
+                .outerjoin(
+                    RunConfigSnapshot,
+                    RunConfigSnapshot.id == AssessmentRun.config_snapshot_id,
+                )
+                .order_by(AssessmentRun.created_at.desc(), AssessmentRun.id.desc())
+            )
+            if filters.asset_type is not None:
+                statement = statement.where(Instrument.asset_type == filters.asset_type.value)
+            rows = list((await session.execute(statement)).all())
+
+            validations_by_run: dict[uuid.UUID, list[InstrumentValidationView]] = defaultdict(list)
+            if validations_visible and rows:
+                run_ids = [row[0].id for row in rows]
+                validations = list(
+                    await session.scalars(
+                        select(Validation)
+                        .where(Validation.run_id.in_(run_ids))
+                        .order_by(Validation.run_id, Validation.horizon)
+                    )
+                )
+                for validation in validations:
+                    validations_by_run[validation.run_id].append(
+                        _instrument_validation_view(validation)
+                    )
+
+            items = _build_overview_items(rows, validations_by_run)
+            query = filters.query.strip().casefold() if filters.query else None
+            if query:
+                items = [
+                    item
+                    for item in items
+                    if query in item.instrument.ticker.casefold()
+                    or query in (item.instrument.name or "").casefold()
+                ]
+            if filters.statuses:
+                statuses = {status.value for status in filters.statuses}
+                items = [item for item in items if item.latest_run.status.value in statuses]
+            if filters.anomalous_only:
+                items = [item for item in items if item.run_counts.anomalous > 0]
+            if filters.created_from is not None:
+                items = [
+                    item for item in items if item.latest_run.created_at >= filters.created_from
+                ]
+            if filters.created_to is not None:
+                items = [item for item in items if item.latest_run.created_at <= filters.created_to]
+
+            instrument_count = len(items)
+            totals = InstrumentRunCounts(
+                total=sum(item.run_counts.total for item in items),
+                queued=sum(item.run_counts.queued for item in items),
+                active=sum(item.run_counts.active for item in items),
+                succeeded=sum(item.run_counts.succeeded for item in items),
+                anomalous=sum(item.run_counts.anomalous for item in items),
+            )
+            if filters.cursor:
+                cursor_created_at, cursor_id = decode_run_cursor(filters.cursor)
+                items = [
+                    item
+                    for item in items
+                    if (item.latest_run.created_at, item.latest_run.id)
+                    < (cursor_created_at, cursor_id)
+                ]
+            has_next = len(items) > filters.limit
+            page_items = items[: filters.limit]
+            next_cursor = None
+            if has_next and page_items:
+                last = page_items[-1].latest_run
+                next_cursor = encode_run_cursor(last.created_at, last.id)
+            return InstrumentOverviewPage(
+                items=page_items,
+                next_cursor=next_cursor,
+                instrument_count=instrument_count,
+                run_counts=totals,
+                validations_visible=validations_visible,
             )
 
     async def instrument_history(
@@ -342,6 +607,25 @@ class RecordService:
             ).all()
             if not rows:
                 raise RecordNotFound("instrument was not found")
+            validations_by_run: dict[uuid.UUID, list[InstrumentValidationView]] = defaultdict(list)
+            if "validations:read" in principal.scopes:
+                validations = list(
+                    await session.scalars(
+                        select(Validation)
+                        .where(Validation.run_id.in_([row[0].id for row in rows]))
+                        .order_by(Validation.run_id, Validation.horizon)
+                    )
+                )
+                for validation in validations:
+                    validations_by_run[validation.run_id].append(
+                        _instrument_validation_view(validation)
+                    )
+            attempts_by_request: dict[uuid.UUID, int] = defaultdict(int)
+            for run, request, *_ in rows:
+                attempts_by_request[request.id] = max(
+                    attempts_by_request[request.id],
+                    run.attempt,
+                )
             return [
                 InstrumentHistoryItem(
                     run=AssessmentRepository._run_view(run, request, instrument),
@@ -359,7 +643,22 @@ class RecordService:
                         else None
                     ),
                     config_snapshot_sha256=snapshot.sha256 if snapshot is not None else None,
-                    validation_outcome=None,
+                    validation_outcome=_validation_outcome(
+                        _preferred_validation(validations_by_run.get(run.id, []))
+                    ),
+                    validations=validations_by_run.get(run.id, []),
+                    memory_mode=(
+                        (snapshot.content_json.get("memory") or {}).get("mode", "independent")
+                        if snapshot is not None
+                        else request.requested_config_json.get("memory_mode", "independent")
+                    ),
+                    memory_source_count=(
+                        len((snapshot.content_json.get("memory") or {}).get("entries", ()))
+                        if snapshot is not None
+                        else 0
+                    ),
+                    is_latest_attempt=run.attempt == attempts_by_request[request.id],
+                    request_attempt_count=attempts_by_request[request.id],
                 )
                 for run, request, instrument, decision, snapshot in rows
             ]
