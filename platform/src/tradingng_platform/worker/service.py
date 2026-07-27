@@ -101,6 +101,9 @@ def build_runner_input(
         if memory_payload is not None
         else empty_memory_snapshot()
     )
+    alpha_policy = dict(
+        (claim.snapshot.get("vendor_policies") or {}).get("alpha_vantage") or {}
+    )
     return RunnerInput(
         run_id=claim.run_id,
         ticker=claim.ticker,
@@ -116,6 +119,11 @@ def build_runner_input(
         work_dir=job_dir / str(claim.run_id),
         data_vendors=claim.snapshot["data_vendors"],
         tool_vendors=claim.snapshot["tool_vendors"],
+        alpha_vantage_coordination_dir=job_dir.parent / "vendor-limits",
+        alpha_vantage_requests_per_minute=alpha_policy.get("requests_per_minute", 75),
+        alpha_vantage_retry_attempts=alpha_policy.get("retry_attempts", 6),
+        alpha_vantage_retry_base_seconds=alpha_policy.get("retry_base_seconds", 5),
+        alpha_vantage_retry_max_seconds=alpha_policy.get("retry_max_seconds", 60),
         memory=memory,
     )
 

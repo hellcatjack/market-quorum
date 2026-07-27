@@ -1,17 +1,35 @@
 import copy
 import json
+import logging
 import os
 import re
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
+from io import StringIO
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+import requests
 from tradingagents.agents.analysts import sentiment_analyst
-from tradingagents.dataflows import fred
+from tradingagents.dataflows import (
+    alpha_vantage_common,
+    alpha_vantage_fundamentals,
+    alpha_vantage_indicator,
+    alpha_vantage_news,
+    alpha_vantage_stock,
+    fred,
+    market_data_validator,
+)
+from tradingagents.dataflows.alpha_vantage_common import (
+    AlphaVantageNotConfiguredError,
+    AlphaVantageRateLimitError,
+)
+from tradingagents.dataflows.errors import VendorRateLimitError
 from tradingagents.dataflows.interface import VENDOR_METHODS
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -20,6 +38,14 @@ from tradingng_platform.memory import render_tradingagents_memory
 from tradingng_platform.runner.callbacks import AuditCallback
 from tradingng_platform.runner.contracts import RunnerInput
 from tradingng_platform.runner.events import EventEmitter, StageTracker
+from tradingng_platform.vendors.alpha_vantage import (
+    AlphaVantageRetryPolicy,
+    CrossProcessRateGate,
+    alpha_key_fingerprint,
+    classify_alpha_payload,
+)
+
+logger = logging.getLogger(__name__)
 
 _DECISION_LABEL = re.compile(
     r"^\s*\*\*(Rating|Executive Summary|Investment Thesis|"
@@ -44,6 +70,10 @@ class RunnerResult:
     signal: str
     decision: dict
     report_dir: Path
+
+
+class AlphaVantageTransientError(RuntimeError):
+    pass
 
 
 class TradingAgentsRunner:
@@ -98,7 +128,9 @@ class TradingAgentsRunner:
             )
 
         config = self._build_config(directories)
-        with _historical_point_in_time_guard(self.input.analysis_date):
+        with _alpha_vantage_run_guard(self.input), _historical_point_in_time_guard(
+            self.input.analysis_date
+        ):
             graph = self.graph_factory(
                 selected_analysts=self.input.analysts,
                 debug=False,
@@ -198,6 +230,164 @@ class TradingAgentsRunner:
             }
         )
         return config
+
+
+def _guard_alpha_request(
+    request,
+    gate: CrossProcessRateGate,
+    policy: AlphaVantageRetryPolicy,
+    *,
+    sleep=time.sleep,
+):
+    @wraps(request)
+    def guarded(function_name: str, params: dict):
+        for attempt in range(1, policy.attempts + 1):
+            gate.acquire()
+            retry_after = None
+            classification = None
+            try:
+                result = request(function_name, params)
+                if isinstance(result, str) and result.lstrip().startswith("{"):
+                    try:
+                        classification = classify_alpha_payload(json.loads(result))
+                    except json.JSONDecodeError:
+                        classification = None
+                if classification is None:
+                    return result
+                if classification == "authentication":
+                    raise AlphaVantageNotConfiguredError(
+                        "Alpha Vantage rejected the configured API credentials"
+                    )
+            except AlphaVantageNotConfiguredError:
+                raise
+            except VendorRateLimitError:
+                classification = "rate_limit"
+            except requests.HTTPError as exc:
+                response = getattr(exc, "response", None)
+                if response is None or response.status_code != 429:
+                    raise
+                classification = "rate_limit"
+                retry_after = _numeric_retry_after(response.headers.get("Retry-After"))
+
+            if attempt == policy.attempts:
+                if classification == "rate_limit":
+                    raise AlphaVantageRateLimitError(
+                        "Alpha Vantage rate limit persisted after delayed retries"
+                    )
+                raise AlphaVantageTransientError(
+                    "Alpha Vantage returned transient errors after delayed retries"
+                )
+
+            delay = policy.delay(attempt, retry_after=retry_after)
+            gate.defer(delay)
+            logger.warning(
+                "alpha_vantage_retry function=%s attempt=%d delay_seconds=%.1f",
+                function_name,
+                attempt,
+                delay,
+            )
+            sleep(delay)
+
+        raise RuntimeError("unreachable Alpha Vantage retry state")
+
+    return guarded
+
+
+def _numeric_retry_after(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _alpha_ohlcv_loader(request, symbol: str, curr_date: str) -> pd.DataFrame:
+    csv_data = request(
+        "TIME_SERIES_DAILY_ADJUSTED",
+        {"symbol": symbol, "outputsize": "full", "datatype": "csv"},
+    )
+    if not isinstance(csv_data, str):
+        raise ValueError("Alpha Vantage daily response is not CSV text")
+    frame = pd.read_csv(StringIO(csv_data))
+    renamed = frame.rename(
+        columns={
+            "timestamp": "Date",
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume",
+        }
+    )
+    required = ["Date", "Open", "High", "Low", "Close", "Volume"]
+    missing = [column for column in required if column not in renamed.columns]
+    if missing:
+        raise ValueError(f"Alpha Vantage daily CSV is missing columns: {','.join(missing)}")
+    result = renamed[required].copy()
+    result["Date"] = pd.to_datetime(result["Date"], errors="coerce")
+    for column in required[1:]:
+        result[column] = pd.to_numeric(result[column], errors="coerce")
+    result = result.dropna(subset=required)
+    result = result[result["Date"] <= pd.to_datetime(curr_date)].sort_values("Date")
+    if result.empty:
+        raise ValueError(f"No Alpha Vantage OHLCV rows on or before {curr_date}")
+    return result.reset_index(drop=True)
+
+
+@contextmanager
+def _alpha_vantage_run_guard(runner_input: RunnerInput):
+    configured = {
+        vendor.strip()
+        for chain in (*runner_input.data_vendors.values(), *runner_input.tool_vendors.values())
+        for vendor in str(chain).split(",")
+        if vendor.strip()
+    }
+    if "alpha_vantage" not in configured:
+        yield
+        return
+
+    coordination_dir = runner_input.alpha_vantage_coordination_dir
+    if coordination_dir is None:
+        coordination_dir = runner_input.work_dir.parent.parent / "vendor-limits"
+    api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+    key_identity = alpha_key_fingerprint(api_key) if api_key else "unconfigured"
+    gate = CrossProcessRateGate(
+        coordination_dir / f"alpha-vantage-{key_identity}.json",
+        runner_input.alpha_vantage_requests_per_minute,
+    )
+    policy = AlphaVantageRetryPolicy(
+        attempts=runner_input.alpha_vantage_retry_attempts,
+        base_seconds=runner_input.alpha_vantage_retry_base_seconds,
+        max_seconds=runner_input.alpha_vantage_retry_max_seconds,
+    )
+    original_request = alpha_vantage_common._make_api_request
+    guarded_request = _guard_alpha_request(original_request, gate, policy)
+    request_modules = (
+        alpha_vantage_common,
+        alpha_vantage_fundamentals,
+        alpha_vantage_indicator,
+        alpha_vantage_news,
+        alpha_vantage_stock,
+    )
+    original_module_requests = {
+        module: module._make_api_request for module in request_modules
+    }
+    original_loader = market_data_validator.load_ohlcv
+    try:
+        for module in request_modules:
+            module._make_api_request = guarded_request
+        market_data_validator.load_ohlcv = lambda symbol, curr_date: _alpha_ohlcv_loader(
+            guarded_request,
+            symbol,
+            curr_date,
+        )
+        yield
+    finally:
+        for module, module_request in original_module_requests.items():
+            module._make_api_request = module_request
+        market_data_validator.load_ohlcv = original_loader
 
 
 @contextmanager

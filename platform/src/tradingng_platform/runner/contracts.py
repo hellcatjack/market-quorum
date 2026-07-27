@@ -43,7 +43,18 @@ class RunnerInput(BaseModel):
     work_dir: Path
     data_vendors: dict[str, str]
     tool_vendors: dict[str, str]
+    alpha_vantage_coordination_dir: Path | None = None
+    alpha_vantage_requests_per_minute: int = Field(default=75, ge=1, le=10000)
+    alpha_vantage_retry_attempts: int = Field(default=6, ge=1, le=20)
+    alpha_vantage_retry_base_seconds: float = Field(default=5, gt=0, le=300)
+    alpha_vantage_retry_max_seconds: float = Field(default=60, gt=0, le=900)
     memory: MemorySnapshot = Field(default_factory=empty_memory_snapshot)
+
+    @model_validator(mode="after")
+    def validate_alpha_vantage_retry_window(self):
+        if self.alpha_vantage_retry_base_seconds > self.alpha_vantage_retry_max_seconds:
+            raise ValueError("Alpha Vantage retry base must not exceed its maximum")
+        return self
 
 
 class RunnerEvent(BaseModel):

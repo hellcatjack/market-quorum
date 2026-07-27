@@ -83,6 +83,14 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
             },
             "data_vendors": {"core_stock_apis": "yfinance"},
             "tool_vendors": {},
+            "vendor_policies": {
+                "alpha_vantage": {
+                    "requests_per_minute": 42,
+                    "retry_attempts": 4,
+                    "retry_base_seconds": 3,
+                    "retry_max_seconds": 30,
+                }
+            },
             "memory": build_memory_snapshot(
                 MemoryMode.INDEPENDENT,
                 "NVDA",
@@ -103,6 +111,11 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
     assert runner_input.debate_rounds == 3
     assert runner_input.codex_reasoning_effort == "xhigh"
     assert runner_input.memory.mode is MemoryMode.INDEPENDENT
+    assert runner_input.alpha_vantage_requests_per_minute == 42
+    assert runner_input.alpha_vantage_retry_attempts == 4
+    assert runner_input.alpha_vantage_retry_base_seconds == 3
+    assert runner_input.alpha_vantage_retry_max_seconds == 30
+    assert runner_input.alpha_vantage_coordination_dir == tmp_path / "vendor-limits"
 
 
 def test_old_claim_snapshot_without_memory_remains_independent(tmp_path):
@@ -134,6 +147,8 @@ def test_old_claim_snapshot_without_memory_remains_independent(tmp_path):
 
     assert runner_input.memory.mode is MemoryMode.INDEPENDENT
     assert runner_input.memory.entries == ()
+    assert runner_input.alpha_vantage_requests_per_minute == 75
+    assert runner_input.alpha_vantage_retry_attempts == 6
 
 
 def test_dependency_health_event_requires_vendor_identity():

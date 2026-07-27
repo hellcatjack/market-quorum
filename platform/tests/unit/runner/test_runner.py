@@ -4,16 +4,23 @@ from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 
+import pandas as pd
 from langchain_core.messages import AIMessage, HumanMessage
 from tradingagents.agents.analysts import sentiment_analyst
 from tradingagents.dataflows import fred
+from tradingagents.dataflows.alpha_vantage_common import AlphaVantageRateLimitError
 from tradingagents.dataflows.interface import VENDOR_METHODS
 
 from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.memory import MemoryCandidate, build_memory_snapshot
 from tradingng_platform.runner.callbacks import AuditCallback
 from tradingng_platform.runner.contracts import RunnerInput
-from tradingng_platform.runner.tradingagents import TradingAgentsRunner
+from tradingng_platform.runner.tradingagents import (
+    TradingAgentsRunner,
+    _alpha_ohlcv_loader,
+    _guard_alpha_request,
+)
+from tradingng_platform.vendors.alpha_vantage import AlphaVantageRetryPolicy
 
 DECISION = """**Rating**: Hold
 
@@ -368,3 +375,90 @@ def test_callback_records_vendor_failure_as_safe_health_event(tmp_path):
     assert health["category"] == "core_stock_apis"
     assert health["error_code"] == "vendor_rate_limit"
     assert "must-not-leak" not in callback.health_path.read_text(encoding="utf-8")
+
+
+class _FakeRateGate:
+    def __init__(self):
+        self.acquired = 0
+        self.deferred = []
+
+    def acquire(self):
+        self.acquired += 1
+
+    def defer(self, seconds):
+        self.deferred.append(seconds)
+
+
+def test_alpha_request_guard_retries_rate_limit_on_same_provider():
+    responses = [
+        AlphaVantageRateLimitError("secret provider detail"),
+        "time,MACD,MACD_Hist,MACD_Signal\n2026-07-24,1.2,0.2,1.0\n",
+    ]
+    calls = []
+    sleeps = []
+    gate = _FakeRateGate()
+
+    def request(function_name, params):
+        calls.append((function_name, params))
+        response = responses.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    guarded = _guard_alpha_request(
+        request,
+        gate,
+        AlphaVantageRetryPolicy(attempts=3, base_seconds=5, max_seconds=60),
+        sleep=sleeps.append,
+    )
+
+    result = guarded("MACD", {"symbol": "JPM", "datatype": "csv"})
+
+    assert result.startswith("time,MACD,MACD_Hist,MACD_Signal")
+    assert [call[0] for call in calls] == ["MACD", "MACD"]
+    assert gate.acquired == 2
+    assert gate.deferred == [5]
+    assert sleeps == [5]
+
+
+def test_alpha_request_guard_retries_json_error_instead_of_returning_fake_csv():
+    responses = [
+        '{"Error Message":"temporary upstream error"}',
+        "time,MACD,MACD_Hist,MACD_Signal\n2026-07-24,1.2,0.2,1.0\n",
+    ]
+    gate = _FakeRateGate()
+
+    guarded = _guard_alpha_request(
+        lambda function_name, params: responses.pop(0),
+        gate,
+        AlphaVantageRetryPolicy(attempts=2, base_seconds=1, max_seconds=2),
+        sleep=lambda seconds: None,
+    )
+
+    assert guarded("MACD", {"symbol": "JPM"}).startswith("time,MACD")
+    assert gate.acquired == 2
+
+
+def test_alpha_ohlcv_loader_builds_raw_point_in_time_frame_without_yahoo():
+    csv = """timestamp,open,high,low,close,adjusted_close,volume,dividend_amount,split_coefficient
+2026-07-28,103,105,102,104,104,1200,0,1
+2026-07-27,101,104,100,103,102,1100,1,1
+2026-07-24,99,102,98,101,100,1000,0,1
+"""
+    calls = []
+
+    def request(function_name, params):
+        calls.append((function_name, params))
+        return csv
+
+    frame = _alpha_ohlcv_loader(request, "JPM", "2026-07-27")
+
+    assert list(frame.columns) == ["Date", "Open", "High", "Low", "Close", "Volume"]
+    assert frame["Date"].tolist() == [pd.Timestamp("2026-07-24"), pd.Timestamp("2026-07-27")]
+    assert frame["Close"].tolist() == [101, 103]
+    assert calls == [
+        (
+            "TIME_SERIES_DAILY_ADJUSTED",
+            {"symbol": "JPM", "outputsize": "full", "datatype": "csv"},
+        )
+    ]
