@@ -92,10 +92,10 @@ export function DashboardPage() {
 
   const counts = view === "instruments"
     ? {
-        queued: overview.data?.run_counts.queued ?? 0,
-        active: overview.data?.run_counts.active ?? 0,
-        succeeded: overview.data?.run_counts.succeeded ?? 0,
-        failed: overview.data?.run_counts.anomalous ?? 0,
+        queued: overview.data?.run_counts?.queued ?? 0,
+        active: overview.data?.run_counts?.active ?? 0,
+        succeeded: overview.data?.run_counts?.succeeded ?? 0,
+        failed: overview.data?.run_counts?.anomalous ?? 0,
       }
     : {
         queued: runs.data?.items.filter((run) => run.status === "queued").length ?? 0,

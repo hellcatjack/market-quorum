@@ -191,9 +191,7 @@ class _Records:
                         asset_type="stock",
                     ),
                     latest_run=run,
-                    latest_successful_run=run.model_copy(
-                        update={"status": RunStatus.SUCCEEDED}
-                    ),
+                    latest_successful_run=run.model_copy(update={"status": RunStatus.SUCCEEDED}),
                     latest_decision=DecisionView(
                         run_id=validation.run_id,
                         rating="Underweight",

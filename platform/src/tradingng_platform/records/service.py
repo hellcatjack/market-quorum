@@ -177,9 +177,7 @@ def _build_overview_items(
             else []
         )
         all_validations = [
-            item
-            for row in instrument_rows
-            for item in validations_by_run.get(row[0].id, [])
+            item for row in instrument_rows for item in validations_by_run.get(row[0].id, [])
         ]
         items.append(
             InstrumentOverviewItem(
@@ -205,9 +203,7 @@ def _build_overview_items(
                     else None
                 ),
                 latest_decision=(
-                    _decision_view(latest_successful[3])
-                    if latest_successful is not None
-                    else None
+                    _decision_view(latest_successful[3]) if latest_successful is not None else None
                 ),
                 previous_rating=(
                     successful_rows[1][3].rating if len(successful_rows) > 1 else None
