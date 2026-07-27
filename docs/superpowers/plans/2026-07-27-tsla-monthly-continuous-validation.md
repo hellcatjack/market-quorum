@@ -108,6 +108,8 @@ git commit -m "test: add resumable TSLA monthly audit harness"
 Use `httpx.MockTransport` to require the client to:
 
 - obtain a client-credentials token without placing it in saved state;
+- refresh the in-memory token once after a `401` response, because one deep
+  assessment can outlive the Keycloak access-token lifetime;
 - submit exactly one item to `/api/v1/assessments` with `deep`, `historical`, all
   four analysts, Chinese output, and a deterministic per-date idempotency key;
 - poll run detail, steps, decision, artifacts, and validations;
@@ -121,7 +123,8 @@ Expected RED: `AuditApiClient` and `run_checkpoint` are not defined.
 Implement `AuditApiClient` around an injected `httpx.Client`. Read
 `TRADINGNG_API_CLIENT_SECRET` from `.env.platform` only at process startup,
 exchange it at the local Keycloak endpoint, keep the token in memory, and send it
-only in the Authorization header. Implement bounded network retries for GET
+only in the Authorization header. Refresh once and replay the request after a
+`401`; never serialize either token. Implement bounded network retries for GET
 polling; do not automatically retry a non-idempotent POST except by reusing the
 same idempotency key and then listing TSLA runs to recover its run ID.
 
