@@ -125,8 +125,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
         return {
             "object": "list",
             "data": [
-                {"id": model, "object": "model", "owned_by": "local"}
-                for model in _PUBLIC_MODELS
+                {"id": model, "object": "model", "owned_by": "local"} for model in _PUBLIC_MODELS
             ],
         }
 
@@ -215,9 +214,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                 if codex_model is not None or codex_reasoning_effort is not None:
                     raise InvalidRequest("Legacy and route pin headers cannot be mixed")
                 if not all(value is not None and value.strip() for value in route_values):
-                    raise InvalidRequest(
-                        "TradingNG route pin headers must be supplied together"
-                    )
+                    raise InvalidRequest("TradingNG route pin headers must be supplied together")
                 if body.model == "codex-fast":
                     pinned_config = EffectiveCodexConfig(
                         model=fast_codex_model,

@@ -40,9 +40,7 @@ def test_routing_snapshot_id_is_deterministic_and_changes_with_route():
             "fast": {"reasoning_effort": "high", "model": "gpt-5.6-terra"},
         }
     )
-    changed = ModelRoutingPolicy(
-        fast=ModelRoute(model="gpt-5.6-terra", reasoning_effort="medium")
-    )
+    changed = ModelRoutingPolicy(fast=ModelRoute(model="gpt-5.6-terra", reasoning_effort="medium"))
 
     assert first.snapshot_id == second.snapshot_id
     assert len(first.snapshot_id) == 64
