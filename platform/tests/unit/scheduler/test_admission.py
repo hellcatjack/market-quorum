@@ -60,6 +60,14 @@ async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
         prompt_schema_version="v1",
         data_vendors={"market_data": "yfinance"},
         tool_vendors={"get_stock_data": "yfinance"},
+        vendor_policies={
+            "alpha_vantage": {
+                "requests_per_minute": 75,
+                "retry_attempts": 6,
+                "retry_base_seconds": 5,
+                "retry_max_seconds": 60,
+            }
+        },
     )
     service = AdmissionService(
         scheduler_repository,
@@ -160,3 +168,4 @@ def test_run_snapshot_is_canonical_and_resolves_depth_rounds():
     assert first.content["memory"]["mode"] == "historical"
     assert first.content["memory"]["entries"][0]["horizon"] == 5
     assert first.content["memory"]["snapshot_sha256"] == memory.snapshot_sha256
+    assert first.content["vendor_policies"] == metadata.vendor_policies

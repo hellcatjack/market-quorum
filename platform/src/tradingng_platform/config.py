@@ -71,8 +71,16 @@ class Settings(BaseSettings):
     max_running_validation: int = 2
     validation_price_providers: Annotated[tuple[str, ...], NoDecode] = ("yfinance",)
     alpha_vantage_api_key: SecretStr | None = Field(default=None, repr=False)
+    research_alpha_vantage_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="ALPHA_VANTAGE_API_KEY",
+        repr=False,
+    )
     validation_provider_timeout_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
     alpha_vantage_requests_per_minute: int = Field(default=75, ge=1, le=10000)
+    alpha_vantage_retry_attempts: int = Field(default=6, ge=1, le=20)
+    alpha_vantage_retry_base_seconds: float = Field(default=5, ge=0.1, le=300)
+    alpha_vantage_retry_max_seconds: float = Field(default=60, ge=0.1, le=900)
     research_data_vendor_chain: Annotated[tuple[str, ...], NoDecode] = (
         "alpha_vantage",
         "yfinance",
@@ -100,6 +108,12 @@ class Settings(BaseSettings):
             query={"charset": self.db_charset},
         ).render_as_string(hide_password=False)
         object.__setattr__(self, "database_url", resolved)
+        return self
+
+    @model_validator(mode="after")
+    def validate_alpha_vantage_retry_window(self):
+        if self.alpha_vantage_retry_base_seconds > self.alpha_vantage_retry_max_seconds:
+            raise ValueError("Alpha Vantage retry base must not exceed its maximum")
         return self
 
     @field_validator(
@@ -137,6 +151,18 @@ class Settings(BaseSettings):
         if any(item not in allowed for item in normalized):
             raise ValueError("unsupported research data vendor")
         return normalized
+
+    @property
+    def effective_research_data_vendor_chain(self) -> tuple[str, ...]:
+        if self.research_alpha_vantage_api_key is not None:
+            return ("alpha_vantage",)
+        return self.research_data_vendor_chain
+
+    @property
+    def effective_validation_price_providers(self) -> tuple[str, ...]:
+        if self.alpha_vantage_api_key is not None:
+            return ("alphavantage",)
+        return self.validation_price_providers
 
     @computed_field
     @property

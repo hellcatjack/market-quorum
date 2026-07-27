@@ -1,6 +1,6 @@
 import hashlib
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -55,6 +55,7 @@ class ExecutionMetadata:
     prompt_schema_version: str
     data_vendors: dict[str, str]
     tool_vendors: dict[str, str]
+    vendor_policies: dict[str, dict] = field(default_factory=dict)
 
 
 def _configured_vendors(metadata: ExecutionMetadata) -> set[str]:
@@ -102,6 +103,7 @@ def build_run_snapshot(
         "prompt_schema_version": metadata.prompt_schema_version,
         "data_vendors": dict(metadata.data_vendors),
         "tool_vendors": dict(metadata.tool_vendors),
+        "vendor_policies": dict(metadata.vendor_policies),
         "memory": memory.model_dump(mode="json"),
     }
     canonical = json.dumps(content, sort_keys=True, separators=(",", ":")).encode()

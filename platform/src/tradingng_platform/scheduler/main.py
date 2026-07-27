@@ -57,7 +57,7 @@ def _commit(path: Path) -> str:
 def _execution_metadata(settings: Settings) -> ExecutionMetadata:
     project_root = Path(__file__).resolve().parents[4]
     data_vendors = dict(DEFAULT_CONFIG["data_vendors"])
-    research_vendor_chain = ",".join(settings.research_data_vendor_chain)
+    research_vendor_chain = ",".join(settings.effective_research_data_vendor_chain)
     for category in _ALPHA_VANTAGE_RESEARCH_CATEGORIES:
         data_vendors[category] = research_vendor_chain
     return ExecutionMetadata(
@@ -66,6 +66,14 @@ def _execution_metadata(settings: Settings) -> ExecutionMetadata:
         prompt_schema_version="v1",
         data_vendors=data_vendors,
         tool_vendors=dict(DEFAULT_CONFIG["tool_vendors"]),
+        vendor_policies={
+            "alpha_vantage": {
+                "requests_per_minute": settings.alpha_vantage_requests_per_minute,
+                "retry_attempts": settings.alpha_vantage_retry_attempts,
+                "retry_base_seconds": settings.alpha_vantage_retry_base_seconds,
+                "retry_max_seconds": settings.alpha_vantage_retry_max_seconds,
+            }
+        },
     )
 
 

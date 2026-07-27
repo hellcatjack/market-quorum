@@ -92,6 +92,39 @@ def test_validation_provider_order_and_alpha_key_are_secret(monkeypatch):
     assert "premium-secret" not in repr(settings)
 
 
+def test_configured_alpha_keys_make_research_and_validation_exclusive(monkeypatch):
+    monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "research-premium-secret")
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+        alpha_vantage_api_key="validation-premium-secret",
+        research_data_vendor_chain=("alpha_vantage", "yfinance"),
+        validation_price_providers=("alphavantage", "yfinance"),
+    )
+
+    assert settings.effective_research_data_vendor_chain == ("alpha_vantage",)
+    assert settings.effective_validation_price_providers == ("alphavantage",)
+    assert settings.alpha_vantage_retry_attempts == 6
+    assert settings.alpha_vantage_retry_base_seconds == 5
+    assert settings.alpha_vantage_retry_max_seconds == 60
+    assert "research-premium-secret" not in repr(settings)
+    assert "validation-premium-secret" not in repr(settings)
+
+
+def test_missing_alpha_keys_preserve_explicit_vendor_routes(monkeypatch):
+    monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+        alpha_vantage_api_key=None,
+        research_data_vendor_chain=("yfinance",),
+        validation_price_providers=("yfinance",),
+    )
+
+    assert settings.effective_research_data_vendor_chain == ("yfinance",)
+    assert settings.effective_validation_price_providers == ("yfinance",)
+
+
 def test_research_vendor_chain_preserves_explicit_order(monkeypatch):
     monkeypatch.setenv(
         "TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN",
