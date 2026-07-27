@@ -6,6 +6,9 @@ import type { InstrumentHistoryItem } from "../../api/records";
 import { getInstrument, getInstrumentHistory } from "../../api/records";
 import { formatPercent } from "../dashboard/instrumentPresentation";
 import { LocalTime } from "../runs/RunTimeline";
+import { useI18n } from "../../i18n/I18nProvider";
+import { reasoningEffortLabel } from "../../i18n/domainLabels";
+import { assetTypeLabel, runStatusLabel } from "../../i18n/domainLabels";
 import {
   orderInstrumentHistory,
   projectInstrumentHistory,
@@ -13,24 +16,6 @@ import {
 } from "./instrumentHistory";
 
 const HORIZONS = [1, 5, 20] as const;
-
-const STATUS_LABELS: Record<string, string> = {
-  queued: "排队中",
-  admitted: "已准入",
-  starting: "启动中",
-  running_analysts: "分析中",
-  research_debate: "研究辩论",
-  trader_plan: "交易计划",
-  risk_debate: "风险辩论",
-  portfolio_decision: "组合决策",
-  finalizing: "整理结果",
-  succeeded: "已完成",
-  failed: "失败",
-  cancel_requested: "等待取消",
-  cancelling: "取消中",
-  cancelled: "已取消",
-  needs_attention: "需要处理",
-};
 
 type InstrumentValidation = NonNullable<InstrumentHistoryItem["validations"]>[number];
 
@@ -41,10 +26,11 @@ function ValidationCell({
   horizon: number;
   validation: InstrumentValidation | undefined;
 }) {
+  const { t } = useI18n();
   if (!validation) {
     return (
       <div className="history-validation history-validation--empty">
-        <strong>{horizon}D</strong><span>待生成</span>
+        <strong>{horizon}D</strong><span>{t("待生成")}</span>
       </div>
     );
   }
@@ -53,9 +39,9 @@ function ValidationCell({
     return (
       <div className={`history-validation history-validation--${failed ? "error" : "pending"}`}>
         <strong>{horizon}D</strong>
-        <span>{failed ? "验证异常" : "待验证"}</span>
+        <span>{failed ? t("验证异常") : t("待验证")}</span>
         {validation.matures_at && !failed ? (
-          <small>预计 {validation.matures_at.slice(0, 10)}</small>
+          <small>{t("预计 {date}", { date: validation.matures_at.slice(0, 10) })}</small>
         ) : null}
       </div>
     );
@@ -66,10 +52,10 @@ function ValidationCell({
       ? "incorrect"
       : "unjudged";
   const directionLabel = validation.direction_correct === true
-    ? "方向正确"
+    ? t("方向正确")
     : validation.direction_correct === false
-      ? "方向错误"
-      : "方向未判定";
+      ? t("方向错误")
+      : t("方向未判定");
   return (
     <div className={`history-validation history-validation--completed history-validation--direction-${directionState}`}>
       <strong>{horizon}D</strong>
@@ -81,20 +67,22 @@ function ValidationCell({
         {directionLabel}
       </small>
       {validation.price_target_hit !== null ? (
-        <small>{validation.price_target_hit ? "目标价命中" : "目标价未命中"}</small>
+        <small>{validation.price_target_hit ? t("目标价命中") : t("目标价未命中")}</small>
       ) : null}
     </div>
   );
 }
 
 function MemoryLabel({ item }: { item: InstrumentHistoryItem }) {
+  const { t } = useI18n();
   if (item.memory_mode === "historical") {
-    return <span className="history-memory">历史辅助 · {item.memory_source_count} 个来源</span>;
+    return <span className="history-memory">{t("{label} · {count} 个来源", { label: t("历史辅助"), count: item.memory_source_count })}</span>;
   }
-  return <span className="history-memory">独立评估</span>;
+  return <span className="history-memory">{t("独立评估")}</span>;
 }
 
 export function InstrumentHistoryPage() {
+  const { locale, t } = useI18n();
   const { ticker = "" } = useParams<{ ticker: string }>();
   const normalized = ticker.toUpperCase();
   const [order, setOrder] = useState<InstrumentHistoryOrder>("newest");
@@ -111,8 +99,8 @@ export function InstrumentHistoryPage() {
     retry: false,
   });
   const projectedEvents = useMemo(
-    () => projectInstrumentHistory(history.data ?? []),
-    [history.data],
+    () => projectInstrumentHistory(history.data ?? [], locale),
+    [history.data, locale],
   );
   const events = useMemo(
     () => orderInstrumentHistory(projectedEvents, order),
@@ -120,50 +108,50 @@ export function InstrumentHistoryPage() {
   );
 
   if (summary.isError || history.isError) {
-    return <p className="page-shell page-warning" role="alert">无法读取该标的的历史评估。</p>;
+    return <p className="page-shell page-warning" role="alert">{t("无法读取该标的的历史评估。")}</p>;
   }
   return (
     <section className="page-shell instrument-page">
       <header className="instrument-hero">
         <div>
-          <p className="eyebrow">标的档案 / 结论演化</p>
-          <h1>{normalized} 历史评估</h1>
-          <p>默认优先查看最新研究，也可切换为审计顺序，并将每次预测与 1/5/20 日实际表现绑定。</p>
+          <p className="eyebrow">{t("标的档案 / 结论演化")}</p>
+          <h1>{t("{ticker} 历史评估", { ticker: normalized })}</h1>
+          <p>{t("默认优先查看最新研究，也可切换为审计顺序，并将每次预测与 1/5/20 日实际表现绑定。")}</p>
         </div>
         <dl>
-          <div><dt>评估次数</dt><dd>{summary.data?.assessment_count ?? "—"}</dd></div>
-          <div><dt>最新有效评级</dt><dd>{summary.data?.latest_rating ?? "—"}</dd></div>
-          <div><dt>资产类型</dt><dd>{summary.data?.asset_types.join(" / ") ?? "—"}</dd></div>
+          <div><dt>{t("评估次数")}</dt><dd>{summary.data?.assessment_count ?? "—"}</dd></div>
+          <div><dt>{t("最新有效评级")}</dt><dd>{summary.data?.latest_rating ?? "—"}</dd></div>
+          <div><dt>{t("资产类型")}</dt><dd>{summary.data?.asset_types.map((item) => assetTypeLabel(item, locale)).join(" / ") ?? "—"}</dd></div>
         </dl>
       </header>
 
       <div className="instrument-history-heading">
         <div>
-          <p className="eyebrow">{order === "newest" ? "由新到旧" : "由旧到新"}</p>
-          <h2>结论与表现时间线</h2>
+          <p className="eyebrow">{order === "newest" ? t("由新到旧") : t("由旧到新")}</p>
+          <h2>{t("结论与表现时间线")}</h2>
         </div>
         <div className="history-heading-actions">
-          <span>{events.length} 个研究事件</span>
-          <div className="history-order-control" aria-label="研究事件排序">
+          <span>{t("{count} 个研究事件", { count: events.length })}</span>
+          <div className="history-order-control" aria-label={t("研究事件排序")}>
             <button
               type="button"
               aria-pressed={order === "newest"}
               onClick={() => setOrder("newest")}
             >
-              最新在前
+              {t("最新在前")}
             </button>
             <button
               type="button"
               aria-pressed={order === "oldest"}
               onClick={() => setOrder("oldest")}
             >
-              最早在前
+              {t("最早在前")}
             </button>
           </div>
         </div>
       </div>
-      {history.isLoading ? <p className="table-empty" role="status">正在载入历史…</p> : null}
-      <ol className="instrument-history-timeline" aria-label={`${normalized} 结论演化`}>
+      {history.isLoading ? <p className="table-empty" role="status">{t("正在载入历史…")}</p> : null}
+      <ol className="instrument-history-timeline" aria-label={t("{ticker} 结论演化", { ticker: normalized })}>
         {events.map(({ primary, priorAttempts, transition }) => (
           <li key={primary.run.request_id} data-testid="history-event">
             <article className={`instrument-history-event instrument-history-event--${primary.run.status}`}>
@@ -173,26 +161,26 @@ export function InstrumentHistoryPage() {
                   <LocalTime value={primary.run.created_at} />
                 </div>
                 <span className={`run-status run-status--${primary.run.status === "succeeded" ? "success" : primary.run.status === "failed" || primary.run.status === "needs_attention" ? "danger" : "muted"}`}>
-                  {STATUS_LABELS[primary.run.status] ?? primary.run.status}
+                  {runStatusLabel(primary.run.status, locale)}
                 </span>
               </header>
 
               <div className="instrument-history-decision">
                 <div>
-                  <p className="eyebrow">投资判断</p>
-                  <h3>{primary.rating ?? "尚无有效结论"}</h3>
+                  <p className="eyebrow">{t("投资判断")}</p>
+                  <h3>{primary.rating ?? t("尚无有效结论")}</h3>
                   {transition ? <strong className="rating-transition">{transition}</strong> : null}
-                  <p>{primary.executive_summary ?? "本次运行未形成投资摘要。"}</p>
+                  <p>{primary.executive_summary ?? t("本次运行未形成投资摘要。")}</p>
                   {primary.price_target !== null ? (
-                    <span>目标价 {primary.price_target}</span>
+                    <span>{t("目标价")} {primary.price_target}</span>
                   ) : null}
                 </div>
                 <Link className="secondary-button" href={`/runs/${primary.run.id}`}>
-                  查看评估详情
+                  {t("查看评估详情")}
                 </Link>
               </div>
 
-              <div className="history-validation-grid" aria-label="表现验证">
+              <div className="history-validation-grid" aria-label={t("表现验证")}>
                 {HORIZONS.map((horizon) => (
                   <ValidationCell
                     key={horizon}
@@ -206,20 +194,27 @@ export function InstrumentHistoryPage() {
 
               <footer className="instrument-history-meta">
                 <MemoryLabel item={primary} />
-                <span>{primary.gateway_model ?? "模型未知"} · {primary.gateway_reasoning_effort ?? "深度未知"}</span>
+                {primary.gateway_fast_model || primary.gateway_slow_model ? (
+                  <span className="history-model-routes">
+                    <span>{t("快速分析路由")}：{primary.gateway_fast_model ?? "—"} · {reasoningEffortLabel(primary.gateway_fast_reasoning_effort ?? null, locale)}</span>
+                    <span>{t("关键裁决路由")}：{primary.gateway_slow_model ?? "—"} · {reasoningEffortLabel(primary.gateway_slow_reasoning_effort ?? null, locale)}</span>
+                  </span>
+                ) : (
+                  <span>{t("旧版单路由")}：{primary.gateway_model ?? t("模型未知")} · {reasoningEffortLabel(primary.gateway_reasoning_effort ?? null, locale)}</span>
+                )}
                 <code title={primary.config_snapshot_sha256 ?? undefined}>
-                  {primary.config_snapshot_sha256 ?? "无配置快照"}
+                  {primary.config_snapshot_sha256 ?? t("无配置快照")}
                 </code>
               </footer>
 
               {priorAttempts.length > 0 ? (
                 <details className="history-prior-attempts">
-                  <summary>其他尝试（{priorAttempts.length}）</summary>
+                  <summary>{t("其他尝试（{count}）", { count: priorAttempts.length })}</summary>
                   <ul>
                     {priorAttempts.map((attempt) => (
                       <li key={attempt.run.id}>
                         <Link href={`/runs/${attempt.run.id}`}>
-                          尝试 #{attempt.run.attempt} · {STATUS_LABELS[attempt.run.status] ?? attempt.run.status}
+                          {t("尝试 #{attempt} · {status}", { attempt: attempt.run.attempt, status: runStatusLabel(attempt.run.status, locale) })}
                         </Link>
                         <LocalTime value={attempt.run.created_at} />
                       </li>
@@ -232,7 +227,7 @@ export function InstrumentHistoryPage() {
         ))}
       </ol>
       {!history.isLoading && events.length === 0 ? (
-        <p className="table-empty">尚无历史评估。</p>
+        <p className="table-empty">{t("尚无历史评估。")}</p>
       ) : null}
     </section>
   );

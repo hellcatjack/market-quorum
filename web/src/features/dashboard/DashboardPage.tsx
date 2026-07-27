@@ -9,6 +9,7 @@ import {
 } from "../../api/assessments";
 import { listInstrumentOverviews } from "../../api/records";
 import { CapacityBanner } from "../system/CapacityBanner";
+import { useI18n } from "../../i18n/I18nProvider";
 import { InstrumentLedgerTable } from "./InstrumentLedgerTable";
 import { RunTable } from "./RunTable";
 
@@ -25,6 +26,7 @@ function utcBoundary(date: string, end: boolean): string | undefined {
 }
 
 export function DashboardPage() {
+  const { locale, t } = useI18n();
   const [view, setView] = useState<DashboardView>("instruments");
   const [ticker, setTicker] = useState("");
   const [status, setStatus] = useState<AssessmentStatus | "">("");
@@ -117,35 +119,35 @@ export function DashboardPage() {
     <section className="page-shell dashboard-page">
       <header className="page-header dashboard-heading">
         <div>
-          <p className="eyebrow">TradingNG / 研究台账</p>
-          <h1>评估总览</h1>
-          <p>集中查看最新判断、实际表现与完整任务状态。</p>
+          <p className="eyebrow">{t("TradingNG / 研究台账")}</p>
+          <h1>{t("评估总览")}</h1>
+          <p>{t("集中查看最新判断、实际表现与完整任务状态。")}</p>
         </div>
-        <Link className="primary-button" href="/new">＋ 新建评估</Link>
+        <Link className="primary-button" href="/new">{t("＋ 新建评估")}</Link>
       </header>
       {capacity.data ? <CapacityBanner capacity={capacity.data} /> : null}
-      {capacity.isError ? <p className="page-warning" role="alert">容量数据暂时不可用。</p> : null}
+      {capacity.isError ? <p className="page-warning" role="alert">{t("容量数据暂时不可用。")}</p> : null}
       {capacity.data?.open_circuits.length ? (
         <div className="circuit-warning" role="alert">
-          <strong>数据源熔断</strong>
+          <strong>{t("数据源熔断")}</strong>
           {capacity.data.open_circuits.map((circuit) => <span key={circuit}>{circuit}</span>)}
         </div>
       ) : null}
-      <div className="count-grid" aria-label="当前筛选状态统计">
-        <article><span>排队</span><strong data-testid="count-queued">{counts.queued}</strong></article>
-        <article><span>运行中</span><strong data-testid="count-active">{counts.active}</strong></article>
-        <article><span>已完成</span><strong data-testid="count-succeeded">{counts.succeeded}</strong></article>
-        <article><span>异常</span><strong data-testid="count-failed">{counts.failed}</strong></article>
+      <div className="count-grid" aria-label={t("当前筛选状态统计")}>
+        <article><span>{t("排队")}</span><strong data-testid="count-queued">{counts.queued}</strong></article>
+        <article><span>{t("运行中")}</span><strong data-testid="count-active">{counts.active}</strong></article>
+        <article><span>{t("已完成")}</span><strong data-testid="count-succeeded">{counts.succeeded}</strong></article>
+        <article><span>{t("异常")}</span><strong data-testid="count-failed">{counts.failed}</strong></article>
       </div>
 
-      <div className="dashboard-view-tabs" role="tablist" aria-label="总览视图">
+      <div className="dashboard-view-tabs" role="tablist" aria-label={t("总览视图")}>
         <button
           type="button"
           role="tab"
           aria-selected={view === "instruments"}
           onClick={() => setView("instruments")}
         >
-          标的台账
+          {t("标的台账")}
         </button>
         <button
           type="button"
@@ -153,29 +155,29 @@ export function DashboardPage() {
           aria-selected={view === "runs"}
           onClick={() => setView("runs")}
         >
-          任务记录
+          {t("任务记录")}
         </button>
       </div>
       <div className="run-section-heading">
         <div>
-          <p className="eyebrow">{view === "instruments" ? "预测与实际" : "运行审计"}</p>
-          <h2>{view === "instruments" ? "标的研究台账" : "任务队列与历史"}</h2>
+          <p className="eyebrow">{view === "instruments" ? t("预测与实际") : t("运行审计")}</p>
+          <h2>{view === "instruments" ? t("标的研究台账") : t("任务队列与历史")}</h2>
         </div>
         {(view === "instruments" ? overview.isFetching : runs.isFetching) ? (
-          <span className="refresh-note" role="status">正在刷新…</span>
+          <span className="refresh-note" role="status">{t("正在刷新…")}</span>
         ) : null}
       </div>
       <div className="run-filters panel">
         <label>
-          <span>标的</span>
+          <span>{t("标的")}</span>
           <input
             value={ticker}
             onChange={(event) => { setTicker(event.target.value); resetCursors(); }}
-            placeholder={view === "instruments" ? "NVDA / 英伟达" : "NVDA"}
+            placeholder={view === "instruments" ? (locale === "zh-CN" ? "NVDA / 英伟达" : "NVDA / NVIDIA") : "NVDA"}
           />
         </label>
         <label>
-          <span>最新状态</span>
+          <span>{t("最新状态")}</span>
           <select
             value={status}
             onChange={(event) => {
@@ -183,16 +185,16 @@ export function DashboardPage() {
               resetCursors();
             }}
           >
-            <option value="">全部状态</option>
-            <option value="queued">排队中</option>
-            <option value="running_analysts">分析中</option>
-            <option value="succeeded">已完成</option>
-            <option value="failed">失败</option>
-            <option value="needs_attention">需要处理</option>
+            <option value="">{t("全部状态")}</option>
+            <option value="queued">{t("排队中")}</option>
+            <option value="running_analysts">{t("分析中")}</option>
+            <option value="succeeded">{t("已完成")}</option>
+            <option value="failed">{t("失败")}</option>
+            <option value="needs_attention">{t("需要处理")}</option>
           </select>
         </label>
         <label>
-          <span>开始日期</span>
+          <span>{t("开始日期")}</span>
           <input
             type="date"
             value={createdFrom}
@@ -200,7 +202,7 @@ export function DashboardPage() {
           />
         </label>
         <label>
-          <span>结束日期</span>
+          <span>{t("结束日期")}</span>
           <input
             type="date"
             value={createdTo}
@@ -213,7 +215,7 @@ export function DashboardPage() {
         <>
           {overview.isError ? (
             <p className="page-warning" role="alert">
-              标的台账暂时不可用；可切换到任务记录继续处理运行问题。
+              {t("标的台账暂时不可用；可切换到任务记录继续处理运行问题。")}
             </p>
           ) : null}
           <InstrumentLedgerTable
@@ -237,7 +239,7 @@ export function DashboardPage() {
       ) : (
         <>
           {runs.isError ? (
-            <p className="page-warning" role="alert">评估列表暂时不可用，请稍后重试。</p>
+            <p className="page-warning" role="alert">{t("评估列表暂时不可用，请稍后重试。")}</p>
           ) : null}
           <RunTable
             runs={runs.data?.items ?? []}

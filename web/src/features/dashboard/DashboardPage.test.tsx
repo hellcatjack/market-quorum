@@ -22,6 +22,10 @@ const capacity = {
   gateway_active_completions: 2,
   gateway_model: "gpt-5.6-sol",
   gateway_reasoning_effort: "xhigh",
+  model_routing: {
+    fast: { model: "gpt-5.6-terra", reasoning_effort: "medium" },
+    slow: { model: "gpt-5.6-sol", reasoning_effort: "high" },
+  },
   open_circuits: ["vendor:finnhub"],
   admission_allowed: false,
   admission_reasons: ["running_limit_reached"],
@@ -153,7 +157,9 @@ test("defaults to one instrument row and keeps the full task view available", as
   });
   renderDashboard();
 
-  expect(await screen.findByText("gpt-5.6-sol · xhigh")).toBeInTheDocument();
+  expect(await screen.findByText("gpt-5.6-terra · 中")).toBeInTheDocument();
+  expect(screen.getByText("gpt-5.6-sol · 高")).toBeInTheDocument();
+  expect(screen.queryByText("gpt-5.6-sol · xhigh")).not.toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "标的台账" })).toHaveAttribute(
     "aria-selected",
     "true",

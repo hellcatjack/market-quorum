@@ -50,6 +50,24 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
     if (path.endsWith("/evidence")) {
       return json([{ id: "evidence-1", source: "yfinance", tool_name: "get_stock_data", arguments: { ticker: "SPCX" }, collected_at: "2026-07-25T12:02:00Z", effective_at: "2026-07-25T00:00:00Z", freshness: "fresh", content_hash: "abc123" }]);
     }
+    if (path.endsWith("/llm-interactions")) {
+      return json({
+        items: [{
+          sequence: 1,
+          route: "slow",
+          model_alias: "codex-slow",
+          physical_model: "gpt-5.6-sol",
+          reasoning_effort: "high",
+          status: "completed",
+          started_at: "2026-07-25T12:02:10Z",
+          completed_at: "2026-07-25T12:02:14Z",
+          duration_ms: 4000,
+          error_code: null,
+        }],
+        source: "sealed",
+        complete: true,
+      });
+    }
     if (path.endsWith("/artifacts")) {
       return json([
         { id: "artifact-1", run_id: "run-123", kind: "report_18_complete_report", media_type: "text/markdown", size: 512, sha256: "def456", created_at: "2026-07-25T12:03:00Z" },
@@ -166,12 +184,13 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
   );
 
   expect(await screen.findByRole("heading", { name: "SPCX 评估详情" })).toBeInTheDocument();
-  expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
-  expect(screen.getByText("xhigh")).toBeInTheDocument();
-  expect(screen.getByText("快模型")).toBeInTheDocument();
-  expect(screen.getByText("gpt-5.6-terra · medium")).toBeInTheDocument();
-  expect(screen.getByText("慢模型")).toBeInTheDocument();
-  expect(screen.getByText("gpt-5.6-sol · high")).toBeInTheDocument();
+  expect(screen.getByText("快速分析路由")).toBeInTheDocument();
+  expect(screen.getByText("gpt-5.6-terra · 中")).toBeInTheDocument();
+  expect(screen.getAllByText("关键裁决路由")).toHaveLength(2);
+  expect(screen.getByText("gpt-5.6-sol · 高")).toBeInTheDocument();
+  expect(screen.queryByText("Gateway 模型")).not.toBeInTheDocument();
+  expect(await screen.findByTestId("llm-1")).toHaveTextContent("关键裁决路由");
+  expect(screen.getByTestId("llm-1")).toHaveTextContent("已完成");
   expect(screen.getByText("snapshot-sha")).toBeInTheDocument();
   expect(screen.getByText("历史辅助")).toBeInTheDocument();
   expect(screen.getByText("历史经验 1 条")).toBeInTheDocument();

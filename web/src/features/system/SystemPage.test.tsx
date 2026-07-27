@@ -22,13 +22,15 @@ test("shows safe diagnostics and keeps scheduler policy read-only for viewers", 
   expect(await screen.findByRole("heading", { name: "系统状态" })).toBeInTheDocument();
   expect(await screen.findByText("worker-1")).toBeInTheDocument();
   expect(screen.getByText("vendor:finnhub")).toBeInTheDocument();
+  const compatibility = screen.getByText("兼容默认路由（非 TradingAgents 评估路由）").closest("details");
+  expect(compatibility).not.toHaveAttribute("open");
   expect(screen.getByLabelText("最大并发评估")).toHaveAttribute("max", "32");
   expect(screen.getByLabelText("最大并发评估")).toBeDisabled();
-  expect(await screen.findByLabelText("快模型")).toHaveValue("gpt-5.6-terra");
-  expect(screen.getByLabelText("快模型")).toBeDisabled();
-  expect(screen.getByLabelText("慢模型")).toHaveValue("gpt-5.6-sol");
-  expect(screen.getByLabelText("快模型思考深度")).toHaveValue("high");
-  expect(screen.getByLabelText("慢模型思考深度")).toHaveValue("high");
+  expect(await screen.findByLabelText("快速分析模型")).toHaveValue("gpt-5.6-terra");
+  expect(screen.getByLabelText("快速分析模型")).toBeDisabled();
+  expect(screen.getByLabelText("关键裁决模型")).toHaveValue("gpt-5.6-sol");
+  expect(screen.getByLabelText("快速分析思考深度")).toHaveValue("high");
+  expect(screen.getByLabelText("关键裁决思考深度")).toHaveValue("high");
   expect(document.body.textContent).not.toContain("/app/devs");
   expect(document.body.textContent).not.toContain("secret");
 });
@@ -77,10 +79,10 @@ test("lets administrators save fast and slow models with independent efforts", a
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><SystemPage /></QueryClientProvider>);
 
-  const fastModel = await screen.findByLabelText("快模型");
+  const fastModel = await screen.findByLabelText("快速分析模型");
   fireEvent.change(fastModel, { target: { value: "gpt-5.6-sol" } });
-  fireEvent.change(screen.getByLabelText("快模型思考深度"), { target: { value: "medium" } });
-  fireEvent.change(screen.getByLabelText("慢模型思考深度"), { target: { value: "xhigh" } });
+  fireEvent.change(screen.getByLabelText("快速分析思考深度"), { target: { value: "medium" } });
+  fireEvent.change(screen.getByLabelText("关键裁决思考深度"), { target: { value: "xhigh" } });
   fireEvent.click(screen.getByRole("button", { name: "保存模型路由" }));
 
   await waitFor(() => expect(savedRouting).toEqual({

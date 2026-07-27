@@ -1,6 +1,8 @@
 import { Link } from "wouter";
 
 import type { InstrumentOverview } from "../../api/records";
+import { useI18n } from "../../i18n/I18nProvider";
+import { assetTypeLabel, outcomeLabel, runStatusLabel } from "../../i18n/domainLabels";
 import {
   predictionOutcomeTokens,
   ratingTransition,
@@ -9,24 +11,6 @@ import {
 
 const ANOMALOUS = new Set(["failed", "needs_attention"]);
 
-const STATUS_LABELS: Record<string, string> = {
-  queued: "排队中",
-  admitted: "已准入",
-  starting: "启动中",
-  running_analysts: "分析中",
-  research_debate: "研究辩论",
-  trader_plan: "交易计划",
-  risk_debate: "风险辩论",
-  portfolio_decision: "组合决策",
-  finalizing: "整理结果",
-  succeeded: "已完成",
-  failed: "失败",
-  cancel_requested: "等待取消",
-  cancelling: "取消中",
-  cancelled: "已取消",
-  needs_attention: "需要处理",
-};
-
 function instrumentLabel(item: InstrumentOverview): string {
   return [item.instrument.name ?? item.instrument.ticker, item.instrument.ticker, item.instrument.exchange]
     .filter((value, index, values) => Boolean(value) && values.indexOf(value) === index)
@@ -34,9 +18,10 @@ function instrumentLabel(item: InstrumentOverview): string {
 }
 
 function PredictionOutcome({ item }: { item: InstrumentOverview }) {
+  const { locale } = useI18n();
   const tokens = predictionOutcomeTokens(item);
   if (tokens.state === "empty") {
-    return <span className="ledger-empty">{tokens.outcome}</span>;
+    return <span className="ledger-empty">{outcomeLabel(tokens.outcome, locale)}</span>;
   }
   const outcomeTone = tokens.state === "error" || tokens.outcome === "方向错误"
     ? "negative"
@@ -56,7 +41,7 @@ function PredictionOutcome({ item }: { item: InstrumentOverview }) {
         <span className="prediction-separator" aria-hidden="true">→</span>
       ) : null}
       <span className={`prediction-token prediction-token--outcome prediction-token--${outcomeTone}`}>
-        {tokens.outcome}
+        {outcomeLabel(tokens.outcome, locale)}
       </span>
       {tokens.target ? <span className="prediction-token">{tokens.target}</span> : null}
     </div>
@@ -78,6 +63,7 @@ export function InstrumentLedgerTable({
   onNext: () => void;
   onPrevious: () => void;
 }) {
+  const { locale, t } = useI18n();
   return (
     <div className="ledger-table-wrap panel">
       <table className="ledger-table">
@@ -89,10 +75,10 @@ export function InstrumentLedgerTable({
         </colgroup>
         <thead>
           <tr>
-            <th scope="col">标的</th>
-            <th scope="col">结论与表现</th>
-            <th scope="col">可靠性与变化</th>
-            <th scope="col">运行</th>
+            <th scope="col">{t("标的")}</th>
+            <th scope="col">{t("结论与表现")}</th>
+            <th scope="col">{t("可靠性与变化")}</th>
+            <th scope="col">{t("运行")}</th>
           </tr>
         </thead>
         <tbody>
@@ -104,7 +90,7 @@ export function InstrumentLedgerTable({
             const latestIsAnomalous = ANOMALOUS.has(item.latest_run.status);
             return (
               <tr key={item.instrument.id}>
-                <td data-label="标的">
+                <td data-label={t("标的")}>
                   <Link
                     className="instrument-link"
                     href={`/instruments/${encodeURIComponent(item.instrument.ticker)}`}
@@ -118,15 +104,15 @@ export function InstrumentLedgerTable({
                       {item.instrument.exchange ? ` · ${item.instrument.exchange}` : ""}
                     </span>
                   </Link>
-                  <span className="ledger-asset-type">{item.instrument.asset_type}</span>
+                  <span className="ledger-asset-type">{assetTypeLabel(item.instrument.asset_type, locale)}</span>
                 </td>
-                <td data-label="结论与表现">
+                <td data-label={t("结论与表现")}>
                   <div className="ledger-main">
                     {item.latest_decision && item.latest_successful_run ? (
                       <div className="ledger-decision">
                         <Link
                           href={`/runs/${item.latest_successful_run.id}`}
-                          aria-label="查看最新有效结论"
+                          aria-label={t("查看最新有效结论")}
                         >
                           <strong>{item.latest_decision.rating}</strong>
                         </Link>
@@ -136,47 +122,47 @@ export function InstrumentLedgerTable({
                     {validationsVisible ? (
                       <PredictionOutcome item={item} />
                     ) : item.latest_decision ? (
-                      <span className="validation-permission">缺少表现验证读取权限</span>
-                    ) : <span className="ledger-empty">尚无有效结论</span>}
+                      <span className="validation-permission">{t("缺少表现验证读取权限")}</span>
+                    ) : <span className="ledger-empty">{t("尚无有效结论")}</span>}
                   </div>
                 </td>
-                <td data-label="可靠性与变化">
+                <td data-label={t("可靠性与变化")}>
                   <div className="ledger-signal-stack">
                     {validationsVisible ? (
                       <div className="ledger-reliability">
                         <strong>{preferredHorizon}D</strong>
-                        <span>{reliabilityLabel(stats)}</span>
+                        <span>{reliabilityLabel(stats, locale)}</span>
                       </div>
                     ) : <span aria-hidden="true">—</span>}
                     <span className="ledger-rating-transition">
-                      {ratingTransition(item.previous_rating, item.latest_decision?.rating)}
+                      {ratingTransition(item.previous_rating, item.latest_decision?.rating, locale)}
                     </span>
                   </div>
                 </td>
-                <td data-label="运行">
+                <td data-label={t("运行")}>
                   <div className="ledger-operation">
                     {latestIsAnomalous ? (
                       <Link
                         className="ledger-anomaly"
                         href={`/runs/${item.latest_run.id}`}
-                        aria-label={`最新任务${STATUS_LABELS[item.latest_run.status] ?? item.latest_run.status}`}
+                        aria-label={t("最新任务{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
                       >
                         <span aria-hidden="true">!</span>
-                        最新任务{STATUS_LABELS[item.latest_run.status] ?? item.latest_run.status}
+                        {t("最新任务{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
                       </Link>
                     ) : (
                       <span className="ledger-latest-status">
-                        最新任务：{STATUS_LABELS[item.latest_run.status] ?? item.latest_run.status}
+                        {t("最新任务：{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
                       </span>
                     )}
-                    <div className="ledger-counts" aria-label={`共 ${item.run_counts.total} 次任务`}>
-                      <span>成功 <strong>{item.run_counts.succeeded}</strong></span>
-                      {item.run_counts.active > 0 ? <span>运行 <strong>{item.run_counts.active}</strong></span> : null}
-                      {item.run_counts.queued > 0 ? <span>排队 <strong>{item.run_counts.queued}</strong></span> : null}
+                    <div className="ledger-counts" aria-label={t("共 {count} 次任务", { count: item.run_counts.total })}>
+                      <span>{t("成功")} <strong>{item.run_counts.succeeded}</strong></span>
+                      {item.run_counts.active > 0 ? <span>{t("运行")} <strong>{item.run_counts.active}</strong></span> : null}
+                      {item.run_counts.queued > 0 ? <span>{t("排队")} <strong>{item.run_counts.queued}</strong></span> : null}
                       {item.run_counts.anomalous > 0 ? (
-                        <span className="ledger-counts__anomaly">异常 <strong>{item.run_counts.anomalous}</strong></span>
+                        <span className="ledger-counts__anomaly">{t("异常")} <strong>{item.run_counts.anomalous}</strong></span>
                       ) : null}
-                      <small>共 {item.run_counts.total}</small>
+                      <small>{t("共 {count}", { count: item.run_counts.total })}</small>
                     </div>
                   </div>
                 </td>
@@ -186,11 +172,11 @@ export function InstrumentLedgerTable({
         </tbody>
       </table>
       {items.length === 0 ? (
-        <p className="table-empty">当前筛选条件下没有标的记录。</p>
+        <p className="table-empty">{t("当前筛选条件下没有标的记录。")}</p>
       ) : null}
-      <div className="pagination" aria-label="标的分页">
-        <button type="button" onClick={onPrevious} disabled={!hasPrevious}>上一页</button>
-        <button type="button" onClick={onNext} disabled={!hasNext}>下一页</button>
+      <div className="pagination" aria-label={t("标的分页")}>
+        <button type="button" onClick={onPrevious} disabled={!hasPrevious}>{t("上一页")}</button>
+        <button type="button" onClick={onNext} disabled={!hasNext}>{t("下一页")}</button>
       </div>
     </div>
   );

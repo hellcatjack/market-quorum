@@ -1,4 +1,5 @@
 import type { InstrumentOverview } from "../../api/records";
+import type { UiLocale } from "../../i18n/I18nProvider";
 
 type ValidationStats = InstrumentOverview["validation_stats"][number];
 
@@ -126,11 +127,11 @@ export function formatPredictionOutcome(overview: InstrumentOverview): string {
   return `${forecast} → ${tokens.horizon} ${tokens.performance}${alpha} → ${tokens.outcome}${target}`;
 }
 
-export function reliabilityLabel(stats: ValidationStats | undefined): string {
-  if (!stats || stats.completed === 0) return "尚无成熟样本";
-  if (stats.completed < 3) return `${stats.completed} 次 · 样本不足`;
+export function reliabilityLabel(stats: ValidationStats | undefined, locale: UiLocale = "zh-CN"): string {
+  if (!stats || stats.completed === 0) return locale === "zh-CN" ? "尚无成熟样本" : "No mature samples";
+  if (stats.completed < 3) return locale === "zh-CN" ? `${stats.completed} 次 · 样本不足` : `${stats.completed} · Insufficient sample`;
   if (stats.direction_observed === 0 || stats.accuracy === null) {
-    return `${stats.completed} 次 · 方向待判定`;
+    return locale === "zh-CN" ? `${stats.completed} 次 · 方向待判定` : `${stats.completed} · Direction pending`;
   }
   return `${stats.direction_correct}/${stats.direction_observed} · ${(
     Number(stats.accuracy) * 100
@@ -140,9 +141,10 @@ export function reliabilityLabel(stats: ValidationStats | undefined): string {
 export function ratingTransition(
   previous: string | null | undefined,
   current: string | null | undefined,
+  locale: UiLocale = "zh-CN",
 ): string {
   if (!current) return "—";
-  if (!previous) return `首次结论 · ${current}`;
-  if (previous === current) return `维持 ${current}`;
+  if (!previous) return locale === "zh-CN" ? `首次结论 · ${current}` : `First conclusion · ${current}`;
+  if (previous === current) return locale === "zh-CN" ? `维持 ${current}` : `Maintained ${current}`;
   return `${previous} → ${current}`;
 }

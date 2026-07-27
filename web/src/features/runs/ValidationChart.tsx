@@ -12,6 +12,7 @@ import {
 } from "lightweight-charts";
 
 import type { ReplayData } from "./validationReplay";
+import { useI18n } from "../../i18n/I18nProvider";
 
 interface Milestone {
   horizon: number;
@@ -52,6 +53,7 @@ export function ValidationChart({
   maxAdverseExcursion,
   maxFavorableExcursion,
 }: ValidationChartProps) {
+  const { locale, t } = useI18n();
   const priceContainer = useRef<HTMLDivElement>(null);
   const performanceContainer = useRef<HTMLDivElement>(null);
 
@@ -69,14 +71,14 @@ export function ValidationChart({
       },
       rightPriceScale: { borderColor: "#d8dee3" },
       timeScale: { borderColor: "#d8dee3", timeVisible: false },
-      localization: { locale: "zh-CN" },
+      localization: { locale },
     };
     const priceChart = createChart(priceContainer.current, {
       ...common,
       height: 360,
     });
     const candleSeries = priceChart.addSeries(CandlestickSeries, {
-      title: `${instrumentTicker} · 复权日 K`,
+      title: `${instrumentTicker} · ${t("复权日 K")}`,
       upColor: "#16794b",
       downColor: "#c43f4f",
       borderVisible: false,
@@ -92,7 +94,7 @@ export function ValidationChart({
           position: "belowBar" as const,
           color: "#176b87",
           shape: "arrowUp" as const,
-          text: "验证起点",
+          text: t("验证起点"),
         },
         ...milestones.map((item) => ({
           time: item.session as Time,
@@ -111,7 +113,7 @@ export function ValidationChart({
         lineStyle: LineStyle.Dashed,
         lineWidth: 1,
         axisLabelVisible: true,
-        title: "原目标价",
+        title: t("原目标价"),
       });
     }
     if (finite(entryPrice) && finite(maxAdverseExcursion)) {
@@ -163,7 +165,7 @@ export function ValidationChart({
       lineStyle: LineStyle.Dashed,
       lineWidth: 1,
       axisLabelVisible: true,
-      title: "起点 100",
+      title: t("起点 100"),
     });
 
     let syncing = false;
@@ -198,22 +200,24 @@ export function ValidationChart({
     benchmarkTicker,
     entryPrice,
     instrumentTicker,
+    locale,
     maxAdverseExcursion,
     maxFavorableExcursion,
     milestones,
     priceTarget,
     replay,
+    t,
   ]);
 
   return (
     <div className="validation-chart" data-testid="validation-chart">
-      <div className="validation-chart__legend" aria-label="图例">
-        <span><i className="validation-chart__swatch validation-chart__swatch--instrument" />{instrumentTicker} 复权价格</span>
-        <span><i className="validation-chart__swatch validation-chart__swatch--benchmark" />{benchmarkTicker} 基准</span>
+      <div className="validation-chart__legend" aria-label={t("图例")}>
+        <span><i className="validation-chart__swatch validation-chart__swatch--instrument" />{t("{ticker} 复权价格", { ticker: instrumentTicker })}</span>
+        <span><i className="validation-chart__swatch validation-chart__swatch--benchmark" />{t("{ticker} 基准", { ticker: benchmarkTicker })}</span>
       </div>
-      <div ref={priceContainer} className="validation-chart__price" aria-label={`${instrumentTicker} 复权日 K 线`} />
-      <p className="validation-chart__subtitle">相对表现 · 验证起点归一化为 100</p>
-      <div ref={performanceContainer} className="validation-chart__performance" aria-label={`${instrumentTicker} 与 ${benchmarkTicker} 相对表现`} />
+      <div ref={priceContainer} className="validation-chart__price" aria-label={t("{ticker} 复权日 K 线", { ticker: instrumentTicker })} />
+      <p className="validation-chart__subtitle">{t("相对表现 · 验证起点归一化为 100")}</p>
+      <div ref={performanceContainer} className="validation-chart__performance" aria-label={t("{ticker} 与 {benchmark} 相对表现", { ticker: instrumentTicker, benchmark: benchmarkTicker })} />
     </div>
   );
 }

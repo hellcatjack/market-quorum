@@ -1,4 +1,5 @@
 import type { InstrumentHistoryItem } from "../../api/records";
+import type { UiLocale } from "../../i18n/I18nProvider";
 import { ratingTransition } from "../dashboard/instrumentPresentation";
 
 export interface InstrumentHistoryGroup {
@@ -39,6 +40,7 @@ export function groupInstrumentHistory(
 
 export function projectInstrumentHistory(
   items: InstrumentHistoryItem[],
+  locale: UiLocale = "zh-CN",
 ): InstrumentHistoryEvent[] {
   const chronological = groupInstrumentHistory(items);
   const projected = chronological.map((group, index) => {
@@ -47,7 +49,7 @@ export function projectInstrumentHistory(
       .find((candidate) => Boolean(candidate.primary.rating))
       ?.primary.rating ?? null;
     const transition = group.primary.rating
-      ? ratingTransition(previousRating, group.primary.rating)
+      ? ratingTransition(previousRating, group.primary.rating, locale)
       : null;
     return { ...group, transition };
   });

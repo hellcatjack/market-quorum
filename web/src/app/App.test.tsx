@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
 import { App } from "./App";
+import { I18nProvider } from "../i18n/I18nProvider";
 
 beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
@@ -94,4 +96,21 @@ test("defines the run detail route", async () => {
   );
 
   expect(await screen.findByRole("heading", { name: "SPCX 评估详情" })).toBeInTheDocument();
+});
+
+test("lets the user switch the complete management shell to English", async () => {
+  const user = userEvent.setup();
+  const { hook } = memoryLocation({ path: "/" });
+  render(
+    <I18nProvider initialLocale="zh-CN">
+      <Router hook={hook}>
+        <App />
+      </Router>
+    </I18nProvider>,
+  );
+
+  await user.selectOptions(screen.getByRole("combobox", { name: "界面语言" }), "en-US");
+  expect(screen.getByRole("link", { name: "Overview" })).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "Assessment overview" })).toBeInTheDocument();
+  expect(window.localStorage.getItem("tradingng.ui.locale")).toBe("en-US");
 });

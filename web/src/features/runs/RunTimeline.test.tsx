@@ -176,3 +176,43 @@ test("shows artifacts without a matching event in one explicit fallback group", 
   expect(screen.getByTestId("unassociated-artifacts")).toHaveTextContent("orphan_report");
   expect(screen.queryAllByTestId("timeline-entry")).toHaveLength(0);
 });
+
+test("places model calls on the timeline with readable route and status labels", () => {
+  render(
+    <RunTimeline
+      steps={[]}
+      events={[{
+        sequence: 1,
+        event_type: "assessment.admitted",
+        payload: {},
+        created_at: "2026-07-25T12:00:00Z",
+      }]}
+      evidence={[]}
+      artifacts={[]}
+      llmInteractions={[{
+        sequence: 1,
+        route: "slow",
+        model_alias: "codex-slow",
+        physical_model: "gpt-5.6-sol",
+        reasoning_effort: "xhigh",
+        status: "completed",
+        started_at: "2026-07-25T12:01:00Z",
+        completed_at: "2026-07-25T12:01:04Z",
+        duration_ms: 4426,
+        error_code: null,
+      }]}
+      canReadArtifacts
+    />,
+  );
+
+  expect(screen.getAllByTestId("timeline-entry").map((node) => node.dataset.timelineId)).toEqual([
+    "event-1",
+    "llm-1",
+  ]);
+  expect(screen.getByTestId("event-1")).toHaveTextContent("任务准入");
+  expect(screen.getByTestId("llm-1")).toHaveTextContent("关键裁决路由");
+  expect(screen.getByTestId("llm-1")).toHaveTextContent("gpt-5.6-sol");
+  expect(screen.getByTestId("llm-1")).toHaveTextContent("很高");
+  expect(screen.getByTestId("llm-1")).toHaveTextContent("已完成");
+  expect(screen.getByTestId("llm-1")).not.toHaveTextContent("completed");
+});

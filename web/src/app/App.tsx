@@ -7,6 +7,7 @@ import { InstrumentHistoryPage } from "../features/instruments/InstrumentHistory
 import { RunDetailPage } from "../features/runs/RunDetailPage";
 import { SystemPage } from "../features/system/SystemPage";
 import { Layout } from "./Layout";
+import { useI18n } from "../i18n/I18nProvider";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,22 +16,24 @@ const queryClient = new QueryClient({
 });
 
 function PlaceholderPage({ title, description }: { title: string; description: string }) {
+  const { t } = useI18n();
   return (
     <section className="page-shell">
       <header className="page-header">
-        <p className="eyebrow">TradingNG / 内部研究</p>
+        <p className="eyebrow">{t("TradingNG / 内部研究")}</p>
         <h1>{title}</h1>
         <p>{description}</p>
       </header>
       <div className="empty-state" role="status">
-        <strong>模块已接入平台路由</strong>
-        <span>数据组件将在下一阶段连接评估 API。</span>
+        <strong>{t("模块已接入平台路由")}</strong>
+        <span>{t("数据组件将在下一阶段连接评估 API。")}</span>
       </div>
     </section>
   );
 }
 
 export function App() {
+  const { t } = useI18n();
   return (
     <QueryClientProvider client={queryClient}>
       <Layout>
@@ -51,7 +54,7 @@ export function App() {
             <SystemPage />
           </Route>
           <Route>
-            <PlaceholderPage title="页面不存在" description="请从主导航选择一个功能。" />
+            <PlaceholderPage title={t("页面不存在")} description={t("请从主导航选择一个功能。")} />
           </Route>
         </Switch>
       </Layout>

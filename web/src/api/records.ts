@@ -5,6 +5,8 @@ export type RunDetail = components["schemas"]["RunDetailView"];
 export type RunStep = components["schemas"]["RunStepView"];
 export type Decision = components["schemas"]["DecisionView"];
 export type Evidence = components["schemas"]["EvidenceView"];
+export type LlmInteraction = components["schemas"]["LlmInteractionView"];
+export type LlmInteractionPage = components["schemas"]["LlmInteractionPage"];
 export type Artifact = components["schemas"]["ArtifactView"];
 export type Review = components["schemas"]["ReviewView"];
 export type Comment = components["schemas"]["CommentView"];
@@ -41,6 +43,10 @@ export const getDecision = (runId: string) =>
   apiRequest<Decision>(`/api/v1/assessments/${encodeURIComponent(runId)}/decision`);
 export const getEvidence = (runId: string) =>
   apiRequest<Evidence[]>(`/api/v1/assessments/${encodeURIComponent(runId)}/evidence`);
+export const getLlmInteractions = (runId: string) =>
+  apiRequest<LlmInteractionPage>(
+    `/api/v1/assessments/${encodeURIComponent(runId)}/llm-interactions`,
+  );
 export const getArtifacts = (runId: string) =>
   apiRequest<Artifact[]>(`/api/v1/assessments/${encodeURIComponent(runId)}/artifacts`);
 export const getValidations = (runId: string) =>

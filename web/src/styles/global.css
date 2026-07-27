@@ -53,6 +53,17 @@ textarea {
   outline-offset: 3px;
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 a {
   color: var(--action);
 }
@@ -119,6 +130,21 @@ a {
   border-radius: 999px;
   color: #dceaf2;
   font-size: 0.84rem;
+}
+
+.locale-picker select {
+  min-height: 36px;
+  padding: 6px 30px 6px 10px;
+  border: 1px solid rgb(255 255 255 / 24%);
+  border-radius: 8px;
+  color: #f7fafc;
+  background: #183d5b;
+  font-size: 0.8rem;
+}
+
+.locale-picker option {
+  color: var(--ink);
+  background: white;
 }
 
 .current-user {
@@ -302,6 +328,18 @@ h1 {
   padding-left: 22px;
   border-left: 1px solid currentcolor;
   font-variant-numeric: tabular-nums;
+}
+
+.capacity-routes {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.capacity-routes .capacity-gateway strong {
+  margin-top: 3px;
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
 }
 
 .capacity-wait,
@@ -1202,6 +1240,11 @@ pre {
   background: var(--warning);
 }
 
+.timeline-marker--llm {
+  color: #6d4bb5;
+  background: #6d4bb5;
+}
+
 .timeline-entry__body,
 .timeline-entry__disclosure {
   padding: 8px 12px;
@@ -1270,6 +1313,20 @@ pre {
 .timeline-entry__badge--artifact {
   color: #51465b;
   background: #eeeaf2;
+}
+
+.timeline-entry__badge--llm {
+  color: #563a91;
+  background: #eee8fb;
+}
+
+.timeline-entry__body--llm {
+  border-color: #ddd2f3;
+  background: #fbf9ff;
+}
+
+.timeline-entry__facts--llm {
+  margin: 10px 0 0;
 }
 
 .timeline-entry__disclosure {
@@ -2187,6 +2244,34 @@ pre {
   max-width: min(28rem, 100%);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.history-model-routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  white-space: normal !important;
+}
+
+.history-model-routes > span {
+  white-space: nowrap;
+}
+
+.gateway-compatibility {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-muted);
+  font-size: 0.8rem;
+}
+
+.gateway-compatibility summary {
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.gateway-compatibility .system-facts {
+  margin-top: 12px;
 }
 
 .history-memory {

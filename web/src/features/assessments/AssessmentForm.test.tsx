@@ -17,6 +17,10 @@ const BLOCKED_CAPACITY: Capacity = {
   gateway_active_completions: 2,
   gateway_model: "gpt-5.6-sol",
   gateway_reasoning_effort: "xhigh",
+  model_routing: {
+    fast: { model: "gpt-5.6-terra", reasoning_effort: "high" },
+    slow: { model: "gpt-5.6-sol", reasoning_effort: "high" },
+  },
   open_circuits: ["vendor:finnhub"],
   admission_allowed: false,
   admission_reasons: ["running_limit_reached"],

@@ -212,8 +212,8 @@ export function selectDefaultHorizon(validations: ValidationChoice[]): number | 
   return Math.max(...candidates.map((item) => item.horizon));
 }
 
-export function horizonLabel(horizon: number): string {
-  return `${horizon} 日`;
+export function horizonLabel(horizon: number, locale: "zh-CN" | "en-US" = "zh-CN"): string {
+  return locale === "zh-CN" ? `${horizon} 日` : `${horizon} days`;
 }
 
 const TRADING_VIEW_EXCHANGES: Record<string, string> = {

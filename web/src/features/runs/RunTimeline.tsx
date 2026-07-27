@@ -1,35 +1,32 @@
 import type { RunEvent } from "../../api/events";
-import type { Artifact, Evidence, RunStep } from "../../api/records";
+import type { Artifact, Evidence, LlmInteraction, RunStep } from "../../api/records";
+import { useI18n } from "../../i18n/I18nProvider";
+import {
+  eventTypeLabel,
+  freshnessLabel,
+  modelRouteLabel,
+  phaseLabel,
+  reasoningEffortLabel,
+  stepStatusLabel,
+} from "../../i18n/domainLabels";
 import { ArtifactPreview } from "./ArtifactPreview";
 import { bindArtifactsToEvents } from "./artifactBindings";
-
-const PHASE_LABELS: Record<string, string> = {
-  queued: "等待调度",
-  admitted: "任务准入",
-  starting: "启动准备",
-  running_analysts: "分析师研究",
-  research_debate: "研究辩论",
-  trader_plan: "交易方案",
-  risk_debate: "风险辩论",
-  portfolio_decision: "组合决策",
-  finalizing: "结果归档",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "等待中",
-  running: "进行中",
-  completed: "已完成",
-  failed: "失败",
-  cancelled: "已取消",
-};
 
 const KIND_PRIORITY = {
   step: 0,
   event: 1,
-  evidence: 2,
+  llm: 2,
+  evidence: 3,
 } as const;
 
 type TimelineItem =
+  | {
+      kind: "llm";
+      id: string;
+      stableKey: string;
+      timestamp: string;
+      record: LlmInteraction;
+    }
   | {
       kind: "step";
       id: string;
@@ -57,6 +54,7 @@ interface RunTimelineProps {
   steps: RunStep[];
   events: RunEvent[];
   evidence: Evidence[];
+  llmInteractions?: LlmInteraction[];
   artifacts: Artifact[];
   canReadArtifacts: boolean;
 }
@@ -65,10 +63,6 @@ function timestampValue(value: string | null): number | null {
   if (!value) return null;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? null : parsed;
-}
-
-function phaseLabel(name: string): string {
-  return PHASE_LABELS[name] ?? name;
 }
 
 function phaseForTimestamp(value: string, steps: RunStep[]): string | null {
@@ -105,7 +99,8 @@ function normalizeTimeline({
   steps,
   events,
   evidence,
-}: Pick<RunTimelineProps, "steps" | "events" | "evidence">): TimelineItem[] {
+  llmInteractions = [],
+}: Pick<RunTimelineProps, "steps" | "events" | "evidence" | "llmInteractions">): TimelineItem[] {
   const items: TimelineItem[] = [
     ...steps.map((record) => ({
       kind: "step" as const,
@@ -119,6 +114,13 @@ function normalizeTimeline({
       id: `event-${record.sequence}`,
       stableKey: String(record.sequence).padStart(12, "0"),
       timestamp: record.created_at,
+      record,
+    })),
+    ...llmInteractions.map((record) => ({
+      kind: "llm" as const,
+      id: `llm-${record.sequence}`,
+      stableKey: String(record.sequence).padStart(12, "0"),
+      timestamp: record.started_at,
       record,
     })),
     ...evidence.map((record) => ({
@@ -144,39 +146,42 @@ function normalizeTimeline({
 }
 
 export function LocalTime({ value }: { value: string | null }) {
+  const { formatDateTime } = useI18n();
   if (!value) return <span>—</span>;
   return (
     <time dateTime={value} title={value}>
-      {new Date(value).toLocaleString()}
+      {formatDateTime(value)}
     </time>
   );
 }
 
 function TimePhase({ phase }: { phase: string | null }) {
+  const { locale, t } = useI18n();
   return (
     <span className="timeline-entry__phase">
-      时间归属：{phase ? phaseLabel(phase) : "未关联阶段"}
+      {t("时间归属：{phase}", { phase: phase ? phaseLabel(phase, locale) : t("未关联阶段") })}
     </span>
   );
 }
 
 function StepEntry({ item }: { item: Extract<TimelineItem, { kind: "step" }> }) {
   const { record } = item;
+  const { locale, t } = useI18n();
   return (
     <div className="timeline-entry__body" data-testid={item.id}>
       <div className="timeline-entry__headline">
-        <span className="timeline-entry__badge">阶段</span>
-        <strong>{phaseLabel(record.name)}</strong>
+        <span className="timeline-entry__badge">{t("阶段")}</span>
+        <strong>{phaseLabel(record.name, locale)}</strong>
         <span>
-          {STATUS_LABELS[record.status] ?? record.status} · 第 {record.attempt} 次
+          {stepStatusLabel(record.status, locale)} · {t("第 {attempt} 次", { attempt: record.attempt })}
         </span>
       </div>
       <div className="timeline-entry__times">
-        <span>开始 <LocalTime value={record.started_at} /></span>
-        <span>结束 <LocalTime value={record.finished_at} /></span>
+        <span>{t("开始")} <LocalTime value={record.started_at} /></span>
+        <span>{t("结束")} <LocalTime value={record.finished_at} /></span>
       </div>
       {record.summary ? <p>{record.summary}</p> : null}
-      {record.error_code ? <p className="timeline-entry__error">错误：{record.error_code}</p> : null}
+      {record.error_code ? <p className="timeline-entry__error">{t("错误")}：{record.error_code}</p> : null}
     </div>
   );
 }
@@ -189,26 +194,28 @@ function EventEntry({
   artifacts: Artifact[];
 }) {
   const { record } = item;
+  const { locale, t } = useI18n();
   return (
     <div data-testid={item.id}>
       <details className="timeline-entry__disclosure" data-testid="timeline-disclosure">
         <summary className="timeline-entry__summary">
-          <span className="timeline-entry__badge timeline-entry__badge--event">事件</span>
+          <span className="timeline-entry__badge timeline-entry__badge--event">{t("事件")}</span>
           <span className="timeline-entry__title">
-            <strong>{record.event_type}</strong>
+            <strong>{eventTypeLabel(record.event_type, locale)}</strong>
             <small>
-              事件序号 #{record.sequence}
-              {artifacts.length > 0 ? ` · 产物 ${artifacts.length}` : ""}
+              {t("事件序号 #{sequence}", { sequence: record.sequence })}
+              {artifacts.length > 0 ? ` · ${t("产物 {count}", { count: artifacts.length })}` : ""}
             </small>
           </span>
           <LocalTime value={record.created_at} />
         </summary>
         <div className="timeline-entry__details">
-          <strong>事件载荷</strong>
+          <code>{record.event_type}</code>
+          <strong>{t("事件载荷")}</strong>
           <pre>{JSON.stringify(record.payload, null, 2)}</pre>
           {artifacts.length > 0 ? (
             <div className="timeline-entry__artifacts">
-              <strong>该事件产生的产物</strong>
+              <strong>{t("该事件产生的产物")}</strong>
               {artifacts.map((artifact) => (
                 <ArtifactPreview key={artifact.id} artifact={artifact} />
               ))}
@@ -220,13 +227,39 @@ function EventEntry({
   );
 }
 
+function LlmEntry({ item }: { item: Extract<TimelineItem, { kind: "llm" }> }) {
+  const { record } = item;
+  const { formatDuration, locale, t } = useI18n();
+  return (
+    <div className="timeline-entry__body timeline-entry__body--llm" data-testid={item.id}>
+      <div className="timeline-entry__headline">
+        <span className="timeline-entry__badge timeline-entry__badge--llm">{t("模型调用")}</span>
+        <strong>{modelRouteLabel(record.route, locale)}</strong>
+        <span>{stepStatusLabel(record.status, locale)}</span>
+      </div>
+      <dl className="timeline-entry__facts timeline-entry__facts--llm">
+        <div><dt>{t("实际模型")}</dt><dd>{record.physical_model ?? "—"}</dd></div>
+        <div><dt>{t("思考深度")}</dt><dd>{reasoningEffortLabel(record.reasoning_effort, locale)}</dd></div>
+        <div><dt>{t("模型别名")}</dt><dd><code>{record.model_alias ?? "—"}</code></dd></div>
+        <div><dt>{t("耗时")}</dt><dd>{formatDuration(record.duration_ms ?? null)}</dd></div>
+      </dl>
+      <div className="timeline-entry__times">
+        <span>{t("开始")} <LocalTime value={record.started_at} /></span>
+        <span>{t("结束")} <LocalTime value={record.completed_at} /></span>
+      </div>
+      {record.error_code ? <p className="timeline-entry__error">{t("错误")}：{record.error_code}</p> : null}
+    </div>
+  );
+}
+
 function EvidenceEntry({ item }: { item: Extract<TimelineItem, { kind: "evidence" }> }) {
   const { record } = item;
+  const { locale, t } = useI18n();
   return (
     <div data-testid={item.id}>
       <details className="timeline-entry__disclosure" data-testid="timeline-disclosure">
         <summary className="timeline-entry__summary">
-          <span className="timeline-entry__badge timeline-entry__badge--evidence">证据</span>
+          <span className="timeline-entry__badge timeline-entry__badge--evidence">{t("证据")}</span>
           <span className="timeline-entry__title">
             <strong>{record.source}</strong>
             <small>{record.tool_name}</small>
@@ -236,10 +269,10 @@ function EvidenceEntry({ item }: { item: Extract<TimelineItem, { kind: "evidence
         </summary>
         <div className="timeline-entry__details">
           <dl className="timeline-entry__facts">
-            <div><dt>有效时间</dt><dd><LocalTime value={record.effective_at} /></dd></div>
-            <div><dt>新鲜度</dt><dd>{record.freshness ?? "未标注"}</dd></div>
+            <div><dt>{t("有效时间")}</dt><dd><LocalTime value={record.effective_at} /></dd></div>
+            <div><dt>{t("新鲜度")}</dt><dd>{freshnessLabel(record.freshness, locale)}</dd></div>
           </dl>
-          <strong>调用参数</strong>
+          <strong>{t("调用参数")}</strong>
           <pre>{JSON.stringify(record.arguments, null, 2)}</pre>
           <code>sha256: {record.content_hash}</code>
         </div>
@@ -249,13 +282,14 @@ function EvidenceEntry({ item }: { item: Extract<TimelineItem, { kind: "evidence
 }
 
 export function RunTimeline(props: RunTimelineProps) {
+  const { t } = useI18n();
   const items = normalizeTimeline(props);
   const artifactBindings = bindArtifactsToEvents(props.artifacts, props.events);
   return (
     <section className="detail-panel detail-panel--wide research-timeline">
       <div className="section-heading timeline-heading">
-        <div><p className="eyebrow">执行轨迹</p><h2>研究时间线</h2></div>
-        {!props.canReadArtifacts ? <p>当前账号无产物读取权限</p> : null}
+        <div><p className="eyebrow">{t("执行轨迹")}</p><h2>{t("研究时间线")}</h2></div>
+        {!props.canReadArtifacts ? <p>{t("当前账号无产物读取权限")}</p> : null}
       </div>
       <ol className="timeline">
         {items.map((item) => (
@@ -276,21 +310,22 @@ export function RunTimeline(props: RunTimelineProps) {
                 artifacts={artifactBindings.byEventSequence.get(item.record.sequence) ?? []}
               />
             ) : null}
+            {item.kind === "llm" ? <LlmEntry item={item} /> : null}
             {item.kind === "evidence" ? <EvidenceEntry item={item} /> : null}
           </li>
         ))}
       </ol>
       {artifactBindings.unassociated.length > 0 ? (
         <aside className="timeline-unassociated" data-testid="unassociated-artifacts">
-          <strong>未关联产物</strong>
-          <p>这些归档文件没有可用于确定业务产生时间的事件。</p>
+          <strong>{t("未关联产物")}</strong>
+          <p>{t("这些归档文件没有可用于确定业务产生时间的事件。")}</p>
           {artifactBindings.unassociated.map((artifact) => (
             <ArtifactPreview key={artifact.id} artifact={artifact} />
           ))}
         </aside>
       ) : null}
       {items.length === 0 && artifactBindings.unassociated.length === 0 ? (
-        <p className="section-empty">暂无研究轨迹。</p>
+        <p className="section-empty">{t("暂无研究轨迹。")}</p>
       ) : null}
     </section>
   );
