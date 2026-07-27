@@ -17,7 +17,7 @@
 - Modify: `web/src/features/instruments/InstrumentHistoryPage.tsx`
 - Modify: `web/src/styles/global.css`
 
-- [ ] **Step 1: Write the failing component assertions**
+- [x] **Step 1: Write the failing component assertions**
 
 Extend the validation fixture so the 1D result is direction-correct and the 20D result is direction-incorrect. Assert that each visible label and its containing card receive the corresponding semantic classes:
 
@@ -35,13 +35,13 @@ expect(incorrectDirection.closest(".history-validation")).toHaveClass(
 );
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run: `npm test -- --run src/features/instruments/InstrumentHistoryPage.test.tsx`
 
 Expected: FAIL because `history-validation__direction--correct` and `history-validation--direction-correct` do not exist yet.
 
-- [ ] **Step 3: Add the minimal presentation mapping**
+- [x] **Step 3: Add the minimal presentation mapping**
 
 In `InstrumentHistoryPage.tsx`, derive a state from `validation.direction_correct` and use it in the completed result markup:
 
@@ -72,7 +72,7 @@ const directionLabel = validation.direction_correct === true
 </div>
 ```
 
-- [ ] **Step 4: Add restrained and accessible CSS states**
+- [x] **Step 4: Add restrained and accessible CSS states**
 
 In `global.css`, style the complete card and badge. Use a subtle inset accent plus pale background on the card, and a bordered pill with a generated symbol on the badge:
 
@@ -130,13 +130,13 @@ In `global.css`, style the complete card and badge. Use a subtle inset accent pl
 }
 ```
 
-- [ ] **Step 5: Run the focused test and verify GREEN**
+- [x] **Step 5: Run the focused test and verify GREEN**
 
 Run: `npm test -- --run src/features/instruments/InstrumentHistoryPage.test.tsx`
 
 Expected: PASS with the correct and incorrect state assertions both satisfied.
 
-- [ ] **Step 6: Run full frontend verification**
+- [x] **Step 6: Run full frontend verification**
 
 Run:
 
@@ -149,7 +149,7 @@ npm run build
 
 Expected: all commands exit 0 with no failed tests, lint errors, type errors, or build errors.
 
-- [ ] **Step 7: Review and commit the implementation**
+- [x] **Step 7: Review and commit the implementation**
 
 Run `git diff --check` and inspect the scoped diff, then commit:
 

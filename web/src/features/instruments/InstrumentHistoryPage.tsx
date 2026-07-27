@@ -60,19 +60,25 @@ function ValidationCell({
       </div>
     );
   }
+  const directionState = validation.direction_correct === true
+    ? "correct"
+    : validation.direction_correct === false
+      ? "incorrect"
+      : "unjudged";
+  const directionLabel = validation.direction_correct === true
+    ? "方向正确"
+    : validation.direction_correct === false
+      ? "方向错误"
+      : "方向未判定";
   return (
-    <div className="history-validation history-validation--completed">
+    <div className={`history-validation history-validation--completed history-validation--direction-${directionState}`}>
       <strong>{horizon}D</strong>
       <span>{formatPercent(validation.total_return)}</span>
       {validation.total_alpha !== null ? (
         <small>Alpha {formatPercent(validation.total_alpha)}</small>
       ) : null}
-      <small>
-        {validation.direction_correct === true
-          ? "方向正确"
-          : validation.direction_correct === false
-            ? "方向错误"
-            : "方向未判定"}
+      <small className={`history-validation__direction history-validation__direction--${directionState}`}>
+        {directionLabel}
       </small>
       {validation.price_target_hit !== null ? (
         <small>{validation.price_target_hit ? "目标价命中" : "目标价未命中"}</small>

@@ -2098,6 +2098,59 @@ pre {
   white-space: nowrap;
 }
 
+.history-validation--direction-correct {
+  border-color: rgb(38 114 76 / 35%);
+  background: rgb(38 114 76 / 6%);
+  box-shadow: inset 3px 0 0 var(--success);
+}
+
+.history-validation--direction-incorrect {
+  border-color: rgb(166 55 52 / 35%);
+  background: rgb(166 55 52 / 6%);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.history-validation--direction-unjudged {
+  background: var(--surface-muted);
+}
+
+.history-validation small.history-validation__direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  margin-top: 2px;
+  padding: 3px 7px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.history-validation small.history-validation__direction--correct {
+  color: var(--success);
+}
+
+.history-validation small.history-validation__direction--incorrect {
+  color: var(--danger);
+}
+
+.history-validation small.history-validation__direction--unjudged {
+  color: var(--ink-muted);
+}
+
+.history-validation__direction--correct::before {
+  content: "✓";
+}
+
+.history-validation__direction--incorrect::before {
+  content: "×";
+}
+
+.history-validation__direction--unjudged::before {
+  content: "—";
+}
+
 .history-validation--pending {
   background: rgb(180 124 24 / 5%);
 }

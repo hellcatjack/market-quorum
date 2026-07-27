@@ -11,6 +11,7 @@ const validation = (
   status: string,
   totalReturn: string | null,
   totalAlpha: string | null,
+  directionCorrect: boolean | null = status === "completed" ? true : null,
 ) => ({
   id: `validation-${horizon}`,
   run_id: "run-new",
@@ -21,7 +22,7 @@ const validation = (
   exit_session: status === "completed" ? "2026-08-20" : null,
   total_return: totalReturn,
   total_alpha: totalAlpha,
-  direction_correct: status === "completed" ? true : null,
+  direction_correct: directionCorrect,
   price_target_hit: horizon === 20 ? false : null,
   error_code: null,
 });
@@ -48,7 +49,7 @@ const history = [
     validations: [
       validation(1, "completed", "0.03", "0.01"),
       validation(5, "scheduled", null, null),
-      validation(20, "completed", "-0.2065", "-0.1459"),
+      validation(20, "completed", "-0.2065", "-0.1459", false),
     ],
     memory_mode: "historical",
     memory_source_count: 2,
@@ -152,6 +153,16 @@ test("shows newest research first, preserves transitions and can switch to audit
   expect(events[0]).toHaveTextContent("待验证");
   expect(events[0]).toHaveTextContent("-20.65%");
   expect(events[0]).toHaveTextContent("方向正确");
+  const correctDirection = within(events[0]).getByText("方向正确");
+  expect(correctDirection).toHaveClass("history-validation__direction--correct");
+  expect(correctDirection.closest(".history-validation")).toHaveClass(
+    "history-validation--direction-correct",
+  );
+  const incorrectDirection = within(events[0]).getByText("方向错误");
+  expect(incorrectDirection).toHaveClass("history-validation__direction--incorrect");
+  expect(incorrectDirection.closest(".history-validation")).toHaveClass(
+    "history-validation--direction-incorrect",
+  );
   expect(events[0]).toHaveTextContent("目标价未命中");
   expect(within(events[0]).getByRole("link", { name: "查看评估详情" })).toHaveAttribute(
     "href",
