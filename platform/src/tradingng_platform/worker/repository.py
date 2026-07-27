@@ -211,6 +211,7 @@ class WorkerRepository:
             if current not in {RunStatus.CANCEL_REQUESTED, RunStatus.CANCELLING}:
                 if target != current:
                     assert_transition(current, target)
+                    await self._finish_running_steps(run, "completed")
                     run.status = target.value
                     run.version += 1
                     current = target
@@ -218,10 +219,32 @@ class WorkerRepository:
         elif event.type == "result":
             if current not in {RunStatus.CANCEL_REQUESTED, RunStatus.CANCELLING}:
                 assert_transition(current, RunStatus.FINALIZING)
+                await self._finish_running_steps(run, "completed")
                 run.status = RunStatus.FINALIZING.value
                 run.version += 1
                 current = RunStatus.FINALIZING
         return current
+
+    async def _finish_running_steps(
+        self,
+        run: AssessmentRun,
+        status: str,
+        *,
+        error_code: str | None = None,
+    ) -> None:
+        await self.session.execute(
+            update(RunStep)
+            .where(
+                RunStep.run_id == run.id,
+                RunStep.attempt == run.attempt,
+                RunStep.status == "running",
+            )
+            .values(
+                status=status,
+                finished_at=datetime.now(timezone.utc),
+                error_code=error_code,
+            )
+        )
 
     async def _upsert_step(
         self,
@@ -265,6 +288,8 @@ class WorkerRepository:
         )
         if run is None or RunStatus(run.status) != RunStatus.FINALIZING:
             raise RuntimeError("successful runner is not ready for finalization")
+
+        await self._finish_running_steps(run, "completed")
 
         artifact_specs = self._artifact_specs(work_dir)
         manifest = []
@@ -386,6 +411,7 @@ class WorkerRepository:
             await self.finalize_cancelled(run_id)
             return
         assert_transition(current, RunStatus.FAILED)
+        await self._finish_running_steps(run, "failed", error_code=error_code)
         run.status = RunStatus.FAILED.value
         run.error_code = error_code
         run.error_summary = error_summary[:2000]
@@ -405,6 +431,7 @@ class WorkerRepository:
         if run is None:
             raise RuntimeError("cancelled runner references an unknown run")
         current = RunStatus(run.status)
+        await self._finish_running_steps(run, "cancelled")
         if current == RunStatus.CANCEL_REQUESTED:
             assert_transition(current, RunStatus.CANCELLING)
             run.status = RunStatus.CANCELLING.value
