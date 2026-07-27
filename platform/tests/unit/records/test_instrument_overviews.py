@@ -109,6 +109,14 @@ def test_overview_items_keep_latest_successful_decision_when_latest_run_failed()
         status="failed",
         created_at=created_at,
     )
+    failed_retry = AssessmentRun(
+        id=uuid.uuid4(),
+        request_id=failed_request.id,
+        attempt=2,
+        status="failed",
+        retry_of_run_id=failed.id,
+        created_at=created_at + timedelta(hours=1),
+    )
     decision = Decision(
         id=uuid.uuid4(),
         run_id=successful.id,
@@ -124,6 +132,7 @@ def test_overview_items_keep_latest_successful_decision_when_latest_run_failed()
 
     items = _build_overview_items(
         [
+            (failed_retry, failed_request, instrument, None, None),
             (failed, failed_request, instrument, None, None),
             (successful, successful_request, instrument, decision, None),
         ],
@@ -132,7 +141,7 @@ def test_overview_items_keep_latest_successful_decision_when_latest_run_failed()
 
     assert len(items) == 1
     overview = items[0]
-    assert overview.latest_run.id == failed.id
+    assert overview.latest_run.id == failed_retry.id
     assert overview.latest_successful_run.id == successful.id
     assert overview.latest_decision.rating == "Underweight"
     assert overview.preferred_validation == completed

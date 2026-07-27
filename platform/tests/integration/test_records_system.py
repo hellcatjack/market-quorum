@@ -356,7 +356,8 @@ async def test_instrument_overview_preserves_decision_and_binds_validations(
     assert first_page.items[0].latest_successful_run.status == "succeeded"
     assert first_page.items[0].latest_decision.rating == "Underweight"
     assert first_page.items[0].preferred_validation.horizon == 20
-    assert first_page.items[0].run_counts.anomalous == 2
+    assert first_page.items[0].run_counts.anomalous == 1
+    assert first_page.items[0].run_counts.total == 2
     assert first_page.next_cursor is not None
 
     second_page = await service.instrument_overviews(

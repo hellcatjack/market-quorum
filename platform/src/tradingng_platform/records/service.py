@@ -132,7 +132,17 @@ def _decision_view(decision: Decision) -> DecisionView:
 
 
 def _run_counts(rows: list[tuple]) -> InstrumentRunCounts:
-    statuses = [row[0].status for row in rows]
+    final_by_request: dict[uuid.UUID, tuple] = {}
+    for row in rows:
+        request_id = row[1].id
+        current = final_by_request.get(request_id)
+        if current is None or (row[0].attempt, row[0].created_at, row[0].id) > (
+            current[0].attempt,
+            current[0].created_at,
+            current[0].id,
+        ):
+            final_by_request[request_id] = row
+    statuses = [row[0].status for row in final_by_request.values()]
     return InstrumentRunCounts(
         total=len(statuses),
         queued=statuses.count("queued"),
