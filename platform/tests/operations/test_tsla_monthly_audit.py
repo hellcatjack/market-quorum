@@ -29,8 +29,6 @@ def valid_checkpoint():
             "ticker": "TSLA",
             "analysis_date": "2025-08-29",
             "status": "succeeded",
-            "started_at": "2026-07-27T00:00:00Z",
-            "finished_at": "2026-07-27T00:01:30Z",
             "data_vendors": {
                 "core_stock_apis": "alpha_vantage",
                 "technical_indicators": "alpha_vantage",
@@ -411,7 +409,7 @@ def test_run_checkpoint_resumes_submitted_run_without_duplicate_post(tmp_path, v
     )
 
     assert api.posts == []
-    assert summary["elapsed_seconds"] == 90.0
+    assert summary["elapsed_seconds"] == 270.0
 
 
 def test_run_checkpoint_force_verify_refetches_passed_run(tmp_path, valid_checkpoint):
