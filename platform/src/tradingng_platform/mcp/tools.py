@@ -24,7 +24,11 @@ from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.mcp.context import current_principal
 from tradingng_platform.mcp.errors import safe_tool
 from tradingng_platform.mcp.services import McpServices
-from tradingng_platform.records.contracts import InstrumentSummaryView
+from tradingng_platform.records.contracts import (
+    InstrumentOverviewFilters,
+    InstrumentOverviewPage,
+    InstrumentSummaryView,
+)
 from tradingng_platform.system.contracts import CapacityView
 from tradingng_platform.validation.contracts import ValidationScheduleResult, ValidationView
 
@@ -190,6 +194,33 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
         """Return the latest stored assessment summary for an instrument."""
         view = await services.records.instrument_summary(current_principal(), ticker)
         return view
+
+    @server.tool(structured_output=True)
+    @safe_tool
+    async def list_instrument_overviews(
+        query: str | None = None,
+        asset_type: AssetType | None = None,
+        status: list[RunStatus] | None = None,
+        anomalous_only: bool = False,
+        created_from: datetime | None = None,
+        created_to: datetime | None = None,
+        cursor: str | None = None,
+        limit: Annotated[int, Field(ge=1, le=200)] = 50,
+    ) -> InstrumentOverviewPage:
+        """List instruments with latest conclusions and realized validation outcomes."""
+        return await services.records.instrument_overviews(
+            current_principal(),
+            InstrumentOverviewFilters(
+                query=query,
+                asset_type=asset_type,
+                statuses=tuple(status or ()),
+                anomalous_only=anomalous_only,
+                created_from=created_from,
+                created_to=created_to,
+                cursor=cursor,
+                limit=limit,
+            ),
+        )
 
     @server.tool(structured_output=True)
     @safe_tool

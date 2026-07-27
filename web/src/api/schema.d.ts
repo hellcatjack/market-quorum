@@ -331,6 +331,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/instrument-overviews": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Instrument Overviews */
+        get: operations["list_instrument_overviews"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/instruments/{ticker}": {
         parameters: {
             query?: never;
@@ -786,13 +803,107 @@ export interface components {
             gateway_model: string | null;
             /** Gateway Reasoning Effort */
             gateway_reasoning_effort: string | null;
+            /**
+             * Is Latest Attempt
+             * @default true
+             */
+            is_latest_attempt: boolean;
+            /**
+             * Memory Mode
+             * @default independent
+             */
+            memory_mode: string;
+            /**
+             * Memory Source Count
+             * @default 0
+             */
+            memory_source_count: number;
             /** Price Target */
             price_target: string | null;
             /** Rating */
             rating: string | null;
+            /**
+             * Request Attempt Count
+             * @default 1
+             */
+            request_attempt_count: number;
             run: components["schemas"]["RunView"];
             /** Validation Outcome */
             validation_outcome?: string | null;
+            /** Validations */
+            validations?: components["schemas"]["InstrumentValidationView"][];
+        };
+        /** InstrumentIdentityView */
+        InstrumentIdentityView: {
+            /** Asset Type */
+            asset_type: string;
+            /** Exchange */
+            exchange: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string | null;
+            /** Ticker */
+            ticker: string;
+        };
+        /** InstrumentOverviewItem */
+        InstrumentOverviewItem: {
+            instrument: components["schemas"]["InstrumentIdentityView"];
+            latest_decision: components["schemas"]["DecisionView"] | null;
+            latest_run: components["schemas"]["RunView"];
+            latest_successful_run: components["schemas"]["RunView"] | null;
+            preferred_validation: components["schemas"]["InstrumentValidationView"] | null;
+            /** Previous Rating */
+            previous_rating: string | null;
+            run_counts: components["schemas"]["InstrumentRunCounts"];
+            /** Validation Stats */
+            validation_stats: components["schemas"]["InstrumentValidationStats"][];
+        };
+        /** InstrumentOverviewPage */
+        InstrumentOverviewPage: {
+            /** Instrument Count */
+            instrument_count: number;
+            /** Items */
+            items: components["schemas"]["InstrumentOverviewItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+            run_counts: components["schemas"]["InstrumentRunCounts"];
+            /**
+             * Validations Visible
+             * @default true
+             */
+            validations_visible: boolean;
+        };
+        /** InstrumentRunCounts */
+        InstrumentRunCounts: {
+            /**
+             * Active
+             * @default 0
+             */
+            active: number;
+            /**
+             * Anomalous
+             * @default 0
+             */
+            anomalous: number;
+            /**
+             * Queued
+             * @default 0
+             */
+            queued: number;
+            /**
+             * Succeeded
+             * @default 0
+             */
+            succeeded: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** InstrumentSummaryView */
         InstrumentSummaryView: {
@@ -808,6 +919,55 @@ export interface components {
             latest_run_id: string | null;
             /** Ticker */
             ticker: string;
+        };
+        /** InstrumentValidationStats */
+        InstrumentValidationStats: {
+            /** Accuracy */
+            accuracy: string | null;
+            /** Completed */
+            completed: number;
+            /** Direction Correct */
+            direction_correct: number;
+            /** Direction Observed */
+            direction_observed: number;
+            /** Horizon */
+            horizon: number;
+        };
+        /** InstrumentValidationView */
+        InstrumentValidationView: {
+            /** Direction Correct */
+            direction_correct: boolean | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Exit Session */
+            exit_session: string | null;
+            /** Horizon */
+            horizon: number;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Matures At */
+            matures_at: string | null;
+            /** Price Target Hit */
+            price_target_hit: boolean | null;
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Scheduled For
+             * Format: date-time
+             */
+            scheduled_for: string;
+            /** Status */
+            status: string;
+            /** Total Alpha */
+            total_alpha: string | null;
+            /** Total Return */
+            total_return: string | null;
         };
         /**
          * MemoryMode
@@ -1934,6 +2094,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_instrument_overviews: {
+        parameters: {
+            query?: {
+                query?: string | null;
+                asset_type?: components["schemas"]["AssetType"] | null;
+                status?: components["schemas"]["RunStatus"][] | null;
+                anomalous_only?: boolean;
+                created_from?: string | null;
+                created_to?: string | null;
+                cursor?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstrumentOverviewPage"];
                 };
             };
             /** @description Validation Error */

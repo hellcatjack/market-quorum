@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from cryptography.fernet import Fernet
@@ -7,14 +8,22 @@ from fastapi.testclient import TestClient
 
 from tradingng_platform.api.app import create_app
 from tradingng_platform.api.auth import current_principal
+from tradingng_platform.assessments.contracts import RunView
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.auth.tokens import ApiCredentialView, CreatedApiCredentialView
+from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.records.contracts import (
     ArtifactView,
     CommentView,
     DecisionView,
     EvidenceView,
+    InstrumentIdentityView,
+    InstrumentOverviewItem,
+    InstrumentOverviewPage,
+    InstrumentRunCounts,
     InstrumentSummaryView,
+    InstrumentValidationStats,
+    InstrumentValidationView,
     OpenedArtifact,
     ReviewView,
 )
@@ -143,6 +152,76 @@ class _Records:
     async def instrument_history(self, principal, ticker, limit):
         return []
 
+    async def instrument_overviews(self, principal, filters):
+        run = RunView(
+            id=RUN_ID,
+            request_id=uuid.UUID(int=10),
+            ticker="NVDA",
+            instrument_name="英伟达",
+            exchange="NASDAQ",
+            asset_type="stock",
+            analysis_date=date(2026, 7, 1),
+            status=RunStatus.FAILED,
+            attempt=2,
+            created_at=NOW,
+        )
+        validation = InstrumentValidationView(
+            id=uuid.UUID(int=11),
+            run_id=uuid.UUID(int=12),
+            horizon=20,
+            status="completed",
+            scheduled_for=NOW,
+            matures_at=NOW,
+            exit_session=date(2026, 7, 25),
+            total_return=Decimal("-0.2065"),
+            total_alpha=Decimal("-0.1459"),
+            direction_correct=True,
+            price_target_hit=False,
+            error_code=None,
+        )
+        counts = InstrumentRunCounts(total=2, succeeded=1, anomalous=1)
+        return InstrumentOverviewPage(
+            items=[
+                InstrumentOverviewItem(
+                    instrument=InstrumentIdentityView(
+                        id=uuid.UUID(int=13),
+                        ticker="NVDA",
+                        name="英伟达",
+                        exchange="NASDAQ",
+                        asset_type="stock",
+                    ),
+                    latest_run=run,
+                    latest_successful_run=run.model_copy(
+                        update={"status": RunStatus.SUCCEEDED}
+                    ),
+                    latest_decision=DecisionView(
+                        run_id=validation.run_id,
+                        rating="Underweight",
+                        executive_summary="Valuation risk.",
+                        investment_thesis="Expect underperformance.",
+                        price_target=Decimal("110"),
+                        time_horizon="20 trading days",
+                        structured={},
+                    ),
+                    previous_rating="Hold",
+                    preferred_validation=validation,
+                    validation_stats=[
+                        InstrumentValidationStats(
+                            horizon=20,
+                            completed=1,
+                            direction_observed=1,
+                            direction_correct=1,
+                            accuracy=Decimal("1"),
+                        )
+                    ],
+                    run_counts=counts,
+                )
+            ],
+            instrument_count=1,
+            run_counts=counts,
+            validations_visible=True,
+        )
+
 
 class _System:
     async def status(self, principal):
@@ -243,6 +322,25 @@ def test_records_collaboration_instruments_and_artifact_download(monkeypatch, tm
     assert review.status_code == 201
     assert comment.status_code == 201
     assert instrument.json()["assessment_count"] == 2
+
+
+def test_instrument_overview_route_serializes_filters_and_projection(monkeypatch, tmp_path):
+    app = _app(monkeypatch, tmp_path)
+    with TestClient(app) as client:
+        app.state.records = _Records(tmp_path / "unused")
+        response = client.get(
+            "/api/v1/instrument-overviews",
+            params={"query": "英伟", "status": "failed", "limit": 25},
+        )
+        invalid = client.get("/api/v1/instrument-overviews?limit=201")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["items"][0]["instrument"]["ticker"] == "NVDA"
+    assert payload["items"][0]["latest_run"]["status"] == "failed"
+    assert payload["items"][0]["preferred_validation"]["horizon"] == 20
+    assert payload["run_counts"]["anomalous"] == 1
+    assert invalid.status_code == 422
 
 
 def test_system_policy_and_api_credentials_never_list_raw_or_hash(monkeypatch, tmp_path):

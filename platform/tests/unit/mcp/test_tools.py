@@ -49,6 +49,22 @@ class _Records:
         principal.require("assessments:read")
         return _View(ticker=ticker.upper())
 
+    async def instrument_overviews(self, principal, filters):
+        principal.require("assessments:read")
+        return _View(
+            items=[{"instrument": {"ticker": filters.query or "NVDA"}}],
+            next_cursor=None,
+            instrument_count=1,
+            run_counts={
+                "total": 1,
+                "queued": 0,
+                "active": 0,
+                "succeeded": 1,
+                "anomalous": 0,
+            },
+            validations_visible="validations:read" in principal.scopes,
+        )
+
 
 class _System:
     async def capacity(self, principal):
@@ -111,6 +127,7 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
         "retry_assessment",
         "compare_assessments",
         "get_instrument_summary",
+        "list_instrument_overviews",
         "get_system_capacity",
         "schedule_validation",
         "retry_validation",
@@ -150,6 +167,14 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
     )
     assert assessments.submit_calls[1][1].items[0].asset_type.value == "stock"
     assert assessments.wait_calls == 0
+
+    overview = await _call(
+        server,
+        _principal("assessments:read", "validations:read"),
+        "list_instrument_overviews",
+        {"query": "NVDA", "limit": 25},
+    )
+    assert overview.model_dump(mode="json")["items"][0]["instrument"]["ticker"] == "NVDA"
 
     validation_id = uuid.uuid4()
     retried = await _call(

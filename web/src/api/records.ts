@@ -10,7 +10,20 @@ export type Review = components["schemas"]["ReviewView"];
 export type Comment = components["schemas"]["CommentView"];
 export type InstrumentSummary = components["schemas"]["InstrumentSummaryView"];
 export type InstrumentHistoryItem = components["schemas"]["InstrumentHistoryItem"];
+export type InstrumentOverview = components["schemas"]["InstrumentOverviewItem"];
+export type InstrumentOverviewPage = components["schemas"]["InstrumentOverviewPage"];
 export type Validation = components["schemas"]["ValidationView"];
+
+export interface InstrumentOverviewFilters {
+  query?: string;
+  assetType?: components["schemas"]["AssetType"];
+  statuses?: components["schemas"]["RunStatus"][];
+  anomalousOnly?: boolean;
+  createdFrom?: string;
+  createdTo?: string;
+  cursor?: string;
+  limit?: number;
+}
 
 export interface CurrentUser {
   subject: string;
@@ -64,3 +77,20 @@ export const getInstrumentHistory = (ticker: string) =>
   apiRequest<InstrumentHistoryItem[]>(
     `/api/v1/instruments/${encodeURIComponent(ticker)}/history`,
   );
+
+export const listInstrumentOverviews = (
+  filters: InstrumentOverviewFilters = {},
+) => {
+  const query = new URLSearchParams();
+  if (filters.query) query.set("query", filters.query);
+  if (filters.assetType) query.set("asset_type", filters.assetType);
+  for (const status of filters.statuses ?? []) query.append("status", status);
+  if (filters.anomalousOnly) query.set("anomalous_only", "true");
+  if (filters.createdFrom) query.set("created_from", filters.createdFrom);
+  if (filters.createdTo) query.set("created_to", filters.createdTo);
+  if (filters.cursor) query.set("cursor", filters.cursor);
+  query.set("limit", String(filters.limit ?? 50));
+  return apiRequest<InstrumentOverviewPage>(
+    `/api/v1/instrument-overviews?${query.toString()}`,
+  );
+};

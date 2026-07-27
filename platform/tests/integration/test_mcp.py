@@ -152,6 +152,7 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                             "retry_assessment",
                             "compare_assessments",
                             "get_instrument_summary",
+                            "list_instrument_overviews",
                             "get_system_capacity",
                             "schedule_validation",
                             "retry_validation",
@@ -214,6 +215,13 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                         }
                         capacity = _tool_payload(await session.call_tool("get_system_capacity"))
                         assert capacity["gateway_model"] == "gpt-5.6-sol"
+                        overviews = _tool_payload(
+                            await session.call_tool(
+                                "list_instrument_overviews",
+                                {"query": "NVDA", "limit": 25},
+                            )
+                        )
+                        assert overviews["items"][0]["instrument"]["ticker"] == "NVDA"
 
                         concurrent_results = await asyncio.gather(
                             *(
