@@ -188,9 +188,14 @@ def _assessment_elapsed_seconds(steps: list[dict[str, Any]]) -> float:
     return round(elapsed_seconds, 3)
 
 
-def validate_checkpoint(checkpoint: dict[str, Any]) -> dict[str, Any]:
+def validate_checkpoint(
+    checkpoint: dict[str, Any], *, ticker: str = "TSLA"
+) -> dict[str, Any]:
     run = dict(checkpoint.get("run") or {})
-    _require(run.get("ticker") == "TSLA", "checkpoint is not a TSLA assessment")
+    _require(
+        run.get("ticker") == ticker,
+        f"checkpoint is not a {ticker} assessment",
+    )
     _require(run.get("status") == "succeeded", "assessment did not succeed")
     analysis_date = _as_date(run.get("analysis_date"), "analysis date")
 
@@ -318,15 +323,15 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def assessment_payload(analysis_date: date) -> dict[str, Any]:
+def assessment_payload(analysis_date: date, *, ticker: str = "TSLA") -> dict[str, Any]:
     compact_date = analysis_date.strftime("%Y%m%d")
     return {
-        "items": [{"ticker": "TSLA", "analysis_date": analysis_date.isoformat()}],
+        "items": [{"ticker": ticker, "analysis_date": analysis_date.isoformat()}],
         "analysts": ["market", "social", "news", "fundamentals"],
         "depth": "deep",
         "memory_mode": "historical",
         "language": "Chinese",
-        "idempotency_key": f"tsla-monthly-audit-{compact_date}-v1",
+        "idempotency_key": f"{ticker.lower()}-monthly-audit-{compact_date}-v1",
     }
 
 
@@ -352,6 +357,7 @@ def run_checkpoint(
     state: dict[str, Any],
     state_path: Path,
     *,
+    ticker: str = "TSLA",
     poll_seconds: float = 10,
     assessment_timeout_seconds: float = 90 * 60,
     validation_timeout_seconds: float = 20 * 60,
@@ -374,7 +380,8 @@ def run_checkpoint(
         raise AuditFailure(f"missing checkpoint for verify-only date {key}")
     if not run_id:
         submission = api.post_json(
-            "/api/v1/assessments", assessment_payload(analysis_date)
+            "/api/v1/assessments",
+            assessment_payload(analysis_date, ticker=ticker),
         )
         items = submission.get("items") if isinstance(submission, dict) else None
         if not isinstance(items, list) or len(items) != 1 or not items[0].get("id"):
@@ -480,7 +487,7 @@ def run_checkpoint(
         "validations": validations,
         "artifacts": verified_artifacts,
     }
-    summary = validate_checkpoint(checkpoint)
+    summary = validate_checkpoint(checkpoint, ticker=ticker)
     summary.update(
         {
             "elapsed_seconds": _assessment_elapsed_seconds(steps),
@@ -509,6 +516,7 @@ def run_audit(
     state_path: Path,
     *,
     dates: tuple[date, ...] = AUDIT_DATES,
+    ticker: str = "TSLA",
     verify_only: bool = False,
     **checkpoint_options: Any,
 ) -> list[dict[str, Any]]:
@@ -531,6 +539,7 @@ def run_audit(
                 analysis_date,
                 state,
                 state_path,
+                ticker=ticker,
                 force_verify=verify_only,
                 **checkpoint_options,
             )
@@ -569,23 +578,32 @@ def validate_preflight(api: Any) -> dict[str, Any]:
         "preflight admission is blocked: "
         + ",".join(str(item) for item in capacity.get("admission_reasons") or []),
     )
+    model_routing = dict(capacity.get("model_routing") or {})
+    fast = dict(model_routing.get("fast") or {})
+    slow = dict(model_routing.get("slow") or {})
     _require(
-        bool(capacity.get("gateway_model"))
-        and bool(capacity.get("gateway_reasoning_effort")),
-        "preflight Gateway configuration is incomplete",
+        all(
+            route.get("model") and route.get("reasoning_effort")
+            for route in (fast, slow)
+        ),
+        "preflight model routing configuration is incomplete",
     )
     return {
         "admission_allowed": True,
         "admitted_or_running": int(capacity.get("admitted_or_running") or 0),
         "queued": int(capacity.get("queued") or 0),
-        "gateway_model": str(capacity["gateway_model"]),
-        "gateway_reasoning_effort": str(capacity["gateway_reasoning_effort"]),
+        "model_routing": {"fast": fast, "slow": slow},
     }
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the resumable TSLA monthly assessment quality audit"
+        description="Run a resumable monthly assessment quality audit"
+    )
+    parser.add_argument(
+        "--ticker",
+        default="TSLA",
+        type=lambda value: value.strip().upper(),
     )
     parser.add_argument("--env-file", type=Path, default=Path(".env.platform"))
     parser.add_argument(
@@ -632,6 +650,7 @@ def main(argv: list[str] | None = None) -> int:
         summaries = run_audit(
             api,
             state_path,
+            ticker=options.ticker,
             verify_only=options.verify_only,
             poll_seconds=options.poll_seconds,
             assessment_timeout_seconds=options.assessment_timeout_seconds,
@@ -641,6 +660,7 @@ def main(argv: list[str] | None = None) -> int:
         "audit_complete="
         + json.dumps(
             {
+                "ticker": options.ticker,
                 "checkpoint_count": len(summaries),
                 "analysis_dates": [item["analysis_date"] for item in summaries],
             },

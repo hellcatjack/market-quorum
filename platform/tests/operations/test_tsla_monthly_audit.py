@@ -131,6 +131,15 @@ def test_checkpoint_accepts_complete_alpha_only_point_in_time_record(valid_check
     assert summary["artifact_count"] == 1
 
 
+def test_checkpoint_accepts_requested_ticker(valid_checkpoint):
+    checkpoint = deepcopy(valid_checkpoint)
+    checkpoint["run"]["ticker"] = "NVDA"
+
+    summary = validate_checkpoint(checkpoint, ticker="NVDA")
+
+    assert summary["analysis_date"] == "2025-08-29"
+
+
 def test_checkpoint_rejects_nonexclusive_research_vendor(valid_checkpoint):
     invalid = deepcopy(valid_checkpoint)
     invalid["run"]["data_vendors"]["news_data"] = "alpha_vantage,yfinance"
@@ -336,6 +345,13 @@ def test_assessment_payload_uses_deep_historical_chinese_defaults():
     }
 
 
+def test_assessment_payload_supports_a_distinct_nvda_audit_chain():
+    payload = assessment_payload(date(2025, 7, 31), ticker="NVDA")
+
+    assert payload["items"] == [{"ticker": "NVDA", "analysis_date": "2025-07-31"}]
+    assert payload["idempotency_key"] == "nvda-monthly-audit-20250731-v1"
+
+
 class FakeAuditApi:
     def __init__(self, checkpoint):
         self.checkpoint = deepcopy(checkpoint)
@@ -487,7 +503,7 @@ def test_run_audit_processes_dates_in_chronological_order(monkeypatch, tmp_path)
     observed = []
 
     def fake_checkpoint(api, analysis_date, state, state_path, **options):
-        observed.append((analysis_date, options["force_verify"]))
+        observed.append((analysis_date, options["force_verify"], options["ticker"]))
         summary = {"analysis_date": analysis_date.isoformat()}
         state["checkpoints"][analysis_date.isoformat()] = {
             "run_id": analysis_date.strftime("run-%Y%m%d"),
@@ -500,9 +516,12 @@ def test_run_audit_processes_dates_in_chronological_order(monkeypatch, tmp_path)
     monkeypatch.setattr("tsla_monthly_audit.run_checkpoint", fake_checkpoint)
     dates = (date(2025, 7, 31), date(2025, 8, 29))
 
-    summaries = run_audit(object(), tmp_path / "state.json", dates=dates)
+    summaries = run_audit(object(), tmp_path / "state.json", dates=dates, ticker="NVDA")
 
-    assert observed == [(dates[0], False), (dates[1], False)]
+    assert observed == [
+        (dates[0], False, "NVDA"),
+        (dates[1], False, "NVDA"),
+    ]
     assert [item["analysis_date"] for item in summaries] == [
         "2025-07-31",
         "2025-08-29",
@@ -550,13 +569,15 @@ def test_preflight_rejects_open_circuit_or_denied_admission():
         "admission_allowed": True,
         "admission_reasons": [],
         "open_circuits": [],
-        "gateway_model": "gpt-5.6-sol",
-        "gateway_reasoning_effort": "xhigh",
+        "model_routing": {
+            "fast": {"model": "gpt-5.6-terra", "reasoning_effort": "high"},
+            "slow": {"model": "gpt-5.6-sol", "reasoning_effort": "xhigh"},
+        },
         "admitted_or_running": 0,
         "queued": 0,
     }
 
-    assert validate_preflight(CapacityApi(healthy))["gateway_model"] == "gpt-5.6-sol"
+    assert validate_preflight(CapacityApi(healthy))["model_routing"] == healthy["model_routing"]
     with pytest.raises(AuditFailure, match="circuit"):
         validate_preflight(CapacityApi({**healthy, "open_circuits": ["alpha"]}))
     with pytest.raises(AuditFailure, match="admission"):
@@ -573,12 +594,15 @@ def test_parse_args_supports_resumable_and_verify_only_paths(tmp_path):
             "--state-dir",
             str(tmp_path / "audit"),
             "--verify-only",
+            "--ticker",
+            "nvda",
         ]
     )
 
     assert options.env_file == tmp_path / ".env.platform"
     assert options.state_dir == tmp_path / "audit"
     assert options.verify_only is True
+    assert options.ticker == "NVDA"
 
 
 def test_script_entrypoint_runs_after_every_function_definition():
