@@ -8,9 +8,23 @@ from tradingng_platform.config import Settings
 from tradingng_platform.validation.price_contracts import OhlcBasis
 from tradingng_platform.validation.providers import (
     AlphaVantagePriceProvider,
+    LegacyPriceProviderAdapter,
     YFinancePriceProviderV2,
     build_price_provider,
 )
+from tradingng_platform.vendors.alpha_vantage import AlphaVantageRetryPolicy
+
+
+class _FakeRateGate:
+    def __init__(self):
+        self.acquired = 0
+        self.deferred = []
+
+    def acquire(self):
+        self.acquired += 1
+
+    def defer(self, seconds):
+        self.deferred.append(seconds)
 
 
 async def test_alpha_vantage_maps_daily_adjusted_without_leaking_key():
@@ -59,6 +73,100 @@ async def test_alpha_vantage_maps_daily_adjusted_without_leaking_key():
     assert secret in observed_url
     assert secret not in series.request_fingerprint
     assert secret not in repr(series)
+
+
+async def test_alpha_vantage_retries_rate_limit_on_same_provider():
+    payload = {
+        "Meta Data": {"1. Information": "Daily", "5. Time Zone": "US/Eastern"},
+        "Time Series (Daily)": {
+            "2026-01-05": {
+                "1. open": "99",
+                "2. high": "101",
+                "3. low": "98",
+                "4. close": "100",
+                "5. adjusted close": "100",
+                "6. volume": "900",
+                "7. dividend amount": "0",
+                "8. split coefficient": "1",
+            }
+        },
+    }
+    calls = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(200, json={"Note": "API call frequency exceeded"})
+        return httpx.Response(200, json=payload)
+
+    sleeps = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+
+    gate = _FakeRateGate()
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        provider = AlphaVantagePriceProvider(
+            "premium-secret-key",
+            client=client,
+            rate_gate=gate,
+            retry_policy=AlphaVantageRetryPolicy(
+                attempts=3,
+                base_seconds=2,
+                max_seconds=10,
+            ),
+            sleep=sleep,
+        )
+        series = await provider.history("IBM", date(2026, 1, 5), date(2026, 1, 5))
+
+    assert series.provider_id == "alphavantage"
+    assert calls == 2
+    assert gate.acquired == 2
+    assert gate.deferred == [2]
+    assert sleeps == [2]
+
+
+async def test_alpha_vantage_retries_http_429_with_retry_after():
+    payload = {
+        "Time Series (Daily)": {
+            "2026-01-05": {
+                "1. open": "99",
+                "2. high": "101",
+                "3. low": "98",
+                "4. close": "100",
+                "5. adjusted close": "100",
+                "7. dividend amount": "0",
+                "8. split coefficient": "1",
+            }
+        }
+    }
+    responses = [
+        httpx.Response(429, headers={"Retry-After": "7"}),
+        httpx.Response(200, json=payload),
+    ]
+    sleeps = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: responses.pop(0))
+    ) as client:
+        provider = AlphaVantagePriceProvider(
+            "premium-secret-key",
+            client=client,
+            rate_gate=_FakeRateGate(),
+            retry_policy=AlphaVantageRetryPolicy(
+                attempts=2,
+                base_seconds=2,
+                max_seconds=10,
+            ),
+            sleep=sleep,
+        )
+        await provider.history("IBM", date(2026, 1, 5), date(2026, 1, 5))
+
+    assert sleeps == [7]
 
 
 async def test_yfinance_v2_maps_actions_and_declares_split_normalized(monkeypatch):
@@ -124,5 +232,30 @@ def test_provider_router_applies_configured_alpha_vantage_rate_limit():
 
     router = build_price_provider(settings)
 
-    assert router.provider_ids == ("alphavantage", "yfinance")
+    assert router.provider_ids == ("alphavantage",)
     assert router.providers[0].requests_per_minute == 17
+
+
+async def test_legacy_adapter_uses_effective_alpha_provider():
+    payload = {
+        "Time Series (Daily)": {
+            "2026-01-05": {
+                "1. open": "99",
+                "2. high": "101",
+                "3. low": "98",
+                "4. close": "100",
+                "5. adjusted close": "100",
+                "7. dividend amount": "0",
+                "8. split coefficient": "1",
+            }
+        }
+    }
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, json=payload))
+    ) as client:
+        provider = AlphaVantagePriceProvider("premium-secret-key", client=client)
+        legacy = LegacyPriceProviderAdapter(provider)
+        series = await legacy.history("IBM", date(2026, 1, 5), date(2026, 1, 5))
+
+    assert series.source == "alphavantage"
+    assert series.close == [Decimal("100")]

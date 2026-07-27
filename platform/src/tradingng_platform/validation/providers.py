@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import time
 from collections import deque
 from datetime import date, datetime, timedelta, timezone
@@ -15,8 +16,16 @@ import yfinance as yf
 
 from tradingng_platform.config import Settings
 from tradingng_platform.validation.price_contracts import OhlcBasis, ProviderPriceSeries
+from tradingng_platform.validation.prices import PriceSeries
+from tradingng_platform.vendors.alpha_vantage import (
+    AlphaVantageRetryPolicy,
+    CrossProcessRateGate,
+    alpha_key_fingerprint,
+    classify_alpha_payload,
+)
 
 _ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
+logger = logging.getLogger(__name__)
 
 
 class ProviderUnavailable(RuntimeError):
@@ -171,6 +180,9 @@ class AlphaVantagePriceProvider:
         client: httpx.AsyncClient | None = None,
         timeout: float = 15.0,
         requests_per_minute: int = 75,
+        rate_gate: CrossProcessRateGate | None = None,
+        retry_policy: AlphaVantageRetryPolicy | None = None,
+        sleep=asyncio.sleep,
     ):
         if not api_key:
             raise ValueError("Alpha Vantage API key is required")
@@ -179,31 +191,20 @@ class AlphaVantagePriceProvider:
         self._timeout = timeout
         self.requests_per_minute = requests_per_minute
         self._rate_limiter = SlidingWindowRateLimiter(requests_per_minute)
+        self._rate_gate = rate_gate
+        self._retry_policy = retry_policy or AlphaVantageRetryPolicy()
+        self._sleep = sleep
 
     async def history(self, ticker: str, start: date, end: date) -> ProviderPriceSeries:
-        await self._rate_limiter.acquire()
         params = {
             "function": "TIME_SERIES_DAILY_ADJUSTED",
             "symbol": ticker.upper(),
             "outputsize": "full",
             "apikey": self._api_key,
         }
-        try:
-            if self._client is None:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
-                    response = await client.get(_ALPHA_VANTAGE_URL, params=params)
-            else:
-                response = await self._client.get(_ALPHA_VANTAGE_URL, params=params)
-            response.raise_for_status()
-            payload = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
-            raise ProviderUnavailable("Alpha Vantage request failed") from exc
+        payload = await self._request_payload(params)
         if not isinstance(payload, dict):
             raise ProviderInvalidData("Alpha Vantage response is not an object")
-        if "Note" in payload or (
-            "Information" in payload and "rate" in str(payload["Information"]).lower()
-        ):
-            raise ProviderRateLimited("Alpha Vantage request limit reached")
         if "Error Message" in payload:
             raise ProviderInvalidData("Alpha Vantage rejected the symbol")
         observations = payload.get("Time Series (Daily)")
@@ -258,6 +259,65 @@ class AlphaVantagePriceProvider:
             collected_at=datetime.now(timezone.utc),
         )
 
+    async def _request_payload(self, params: dict) -> dict:
+        for attempt in range(1, self._retry_policy.attempts + 1):
+            await self._acquire()
+            retry_after = None
+            try:
+                if self._client is None:
+                    async with httpx.AsyncClient(timeout=self._timeout) as client:
+                        response = await client.get(_ALPHA_VANTAGE_URL, params=params)
+                else:
+                    response = await self._client.get(_ALPHA_VANTAGE_URL, params=params)
+                if response.status_code == 429:
+                    retry_after = _numeric_retry_after(response.headers.get("Retry-After"))
+                    classification = "rate_limit"
+                else:
+                    response.raise_for_status()
+                    payload = response.json()
+                    classification = classify_alpha_payload(payload)
+                    if classification is None:
+                        if not isinstance(payload, dict):
+                            raise ProviderInvalidData(
+                                "Alpha Vantage response is not an object"
+                            )
+                        return payload
+                    if classification == "authentication":
+                        raise ProviderUnavailable(
+                            "Alpha Vantage rejected the configured credentials"
+                        )
+                    if classification != "rate_limit":
+                        raise ProviderInvalidData(
+                            "Alpha Vantage returned an invalid response"
+                        )
+            except ProviderUnavailable:
+                raise
+            except ProviderInvalidData:
+                raise
+            except (httpx.HTTPError, ValueError) as exc:
+                raise ProviderUnavailable("Alpha Vantage request failed") from exc
+
+            if attempt == self._retry_policy.attempts:
+                raise ProviderRateLimited(
+                    "Alpha Vantage request limit persisted after delayed retries"
+                )
+            delay = self._retry_policy.delay(attempt, retry_after=retry_after)
+            if self._rate_gate is not None:
+                await asyncio.to_thread(self._rate_gate.defer, delay)
+            logger.warning(
+                "alpha_vantage_validation_retry attempt=%d delay_seconds=%.1f",
+                attempt,
+                delay,
+            )
+            await self._sleep(delay)
+        raise RuntimeError("unreachable Alpha Vantage retry state")
+
+    async def _acquire(self) -> None:
+        if self._rate_gate is not None:
+            await asyncio.to_thread(self._rate_gate.acquire)
+            return
+        await self._rate_limiter.acquire()
+
 
 class PriceProviderRouter:
     def __init__(self, providers: tuple[ProviderProtocol, ...]):
@@ -281,19 +341,61 @@ class PriceProviderRouter:
         ) from last_error
 
 
+class LegacyPriceProviderAdapter:
+    def __init__(self, provider: ProviderProtocol):
+        self.provider = provider
+
+    async def history(self, ticker: str, start: date, end: date) -> PriceSeries:
+        raw = await self.provider.history(ticker, start, end)
+        return PriceSeries(
+            ticker=raw.ticker,
+            currency=raw.currency,
+            sessions=raw.sessions,
+            open=raw.open,
+            high=raw.high,
+            low=raw.low,
+            close=raw.close,
+            adjusted_close=raw.adjusted_close,
+            source=raw.provider_id,
+            collected_at=raw.collected_at,
+        )
+
+
 def build_price_provider(settings: Settings) -> PriceProviderRouter:
     providers: list[ProviderProtocol] = []
-    for provider_id in settings.validation_price_providers:
+    for provider_id in settings.effective_validation_price_providers:
         if provider_id == "alphavantage":
             if settings.alpha_vantage_api_key is None:
                 continue
+            api_key = settings.alpha_vantage_api_key.get_secret_value()
             providers.append(
                 AlphaVantagePriceProvider(
-                    settings.alpha_vantage_api_key.get_secret_value(),
+                    api_key,
                     timeout=settings.validation_provider_timeout_seconds,
                     requests_per_minute=settings.alpha_vantage_requests_per_minute,
+                    rate_gate=CrossProcessRateGate(
+                        settings.data_dir
+                        / "vendor-limits"
+                        / f"alpha-vantage-{alpha_key_fingerprint(api_key)}.json",
+                        settings.alpha_vantage_requests_per_minute,
+                    ),
+                    retry_policy=AlphaVantageRetryPolicy(
+                        attempts=settings.alpha_vantage_retry_attempts,
+                        base_seconds=settings.alpha_vantage_retry_base_seconds,
+                        max_seconds=settings.alpha_vantage_retry_max_seconds,
+                    ),
                 )
             )
         elif provider_id == "yfinance":
             providers.append(YFinancePriceProviderV2())
     return PriceProviderRouter(tuple(providers))
+
+
+def _numeric_retry_after(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError:
+        return None
+    return parsed if parsed > 0 else None
