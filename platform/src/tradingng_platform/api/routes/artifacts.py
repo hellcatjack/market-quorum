@@ -7,7 +7,13 @@ from fastapi.responses import FileResponse
 from tradingng_platform.api.auth import require_scopes
 from tradingng_platform.api.errors import ApiError
 from tradingng_platform.auth.principal import Principal
-from tradingng_platform.records.contracts import ArtifactView, DecisionView, EvidenceView
+from tradingng_platform.records.contracts import (
+    ArtifactView,
+    DecisionView,
+    EvidenceView,
+    LlmInteractionPage,
+)
+from tradingng_platform.records.llm_interactions import LlmAuditFormatError
 from tradingng_platform.records.service import ArtifactIntegrityError, RecordNotFound
 
 router = APIRouter(tags=["records"])
@@ -18,6 +24,8 @@ def _record_error(error: Exception) -> None:
         raise ApiError(404, "record_not_found", "Assessment record was not found") from None
     if isinstance(error, ArtifactIntegrityError):
         raise ApiError(409, "artifact_integrity_error", "Artifact integrity check failed") from None
+    if isinstance(error, LlmAuditFormatError):
+        raise ApiError(409, "llm_audit_invalid", "LLM audit metadata is invalid") from None
     raise error
 
 
@@ -50,6 +58,22 @@ async def list_evidence(
     try:
         return await request.app.state.records.evidence(principal, run_id)
     except RecordNotFound as error:
+        _record_error(error)
+
+
+@router.get(
+    "/assessments/{run_id}/llm-interactions",
+    response_model=LlmInteractionPage,
+    operation_id="list_assessment_llm_interactions",
+)
+async def list_llm_interactions(
+    run_id: uuid.UUID,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scopes("assessments:read"))],
+) -> LlmInteractionPage:
+    try:
+        return await request.app.state.records.llm_interactions(principal, run_id)
+    except (RecordNotFound, ArtifactIntegrityError, LlmAuditFormatError) as error:
         _record_error(error)
 
 

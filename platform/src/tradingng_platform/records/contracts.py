@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -30,6 +31,25 @@ class EvidenceView(BaseModel):
     effective_at: datetime | None
     freshness: str | None
     content_hash: str
+
+
+class LlmInteractionView(BaseModel):
+    sequence: int = Field(ge=1)
+    route: str | None
+    model_alias: str | None
+    physical_model: str | None
+    reasoning_effort: str | None
+    status: str
+    started_at: datetime
+    completed_at: datetime | None
+    duration_ms: int | None = Field(default=None, ge=0)
+    error_code: str | None
+
+
+class LlmInteractionPage(BaseModel):
+    items: list[LlmInteractionView]
+    source: Literal["live", "sealed", "none"]
+    complete: bool
 
 
 class ArtifactView(BaseModel):

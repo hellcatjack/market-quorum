@@ -1,6 +1,7 @@
 import uuid
 from collections import defaultdict
 from decimal import Decimal
+from pathlib import Path
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -37,9 +38,11 @@ from tradingng_platform.records.contracts import (
     InstrumentSummaryView,
     InstrumentValidationStats,
     InstrumentValidationView,
+    LlmInteractionPage,
     OpenedArtifact,
     ReviewView,
 )
+from tradingng_platform.records.llm_interactions import parse_llm_interactions
 
 _ACTIVE_STATUSES = frozenset(
     {
@@ -264,9 +267,11 @@ class RecordService:
         self,
         sessions: async_sessionmaker[AsyncSession],
         artifact_store: LocalArtifactStore,
+        job_dir: Path | None = None,
     ):
         self.sessions = sessions
         self.artifact_store = artifact_store
+        self.job_dir = job_dir.resolve() if job_dir is not None else None
 
     async def decision(self, principal: Principal, run_id: uuid.UUID) -> DecisionView:
         principal.require("assessments:read")
@@ -309,6 +314,46 @@ class RecordService:
                 )
                 for item in evidence
             ]
+
+    async def llm_interactions(
+        self,
+        principal: Principal,
+        run_id: uuid.UUID,
+    ) -> LlmInteractionPage:
+        principal.require("assessments:read")
+        async with self.sessions() as session:
+            await self._ensure_run(session, run_id)
+            artifact = await session.scalar(
+                select(Artifact)
+                .where(
+                    Artifact.run_id == run_id,
+                    Artifact.kind == "llm_interactions",
+                    Artifact.deleted_at.is_(None),
+                )
+                .order_by(Artifact.created_at.desc(), Artifact.id.desc())
+            )
+
+        if artifact is not None:
+            try:
+                path = self.artifact_store.resolve(artifact.storage_key)
+            except ValueError as error:
+                raise ArtifactIntegrityError("artifact storage key is invalid") from error
+            if not self.artifact_store.verify(artifact.storage_key, artifact.sha256):
+                raise ArtifactIntegrityError("artifact content hash does not match")
+            return parse_llm_interactions(path.read_bytes(), source="sealed")
+
+        live_path = self._live_llm_interactions_path(run_id)
+        if live_path is not None and live_path.is_file():
+            return parse_llm_interactions(live_path.read_bytes(), source="live")
+        return LlmInteractionPage(items=[], source="none", complete=False)
+
+    def _live_llm_interactions_path(self, run_id: uuid.UUID) -> Path | None:
+        if self.job_dir is None:
+            return None
+        candidate = (self.job_dir / str(run_id) / "working" / "llm_interactions.jsonl").resolve()
+        if not candidate.is_relative_to(self.job_dir):
+            return None
+        return candidate
 
     async def list_artifacts(
         self,

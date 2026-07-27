@@ -24,6 +24,8 @@ from tradingng_platform.records.contracts import (
     InstrumentSummaryView,
     InstrumentValidationStats,
     InstrumentValidationView,
+    LlmInteractionPage,
+    LlmInteractionView,
     OpenedArtifact,
     ReviewView,
 )
@@ -91,6 +93,26 @@ class _Records:
                 content_hash="a" * 64,
             )
         ]
+
+    async def llm_interactions(self, principal, run_id):
+        return LlmInteractionPage(
+            items=[
+                LlmInteractionView(
+                    sequence=1,
+                    route="fast",
+                    model_alias="codex-fast",
+                    physical_model="gpt-5.6-terra",
+                    reasoning_effort="high",
+                    status="completed",
+                    started_at=NOW,
+                    completed_at=NOW,
+                    duration_ms=4426,
+                    error_code=None,
+                )
+            ],
+            source="sealed",
+            complete=True,
+        )
 
     async def list_artifacts(self, principal, run_id):
         return [
@@ -302,6 +324,7 @@ def test_records_collaboration_instruments_and_artifact_download(monkeypatch, tm
         app.state.records = _Records(artifact)
         decision = client.get(f"/api/v1/assessments/{RUN_ID}/decision")
         evidence = client.get(f"/api/v1/assessments/{RUN_ID}/evidence")
+        interactions = client.get(f"/api/v1/assessments/{RUN_ID}/llm-interactions")
         artifacts = client.get(f"/api/v1/assessments/{RUN_ID}/artifacts")
         download = client.get(f"/api/v1/artifacts/{ARTIFACT_ID}")
         review = client.post(
@@ -316,6 +339,12 @@ def test_records_collaboration_instruments_and_artifact_download(monkeypatch, tm
 
     assert decision.json()["rating"] == "Hold"
     assert evidence.json()[0]["source"] == "yfinance"
+    assert interactions.status_code == 200
+    assert interactions.json()["items"][0]["physical_model"] == "gpt-5.6-terra"
+    assert "messages" not in interactions.text
+    assert "response" not in interactions.text
+    assert "token_usage" not in interactions.text
+    assert "private prompt" not in interactions.text
     assert "storage_key" not in artifacts.text
     assert str(tmp_path) not in artifacts.text
     assert download.text == "report"

@@ -85,6 +85,7 @@ def create_app(
         app.state.records = RecordService(
             resolved_database.sessions,
             LocalArtifactStore(app_settings.artifact_dir),
+            app_settings.job_dir,
         )
         app.state.system = SystemService(
             resolved_database.sessions,

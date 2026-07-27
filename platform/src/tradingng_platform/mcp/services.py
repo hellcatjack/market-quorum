@@ -35,6 +35,7 @@ class McpServices:
             records=RecordService(
                 database.sessions,
                 LocalArtifactStore(settings.artifact_dir),
+                settings.job_dir,
             ),
             system=SystemService(
                 database.sessions,

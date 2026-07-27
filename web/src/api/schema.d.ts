@@ -262,6 +262,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assessments/{run_id}/llm-interactions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Llm Interactions */
+        get: operations["list_assessment_llm_interactions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assessments/{run_id}/retry": {
         parameters: {
             query?: never;
@@ -660,6 +677,7 @@ export interface components {
             hard_max_running_total: number;
             /** Max Running Total */
             max_running_total: number;
+            model_routing: components["schemas"]["ModelRoutingPolicy"];
             /** Oldest Queued Seconds */
             oldest_queued_seconds: number | null;
             /** Open Circuits */
@@ -817,10 +835,18 @@ export interface components {
             config_snapshot_sha256: string | null;
             /** Executive Summary */
             executive_summary: string | null;
+            /** Gateway Fast Model */
+            gateway_fast_model?: string | null;
+            /** Gateway Fast Reasoning Effort */
+            gateway_fast_reasoning_effort?: string | null;
             /** Gateway Model */
             gateway_model: string | null;
             /** Gateway Reasoning Effort */
             gateway_reasoning_effort: string | null;
+            /** Gateway Slow Model */
+            gateway_slow_model?: string | null;
+            /** Gateway Slow Reasoning Effort */
+            gateway_slow_reasoning_effort?: string | null;
             /**
              * Is Latest Attempt
              * @default true
@@ -987,6 +1013,44 @@ export interface components {
             /** Total Return */
             total_return: string | null;
         };
+        /** LlmInteractionPage */
+        LlmInteractionPage: {
+            /** Complete */
+            complete: boolean;
+            /** Items */
+            items: components["schemas"]["LlmInteractionView"][];
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "live" | "sealed" | "none";
+        };
+        /** LlmInteractionView */
+        LlmInteractionView: {
+            /** Completed At */
+            completed_at: string | null;
+            /** Duration Ms */
+            duration_ms?: number | null;
+            /** Error Code */
+            error_code: string | null;
+            /** Model Alias */
+            model_alias: string | null;
+            /** Physical Model */
+            physical_model: string | null;
+            /** Reasoning Effort */
+            reasoning_effort: string | null;
+            /** Route */
+            route: string | null;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+        };
         /**
          * MemoryMode
          * @enum {string}
@@ -1041,6 +1105,23 @@ export interface components {
              * @enum {string}
              */
             reasoning_effort: "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+        };
+        /** ModelRoutingPolicy */
+        ModelRoutingPolicy: {
+            /**
+             * @default {
+             *       "model": "gpt-5.6-terra",
+             *       "reasoning_effort": "high"
+             *     }
+             */
+            fast: components["schemas"]["ModelRoute"];
+            /**
+             * @default {
+             *       "model": "gpt-5.6-sol",
+             *       "reasoning_effort": "high"
+             *     }
+             */
+            slow: components["schemas"]["ModelRoute"];
         };
         /** ModelRoutingPolicyCommand */
         ModelRoutingPolicyCommand: {
@@ -2003,6 +2084,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_assessment_llm_interactions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmInteractionPage"];
                 };
             };
             /** @description Validation Error */
