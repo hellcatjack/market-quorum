@@ -21,6 +21,7 @@ class CapacityView(BaseModel):
     gateway_active_completions: int
     gateway_model: str
     gateway_reasoning_effort: str
+    model_routing: ModelRoutingPolicy
     open_circuits: list[str]
     admission_allowed: bool
     admission_reasons: list[str]

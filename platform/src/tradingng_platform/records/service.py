@@ -238,6 +238,19 @@ def _validation_outcome(validation: InstrumentValidationView | None) -> str | No
     return f"{prefix} · 待验证"
 
 
+def _gateway_route_value(
+    snapshot: RunConfigSnapshot | None,
+    route: str,
+    field: str,
+) -> str | None:
+    if snapshot is None:
+        return None
+    gateway = snapshot.content_json.get("gateway") or {}
+    routes = gateway.get("routes") or {}
+    value = (routes.get(route) or {}).get(field)
+    return value if isinstance(value, str) else None
+
+
 class RecordNotFound(Exception):
     pass
 
@@ -647,6 +660,18 @@ class RecordService:
                         (snapshot.content_json.get("gateway") or {}).get("reasoning_effort")
                         if snapshot is not None
                         else None
+                    ),
+                    gateway_fast_model=_gateway_route_value(snapshot, "fast", "model"),
+                    gateway_fast_reasoning_effort=_gateway_route_value(
+                        snapshot,
+                        "fast",
+                        "reasoning_effort",
+                    ),
+                    gateway_slow_model=_gateway_route_value(snapshot, "slow", "model"),
+                    gateway_slow_reasoning_effort=_gateway_route_value(
+                        snapshot,
+                        "slow",
+                        "reasoning_effort",
                     ),
                     config_snapshot_sha256=snapshot.sha256 if snapshot is not None else None,
                     validation_outcome=_validation_outcome(

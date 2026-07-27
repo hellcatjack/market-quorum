@@ -94,6 +94,7 @@ class SystemService:
         now = datetime.now(timezone.utc)
         async with self.sessions() as session, session.begin():
             policy = await SchedulerPolicyRepository(session).get()
+            model_routing = await ModelRoutingPolicyRepository(session).get()
             active = int(
                 await session.scalar(
                     select(func.count())
@@ -126,6 +127,7 @@ class SystemService:
             gateway_active_completions=gateway.active_completions,
             gateway_model=gateway.model,
             gateway_reasoning_effort=gateway.reasoning_effort,
+            model_routing=model_routing,
             open_circuits=list(circuits),
             admission_allowed=decision.allowed,
             admission_reasons=list(decision.reasons),

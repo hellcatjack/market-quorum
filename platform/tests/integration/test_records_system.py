@@ -89,7 +89,20 @@ async def test_records_are_hash_verified_and_collaboration_is_audited(
     async with session_factory() as session, session.begin():
         snapshot = RunConfigSnapshot(
             content_json={
-                "gateway": {"model": "gpt-5.6-sol", "reasoning_effort": "xhigh"},
+                "gateway": {
+                    "model": "gpt-5.6-sol",
+                    "reasoning_effort": "xhigh",
+                    "routes": {
+                        "fast": {
+                            "model": "gpt-5.6-terra",
+                            "reasoning_effort": "high",
+                        },
+                        "slow": {
+                            "model": "gpt-5.6-sol",
+                            "reasoning_effort": "xhigh",
+                        },
+                    },
+                },
             },
             sha256="c" * 64,
             gateway_snapshot_id="snapshot-records",
@@ -155,6 +168,10 @@ async def test_records_are_hash_verified_and_collaboration_is_audited(
     assert history[0].price_target == Decimal("100")
     assert history[0].gateway_model == "gpt-5.6-sol"
     assert history[0].gateway_reasoning_effort == "xhigh"
+    assert history[0].gateway_fast_model == "gpt-5.6-terra"
+    assert history[0].gateway_fast_reasoning_effort == "high"
+    assert history[0].gateway_slow_model == "gpt-5.6-sol"
+    assert history[0].gateway_slow_reasoning_effort == "xhigh"
     assert history[0].config_snapshot_sha256 == "c" * 64
     assert history[0].validation_outcome is None
 
@@ -181,6 +198,10 @@ async def test_system_capacity_and_policy_update_are_bounded_and_audited(
     capacity = await service.capacity(principal)
     assert capacity.queued == 1
     assert capacity.max_running_total == 2
+    assert capacity.model_routing.fast.model == "gpt-5.6-terra"
+    assert capacity.model_routing.fast.reasoning_effort == "high"
+    assert capacity.model_routing.slow.model == "gpt-5.6-sol"
+    assert capacity.model_routing.slow.reasoning_effort == "high"
     updated = await service.update_scheduler_policy(
         principal,
         SchedulerPolicyCommand(

@@ -172,6 +172,10 @@ class InstrumentHistoryItem(BaseModel):
     price_target: Decimal | None
     gateway_model: str | None
     gateway_reasoning_effort: str | None
+    gateway_fast_model: str | None = None
+    gateway_fast_reasoning_effort: str | None = None
+    gateway_slow_model: str | None = None
+    gateway_slow_reasoning_effort: str | None = None
     config_snapshot_sha256: str | None
     validation_outcome: str | None = None
     validations: list[InstrumentValidationView] = Field(default_factory=list)
