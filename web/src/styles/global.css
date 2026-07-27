@@ -767,6 +767,96 @@ h1 {
   gap: 18px;
 }
 
+.assessment-form .form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.memory-mode-fieldset {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+
+.memory-mode-fieldset legend {
+  margin-bottom: 10px;
+  color: #405064;
+  font-size: 0.86rem;
+  font-weight: 650;
+}
+
+.memory-mode-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.memory-mode-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 11px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fafaf6;
+  cursor: pointer;
+}
+
+.memory-mode-option:has(input:checked) {
+  border-color: var(--action);
+  background: #f0f7fa;
+  box-shadow: inset 0 0 0 1px var(--action);
+}
+
+.memory-mode-option:focus-within {
+  outline: 3px solid rgb(29 117 168 / 22%);
+  outline-offset: 2px;
+}
+
+.memory-mode-option input {
+  width: 18px;
+  min-height: 18px;
+  margin-top: 2px;
+}
+
+.memory-mode-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.memory-mode-copy small {
+  color: var(--ink-muted);
+}
+
+.memory-mode-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.memory-mode-title em {
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--action);
+  background: rgb(29 117 168 / 9%);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.memory-mode-note {
+  margin: 10px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
 .analyst-fieldset {
   padding: 0;
   border: 0;
@@ -2246,6 +2336,14 @@ pre {
     grid-template-columns: 1fr 1fr;
   }
 
+  .memory-mode-options {
+    grid-template-columns: 1fr;
+  }
+
+  .assessment-form .form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .capacity-banner,
   .dispatch-layout,
   .detail-grid,
@@ -2383,6 +2481,10 @@ pre {
 
   .dashboard-view-tabs {
     display: flex;
+  }
+
+  .assessment-form .form-grid {
+    grid-template-columns: 1fr;
   }
 
   .dashboard-view-tabs button {
