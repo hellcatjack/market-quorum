@@ -168,11 +168,21 @@ def test_checkpoint_rejects_incomplete_or_nonalpha_validation(valid_checkpoint):
         validate_checkpoint(invalid)
 
 
-def test_checkpoint_rejects_missing_decision_content(valid_checkpoint):
-    invalid = deepcopy(valid_checkpoint)
-    invalid["decision"]["time_horizon"] = None
+def test_checkpoint_preserves_explicitly_unset_time_horizon(valid_checkpoint):
+    checkpoint = deepcopy(valid_checkpoint)
+    checkpoint["decision"]["time_horizon"] = None
 
-    with pytest.raises(AuditFailure, match="decision"):
+    summary = validate_checkpoint(checkpoint)
+
+    assert summary["time_horizon"] is None
+    assert summary["time_horizon_status"] == "not_set"
+
+
+def test_checkpoint_rejects_absent_time_horizon_field(valid_checkpoint):
+    invalid = deepcopy(valid_checkpoint)
+    invalid["decision"].pop("time_horizon")
+
+    with pytest.raises(AuditFailure, match="time horizon"):
         validate_checkpoint(invalid)
 
 

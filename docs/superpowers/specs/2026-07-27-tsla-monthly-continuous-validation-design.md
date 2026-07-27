@@ -60,8 +60,9 @@ For each of the 12 checkpoints:
 - the immutable snapshot names Alpha Vantage exclusively for the four research
   categories and the verified market snapshot does not invoke Yahoo;
 - the final decision has a normalized rating, executive summary, investment
-  thesis, and an unabridged time horizon; a missing price target remains absent
-  rather than fabricated;
+  thesis, and an explicit time-horizon field; a horizon or price target may be
+  `null` when the decision explains that available evidence cannot support one,
+  and the audit records that as `not_set` rather than fabricating a value;
 - every stored artifact passes its SHA-256 verification;
 - all 1-, 5-, and 20-session validations complete through `alphavantage`, use
   `validation.v2`, and carry an explicit entry/exit session and price basis;

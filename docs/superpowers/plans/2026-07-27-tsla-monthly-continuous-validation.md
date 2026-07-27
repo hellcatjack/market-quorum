@@ -56,7 +56,9 @@ def test_checkpoint_rejects_yahoo_or_lookahead_memory(valid_checkpoint):
 Add independent tests requiring five completed timestamped steps, three completed
 `validation.v2` rows with horizons `{1, 5, 20}` and provider `alphavantage`, a
 nonempty decision, at most five distinct earlier memory sources, and nonempty
-artifact metadata.
+artifact metadata. The time-horizon field must exist, but an explicit `null` is
+valid and must be summarized as `not_set` when the model explains that no fixed
+horizon is supportable.
 
 - [ ] **Step 2: Run the tests and verify RED**
 

@@ -214,13 +214,16 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> dict[str, Any]:
         "rating",
         "executive_summary",
         "investment_thesis",
-        "time_horizon",
     )
     _require(
         all(
             str(decision.get(field) or "").strip() for field in required_decision_fields
         ),
         "assessment decision is missing required content",
+    )
+    _require(
+        "time_horizon" in decision,
+        "assessment decision is missing the time horizon field",
     )
 
     validations = list(checkpoint.get("validations") or [])
@@ -265,6 +268,10 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> dict[str, Any]:
         "analysis_date": analysis_date.isoformat(),
         "rating": str(decision["rating"]),
         "price_target": decision.get("price_target"),
+        "time_horizon": decision.get("time_horizon"),
+        "time_horizon_status": (
+            "set" if str(decision.get("time_horizon") or "").strip() else "not_set"
+        ),
         "memory_source_count": len(sources),
         "memory_horizons": [int(source["horizon"]) for source in sources],
         "validation_horizons": sorted(int(item["horizon"]) for item in validations),
