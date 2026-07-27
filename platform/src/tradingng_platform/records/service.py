@@ -1,4 +1,6 @@
 import uuid
+from collections import defaultdict
+from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -26,9 +28,46 @@ from tradingng_platform.records.contracts import (
     EvidenceView,
     InstrumentHistoryItem,
     InstrumentSummaryView,
+    InstrumentValidationStats,
+    InstrumentValidationView,
     OpenedArtifact,
     ReviewView,
 )
+
+
+def _preferred_validation(
+    validations: list[InstrumentValidationView],
+) -> InstrumentValidationView | None:
+    completed = {item.horizon: item for item in validations if item.status == "completed"}
+    for horizon in (20, 5, 1):
+        if horizon in completed:
+            return completed[horizon]
+    return max(validations, key=lambda item: item.horizon, default=None)
+
+
+def _validation_stats(
+    validations: list[InstrumentValidationView],
+) -> list[InstrumentValidationStats]:
+    completed_by_horizon: dict[int, list[InstrumentValidationView]] = defaultdict(list)
+    for item in validations:
+        if item.status == "completed":
+            completed_by_horizon[item.horizon].append(item)
+
+    result = []
+    for horizon in (1, 5, 20):
+        completed = completed_by_horizon[horizon]
+        observed = [item for item in completed if item.direction_correct is not None]
+        correct = sum(item.direction_correct is True for item in observed)
+        result.append(
+            InstrumentValidationStats(
+                horizon=horizon,
+                completed=len(completed),
+                direction_observed=len(observed),
+                direction_correct=correct,
+                accuracy=(Decimal(correct) / Decimal(len(observed)) if observed else None),
+            )
+        )
+    return result
 
 
 class RecordNotFound(Exception):

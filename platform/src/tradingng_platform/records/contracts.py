@@ -1,12 +1,14 @@
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from tradingng_platform.assessments.contracts import RunView
+from tradingng_platform.domain.instruments import AssetType
+from tradingng_platform.domain.runs import RunStatus
 
 
 class DecisionView(BaseModel):
@@ -84,6 +86,85 @@ class InstrumentSummaryView(BaseModel):
     latest_created_at: datetime | None
 
 
+class InstrumentIdentityView(BaseModel):
+    id: uuid.UUID
+    ticker: str
+    name: str | None
+    exchange: str | None
+    asset_type: str
+
+
+class InstrumentValidationView(BaseModel):
+    id: uuid.UUID
+    run_id: uuid.UUID
+    horizon: int
+    status: str
+    scheduled_for: datetime
+    matures_at: datetime | None
+    exit_session: date | None
+    total_return: Decimal | None
+    total_alpha: Decimal | None
+    direction_correct: bool | None
+    price_target_hit: bool | None
+    error_code: str | None
+
+
+class InstrumentValidationStats(BaseModel):
+    horizon: int
+    completed: int
+    direction_observed: int
+    direction_correct: int
+    accuracy: Decimal | None
+
+
+class InstrumentRunCounts(BaseModel):
+    total: int = 0
+    queued: int = 0
+    active: int = 0
+    succeeded: int = 0
+    anomalous: int = 0
+
+
+class InstrumentOverviewItem(BaseModel):
+    instrument: InstrumentIdentityView
+    latest_run: RunView
+    latest_successful_run: RunView | None
+    latest_decision: DecisionView | None
+    previous_rating: str | None
+    preferred_validation: InstrumentValidationView | None
+    validation_stats: list[InstrumentValidationStats]
+    run_counts: InstrumentRunCounts
+
+
+class InstrumentOverviewFilters(BaseModel):
+    query: str | None = None
+    asset_type: AssetType | None = None
+    statuses: tuple[RunStatus, ...] = ()
+    anomalous_only: bool = False
+    created_from: datetime | None = None
+    created_to: datetime | None = None
+    cursor: str | None = None
+    limit: int = Field(default=50, ge=1, le=200)
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if (
+            self.created_from is not None
+            and self.created_to is not None
+            and self.created_from > self.created_to
+        ):
+            raise ValueError("created_from must not be after created_to")
+        return self
+
+
+class InstrumentOverviewPage(BaseModel):
+    items: list[InstrumentOverviewItem]
+    next_cursor: str | None = None
+    instrument_count: int
+    run_counts: InstrumentRunCounts
+    validations_visible: bool = True
+
+
 class InstrumentHistoryItem(BaseModel):
     run: RunView
     rating: str | None
@@ -93,3 +174,8 @@ class InstrumentHistoryItem(BaseModel):
     gateway_reasoning_effort: str | None
     config_snapshot_sha256: str | None
     validation_outcome: str | None = None
+    validations: list[InstrumentValidationView] = Field(default_factory=list)
+    memory_mode: str = "independent"
+    memory_source_count: int = 0
+    is_latest_attempt: bool = True
+    request_attempt_count: int = 1
