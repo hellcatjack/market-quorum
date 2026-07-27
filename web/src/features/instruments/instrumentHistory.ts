@@ -1,9 +1,16 @@
 import type { InstrumentHistoryItem } from "../../api/records";
+import { ratingTransition } from "../dashboard/instrumentPresentation";
 
 export interface InstrumentHistoryGroup {
   primary: InstrumentHistoryItem;
   priorAttempts: InstrumentHistoryItem[];
 }
+
+export interface InstrumentHistoryEvent extends InstrumentHistoryGroup {
+  transition: string | null;
+}
+
+export type InstrumentHistoryOrder = "newest" | "oldest";
 
 export function groupInstrumentHistory(
   items: InstrumentHistoryItem[],
@@ -28,4 +35,33 @@ export function groupInstrumentHistory(
         right.primary.run.analysis_date,
       ) || left.primary.run.created_at.localeCompare(right.primary.run.created_at),
     );
+}
+
+export function projectInstrumentHistory(
+  items: InstrumentHistoryItem[],
+): InstrumentHistoryEvent[] {
+  const chronological = groupInstrumentHistory(items);
+  const projected = chronological.map((group, index) => {
+    const previousRating = [...chronological.slice(0, index)]
+      .reverse()
+      .find((candidate) => Boolean(candidate.primary.rating))
+      ?.primary.rating ?? null;
+    const transition = group.primary.rating
+      ? ratingTransition(previousRating, group.primary.rating)
+      : null;
+    return { ...group, transition };
+  });
+  return projected.reverse();
+}
+
+export function orderInstrumentHistory(
+  events: InstrumentHistoryEvent[],
+  order: InstrumentHistoryOrder,
+): InstrumentHistoryEvent[] {
+  const newestFirst = [...events].sort(
+    (left, right) => right.primary.run.analysis_date.localeCompare(
+      left.primary.run.analysis_date,
+    ) || right.primary.run.created_at.localeCompare(left.primary.run.created_at),
+  );
+  return order === "newest" ? newestFirst : newestFirst.reverse();
 }

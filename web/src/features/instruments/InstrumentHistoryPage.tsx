@@ -1,12 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useParams } from "wouter";
 
 import type { InstrumentHistoryItem } from "../../api/records";
 import { getInstrument, getInstrumentHistory } from "../../api/records";
-import { formatPercent, ratingTransition } from "../dashboard/instrumentPresentation";
+import { formatPercent } from "../dashboard/instrumentPresentation";
 import { LocalTime } from "../runs/RunTimeline";
-import { groupInstrumentHistory } from "./instrumentHistory";
+import {
+  orderInstrumentHistory,
+  projectInstrumentHistory,
+  type InstrumentHistoryOrder,
+} from "./instrumentHistory";
 
 const HORIZONS = [1, 5, 20] as const;
 
@@ -87,6 +91,7 @@ function MemoryLabel({ item }: { item: InstrumentHistoryItem }) {
 export function InstrumentHistoryPage() {
   const { ticker = "" } = useParams<{ ticker: string }>();
   const normalized = ticker.toUpperCase();
+  const [order, setOrder] = useState<InstrumentHistoryOrder>("newest");
   const summary = useQuery({
     queryKey: ["instrument", normalized],
     queryFn: () => getInstrument(normalized),
@@ -99,19 +104,14 @@ export function InstrumentHistoryPage() {
     enabled: Boolean(normalized),
     retry: false,
   });
-  const events = useMemo(() => {
-    const groups = groupInstrumentHistory(history.data ?? []);
-    return groups.map((group, index) => {
-      const previousRating = [...groups.slice(0, index)]
-        .reverse()
-        .find((candidate) => Boolean(candidate.primary.rating))
-        ?.primary.rating ?? null;
-      const transition = group.primary.rating
-        ? ratingTransition(previousRating, group.primary.rating)
-        : null;
-      return { ...group, transition };
-    });
-  }, [history.data]);
+  const projectedEvents = useMemo(
+    () => projectInstrumentHistory(history.data ?? []),
+    [history.data],
+  );
+  const events = useMemo(
+    () => orderInstrumentHistory(projectedEvents, order),
+    [order, projectedEvents],
+  );
 
   if (summary.isError || history.isError) {
     return <p className="page-shell page-warning" role="alert">无法读取该标的的历史评估。</p>;
@@ -122,7 +122,7 @@ export function InstrumentHistoryPage() {
         <div>
           <p className="eyebrow">标的档案 / 结论演化</p>
           <h1>{normalized} 历史评估</h1>
-          <p>按研究发生顺序查看观点变化，并将每次预测与 1/5/20 日实际表现绑定。</p>
+          <p>默认优先查看最新研究，也可切换为审计顺序，并将每次预测与 1/5/20 日实际表现绑定。</p>
         </div>
         <dl>
           <div><dt>评估次数</dt><dd>{summary.data?.assessment_count ?? "—"}</dd></div>
@@ -133,10 +133,28 @@ export function InstrumentHistoryPage() {
 
       <div className="instrument-history-heading">
         <div>
-          <p className="eyebrow">由早到晚</p>
+          <p className="eyebrow">{order === "newest" ? "由新到旧" : "由旧到新"}</p>
           <h2>结论与表现时间线</h2>
         </div>
-        <span>{events.length} 个研究事件</span>
+        <div className="history-heading-actions">
+          <span>{events.length} 个研究事件</span>
+          <div className="history-order-control" aria-label="研究事件排序">
+            <button
+              type="button"
+              aria-pressed={order === "newest"}
+              onClick={() => setOrder("newest")}
+            >
+              最新在前
+            </button>
+            <button
+              type="button"
+              aria-pressed={order === "oldest"}
+              onClick={() => setOrder("oldest")}
+            >
+              最早在前
+            </button>
+          </div>
+        </div>
       </div>
       {history.isLoading ? <p className="table-empty" role="status">正在载入历史…</p> : null}
       <ol className="instrument-history-timeline" aria-label={`${normalized} 结论演化`}>

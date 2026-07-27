@@ -2,6 +2,7 @@ import type { InstrumentOverview } from "../../api/records";
 import {
   formatPercent,
   formatPredictionOutcome,
+  predictionOutcomeTokens,
   ratingDirection,
   ratingTransition,
   reliabilityLabel,
@@ -80,6 +81,19 @@ test("formats one forecast and realized outcome as a bound reading unit", () => 
   expect(formatPredictionOutcome(overview())).toBe(
     "Underweight ↓ → 20D -20.65% / Alpha -14.59% → 方向正确",
   );
+});
+
+test("projects forecast and outcome into compact semantic tokens", () => {
+  expect(predictionOutcomeTokens(overview())).toEqual({
+    rating: "Underweight",
+    direction: "↓",
+    horizon: "20D",
+    performance: "-20.65%",
+    alpha: "Alpha -14.59%",
+    outcome: "方向正确",
+    target: null,
+    state: "completed",
+  });
 });
 
 test("does not mislabel pending or failed validation as a wrong forecast", () => {

@@ -166,8 +166,18 @@ test("defaults to one instrument row and keeps the full task view available", as
 
   const instrument = await screen.findByRole("link", { name: "英伟达 NVDA NASDAQ" });
   expect(instrument).toHaveAttribute("href", "/instruments/NVDA");
-  expect(screen.getByText("Underweight ↓ → 20D -20.65% / Alpha -14.59% → 方向正确"))
-    .toBeInTheDocument();
+  expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
+    "标的",
+    "结论与表现",
+    "可靠性与变化",
+    "运行",
+  ]);
+  expect(screen.getByText("Underweight")).toBeInTheDocument();
+  expect(screen.getAllByText("20D")).toHaveLength(2);
+  expect(screen.getByText("-20.65%")).toBeInTheDocument();
+  expect(screen.getByText("Alpha -14.59%")).toBeInTheDocument();
+  expect(screen.getByText("方向正确")).toHaveClass("prediction-token--positive");
+  expect(screen.queryByText("估值风险较高。")).not.toBeInTheDocument();
   expect(screen.getByText("2 次 · 样本不足")).toBeInTheDocument();
   expect(screen.getByText("Hold → Underweight")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "最新任务失败" })).toHaveAttribute(

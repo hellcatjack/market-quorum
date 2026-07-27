@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
@@ -104,7 +105,7 @@ const history = [
   },
 ];
 
-test("shows chronological conclusions, validation matrix and collapsed retries", async () => {
+test("shows newest research first, preserves transitions and can switch to audit order", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const body = String(input).endsWith("/history")
       ? history
@@ -134,26 +135,38 @@ test("shows chronological conclusions, validation matrix and collapsed retries",
   expect(await screen.findByRole("heading", { name: "NVDA 历史评估" })).toBeInTheDocument();
   const events = await screen.findAllByTestId("history-event");
   expect(events).toHaveLength(2);
-  expect(events[0]).toHaveTextContent("2026-06-01");
-  expect(events[1]).toHaveTextContent("2026-07-25");
-  expect(events[1]).toHaveTextContent("Hold → Underweight");
-  expect(events[1]).toHaveTextContent("历史辅助 · 2 个来源");
-  expect(within(events[1]).getByText("1D")).toBeInTheDocument();
-  expect(within(events[1]).getByText("5D")).toBeInTheDocument();
-  expect(within(events[1]).getByText("20D")).toBeInTheDocument();
-  expect(events[1]).toHaveTextContent("+3.00%");
-  expect(events[1]).toHaveTextContent("Alpha +1.00%");
-  expect(events[1]).toHaveTextContent("待验证");
-  expect(events[1]).toHaveTextContent("-20.65%");
-  expect(events[1]).toHaveTextContent("方向正确");
-  expect(events[1]).toHaveTextContent("目标价未命中");
-  expect(within(events[1]).getByRole("link", { name: "查看评估详情" })).toHaveAttribute(
+  expect(events[0]).toHaveTextContent("2026-07-25");
+  expect(events[1]).toHaveTextContent("2026-06-01");
+  expect(screen.getByRole("button", { name: "最新在前" })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  expect(screen.getByText("由新到旧")).toBeInTheDocument();
+  expect(events[0]).toHaveTextContent("Hold → Underweight");
+  expect(events[0]).toHaveTextContent("历史辅助 · 2 个来源");
+  expect(within(events[0]).getByText("1D")).toBeInTheDocument();
+  expect(within(events[0]).getByText("5D")).toBeInTheDocument();
+  expect(within(events[0]).getByText("20D")).toBeInTheDocument();
+  expect(events[0]).toHaveTextContent("+3.00%");
+  expect(events[0]).toHaveTextContent("Alpha +1.00%");
+  expect(events[0]).toHaveTextContent("待验证");
+  expect(events[0]).toHaveTextContent("-20.65%");
+  expect(events[0]).toHaveTextContent("方向正确");
+  expect(events[0]).toHaveTextContent("目标价未命中");
+  expect(within(events[0]).getByRole("link", { name: "查看评估详情" })).toHaveAttribute(
     "href",
     "/runs/run-new",
   );
-  expect(within(events[1]).getByText("其他尝试（1）")).toBeInTheDocument();
-  expect(within(events[1]).getByRole("link", { name: "尝试 #1 · 失败" })).toHaveAttribute(
+  expect(within(events[0]).getByText("其他尝试（1）")).toBeInTheDocument();
+  expect(within(events[0]).getByRole("link", { name: "尝试 #1 · 失败" })).toHaveAttribute(
     "href",
     "/runs/run-new-first",
   );
+
+  await userEvent.click(screen.getByRole("button", { name: "最早在前" }));
+  const chronologicalEvents = screen.getAllByTestId("history-event");
+  expect(screen.getByText("由旧到新")).toBeInTheDocument();
+  expect(chronologicalEvents[0]).toHaveTextContent("2026-06-01");
+  expect(chronologicalEvents[1]).toHaveTextContent("2026-07-25");
+  expect(chronologicalEvents[1]).toHaveTextContent("Hold → Underweight");
 });

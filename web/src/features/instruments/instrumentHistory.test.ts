@@ -1,5 +1,9 @@
 import type { InstrumentHistoryItem } from "../../api/records";
-import { groupInstrumentHistory } from "./instrumentHistory";
+import {
+  groupInstrumentHistory,
+  orderInstrumentHistory,
+  projectInstrumentHistory,
+} from "./instrumentHistory";
 
 function item(
   id: string,
@@ -65,6 +69,46 @@ test("groups retries under the final attempt and returns research events chronol
   expect(descending.map((entry) => entry.run.id)).toEqual([
     "run-retry-2",
     "run-retry-1",
+    "run-old",
+  ]);
+});
+
+test("defaults the research projection to newest first without reversing transition meaning", () => {
+  const newest = item(
+    "run-retry-2",
+    "request-retry",
+    2,
+    "2026-07-25",
+    "2026-07-25T14:00:00Z",
+  );
+  const firstAttempt = item(
+    "run-retry-1",
+    "request-retry",
+    1,
+    "2026-07-25",
+    "2026-07-25T12:00:00Z",
+  );
+  const oldest = item(
+    "run-old",
+    "request-old",
+    1,
+    "2026-06-01",
+    "2026-06-01T12:00:00Z",
+  );
+  oldest.run.status = "succeeded";
+  oldest.rating = "Hold";
+
+  const projected = projectInstrumentHistory([newest, firstAttempt, oldest]);
+
+  expect(projected.map((event) => event.primary.run.id)).toEqual([
+    "run-retry-2",
+    "run-old",
+  ]);
+  expect(projected[0].transition).toBe("Hold → Underweight");
+  expect(orderInstrumentHistory(projected, "oldest").map((event) => event.primary.run.id))
+    .toEqual(["run-old", "run-retry-2"]);
+  expect(projected.map((event) => event.primary.run.id)).toEqual([
+    "run-retry-2",
     "run-old",
   ]);
 });

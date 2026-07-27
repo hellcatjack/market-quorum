@@ -22,33 +22,108 @@ export function formatPercent(value: string | null | undefined): string {
   return `${percentage > 0 ? "+" : ""}${percentage.toFixed(2)}%`;
 }
 
-export function formatPredictionOutcome(overview: InstrumentOverview): string {
+export interface PredictionOutcomeTokens {
+  rating: string | null;
+  direction: string | null;
+  horizon: string | null;
+  performance: string | null;
+  alpha: string | null;
+  outcome: string;
+  target: string | null;
+  state: "completed" | "pending" | "error" | "empty";
+}
+
+export function predictionOutcomeTokens(
+  overview: InstrumentOverview,
+): PredictionOutcomeTokens {
   const decision = overview.latest_decision;
-  if (!decision) return "尚无有效结论";
-  const forecast = `${decision.rating} ${ratingDirection(decision.rating)}`;
+  if (!decision) {
+    return {
+      rating: null,
+      direction: null,
+      horizon: null,
+      performance: null,
+      alpha: null,
+      outcome: "尚无有效结论",
+      target: null,
+      state: "empty",
+    };
+  }
+  const base = {
+    rating: decision.rating,
+    direction: ratingDirection(decision.rating),
+  };
   const validation = overview.preferred_validation;
-  if (!validation) return `${forecast} → 待验证`;
+  if (!validation) {
+    return {
+      ...base,
+      horizon: null,
+      performance: null,
+      alpha: null,
+      outcome: "待验证",
+      target: null,
+      state: "pending",
+    };
+  }
   const horizon = `${validation.horizon}D`;
   if (validation.status === "failed" || validation.status === "unavailable") {
-    return `${forecast} → ${horizon} 验证异常`;
+    return {
+      ...base,
+      horizon,
+      performance: null,
+      alpha: null,
+      outcome: "验证异常",
+      target: null,
+      state: "error",
+    };
   }
-  if (validation.status !== "completed") return `${forecast} → ${horizon} 待验证`;
+  if (validation.status !== "completed") {
+    return {
+      ...base,
+      horizon,
+      performance: null,
+      alpha: null,
+      outcome: "待验证",
+      target: null,
+      state: "pending",
+    };
+  }
 
   const performance = formatPercent(validation.total_return);
   const alpha = validation.total_alpha === null
-    ? ""
-    : ` / Alpha ${formatPercent(validation.total_alpha)}`;
-  const direction = validation.direction_correct === true
+    ? null
+    : `Alpha ${formatPercent(validation.total_alpha)}`;
+  const outcome = validation.direction_correct === true
     ? "方向正确"
     : validation.direction_correct === false
       ? "方向错误"
       : "方向未判定";
   const target = validation.price_target_hit === true
-    ? " · 目标价命中"
+    ? "目标价命中"
     : validation.price_target_hit === false
-      ? " · 目标价未命中"
-      : "";
-  return `${forecast} → ${horizon} ${performance}${alpha} → ${direction}${target}`;
+      ? "目标价未命中"
+      : null;
+  return {
+    ...base,
+    horizon,
+    performance,
+    alpha,
+    outcome,
+    target,
+    state: "completed",
+  };
+}
+
+export function formatPredictionOutcome(overview: InstrumentOverview): string {
+  const tokens = predictionOutcomeTokens(overview);
+  if (tokens.state === "empty") return tokens.outcome;
+  const forecast = `${tokens.rating} ${tokens.direction}`;
+  if (tokens.state !== "completed") {
+    return `${forecast} → ${tokens.horizon ? `${tokens.horizon} ` : ""}${tokens.outcome}`;
+  }
+  const alpha = tokens.alpha ? ` / ${tokens.alpha}` : "";
+  const target = tokens.target ? ` · ${tokens.target}` : "";
+  return `${forecast} → ${tokens.horizon} ${tokens.performance}${alpha} → ${tokens.outcome}${target}`;
 }
 
 export function reliabilityLabel(stats: ValidationStats | undefined): string {
