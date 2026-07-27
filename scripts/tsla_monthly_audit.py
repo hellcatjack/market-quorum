@@ -5,7 +5,7 @@ import hashlib
 import json
 import os
 import time
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -162,6 +162,29 @@ def _as_date(value: object, label: str) -> date:
         return date.fromisoformat(str(value))
     except ValueError as error:
         raise AuditFailure(f"{label} is not an ISO date") from error
+
+
+def _assessment_elapsed_seconds(run: dict[str, Any]) -> float:
+    try:
+        started_value = str(run["started_at"])
+        finished_value = str(run["finished_at"])
+        started_at = datetime.fromisoformat(
+            started_value[:-1] + "+00:00" if started_value.endswith("Z") else started_value
+        )
+        finished_at = datetime.fromisoformat(
+            finished_value[:-1] + "+00:00"
+            if finished_value.endswith("Z")
+            else finished_value
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise AuditFailure("assessment run timestamps are incomplete") from error
+    _require(
+        started_at.tzinfo is not None and finished_at.tzinfo is not None,
+        "assessment run timestamps must include a timezone",
+    )
+    elapsed_seconds = (finished_at - started_at).total_seconds()
+    _require(elapsed_seconds >= 0, "assessment run timestamps are out of order")
+    return round(elapsed_seconds, 3)
 
 
 def validate_checkpoint(checkpoint: dict[str, Any]) -> dict[str, Any]:
@@ -444,7 +467,7 @@ def run_checkpoint(
     summary = validate_checkpoint(checkpoint)
     summary.update(
         {
-            "elapsed_seconds": round(clock() - checkpoint_started, 3),
+            "elapsed_seconds": _assessment_elapsed_seconds(run),
             "time_horizon": decision.get("time_horizon"),
             "memory_sources": list((run.get("memory") or {}).get("sources") or []),
             "validations": validations,
