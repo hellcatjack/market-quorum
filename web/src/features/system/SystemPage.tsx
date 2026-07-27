@@ -3,13 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getCapacity } from "../../api/assessments";
 import { getCurrentUser } from "../../api/records";
 import {
+  getModelRoutingPolicy,
   getSchedulerPolicy,
   getSystemStatus,
+  type ModelRoutingPolicy,
   type SchedulerPolicy,
+  updateModelRoutingPolicy,
   updateSchedulerPolicy,
 } from "../../api/system";
 import { LocalTime } from "../runs/RunTimeline";
 import { CapacityBanner } from "./CapacityBanner";
+
+type ModelName = ModelRoutingPolicy["fast"]["model"];
+type ReasoningEffort = ModelRoutingPolicy["fast"]["reasoning_effort"];
 
 function PolicyForm({ policy, editable }: { policy: SchedulerPolicy; editable: boolean }) {
   const queryClient = useQueryClient();
@@ -47,17 +53,78 @@ function PolicyForm({ policy, editable }: { policy: SchedulerPolicy; editable: b
   );
 }
 
+function ModelRoutingForm({
+  policy,
+  editable,
+}: {
+  policy: ModelRoutingPolicy;
+  editable: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const update = useMutation({
+    mutationFn: updateModelRoutingPolicy,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["model-routing"] }),
+  });
+  const modelOptions = policy.available_models.map((model) => (
+    <option key={model} value={model}>{model}</option>
+  ));
+  const effortOptions = policy.available_reasoning_efforts.map((effort) => (
+    <option key={effort} value={effort}>{effort}</option>
+  ));
+  return (
+    <form
+      className="policy-form"
+      key={`${policy.version}-${editable}`}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        update.mutate({
+          fast: {
+            model: String(data.get("fast_model")) as ModelName,
+            reasoning_effort: String(data.get("fast_reasoning_effort")) as ReasoningEffort,
+          },
+          slow: {
+            model: String(data.get("slow_model")) as ModelName,
+            reasoning_effort: String(data.get("slow_reasoning_effort")) as ReasoningEffort,
+          },
+        });
+      }}
+    >
+      <label>
+        <span>快模型</span>
+        <select aria-label="快模型" name="fast_model" defaultValue={policy.fast.model} disabled={!editable}>{modelOptions}</select>
+      </label>
+      <label>
+        <span>快模型思考深度</span>
+        <select aria-label="快模型思考深度" name="fast_reasoning_effort" defaultValue={policy.fast.reasoning_effort} disabled={!editable}>{effortOptions}</select>
+      </label>
+      <label>
+        <span>慢模型</span>
+        <select aria-label="慢模型" name="slow_model" defaultValue={policy.slow.model} disabled={!editable}>{modelOptions}</select>
+      </label>
+      <label>
+        <span>慢模型思考深度</span>
+        <select aria-label="慢模型思考深度" name="slow_reasoning_effort" defaultValue={policy.slow.reasoning_effort} disabled={!editable}>{effortOptions}</select>
+      </label>
+      <p>路由版本 {policy.version} · <LocalTime value={policy.updated_at} /></p>
+      {update.isError ? <p className="page-warning" role="alert">模型路由保存失败，请检查选择后重试。</p> : null}
+      {editable ? <button className="primary-button" type="submit" disabled={update.isPending}>{update.isPending ? "保存中…" : "保存模型路由"}</button> : <p className="readonly-note">当前账号只有只读权限。</p>}
+    </form>
+  );
+}
+
 export function SystemPage() {
   const user = useQuery({ queryKey: ["current-user"], queryFn: getCurrentUser, retry: false });
   const status = useQuery({ queryKey: ["system-status"], queryFn: getSystemStatus, refetchInterval: 5_000, retry: false });
   const capacity = useQuery({ queryKey: ["system-capacity"], queryFn: getCapacity, refetchInterval: 5_000, retry: false });
   const policy = useQuery({ queryKey: ["scheduler-policy"], queryFn: getSchedulerPolicy, retry: false });
+  const modelRouting = useQuery({ queryKey: ["model-routing"], queryFn: getModelRoutingPolicy, retry: false });
   const editable = Boolean(user.data?.roles.includes("Admin") && user.data.scopes.includes("assessments:admin"));
   return (
     <section className="page-shell system-page">
       <header className="page-header"><p className="eyebrow">运行诊断 / 安全准入</p><h1>系统状态</h1><p>仅展示容量与健康元数据，不返回密钥、环境值或本地路径。</p></header>
       {capacity.data ? <CapacityBanner capacity={capacity.data} /> : null}
-      {status.isError || capacity.isError || policy.isError ? <p className="page-warning" role="alert">部分系统诊断暂时不可用。</p> : null}
+      {status.isError || capacity.isError || policy.isError || modelRouting.isError ? <p className="page-warning" role="alert">部分系统诊断暂时不可用。</p> : null}
       <div className="system-grid">
         <section className="detail-panel">
           <div className="section-heading"><p className="eyebrow">Gateway</p><h2>Codex 接口</h2></div>
@@ -74,6 +141,11 @@ export function SystemPage() {
         <section className="detail-panel">
           <div className="section-heading"><p className="eyebrow">管理策略</p><h2>调度阈值</h2></div>
           {policy.data ? <PolicyForm policy={policy.data} editable={editable} /> : <p role="status">载入中…</p>}
+        </section>
+        <section className="detail-panel">
+          <div className="section-heading"><p className="eyebrow">TradingAgents</p><h2>模型路由</h2></div>
+          <p>快模型承担高频分析与辩论，慢模型负责研究裁决与最终投资组合判断。更改只影响之后准入的新任务。</p>
+          {modelRouting.data ? <ModelRoutingForm policy={modelRouting.data} editable={editable} /> : <p role="status">载入中…</p>}
         </section>
       </div>
     </section>

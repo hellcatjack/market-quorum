@@ -2,6 +2,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, model_validator
 
+from tradingng_platform.model_routing import (
+    ModelRoute,
+    ModelRoutingPolicy,
+)
 from tradingng_platform.scheduler.policy import (
     ABSOLUTE_MAX_RUNNING_TOTAL,
     AdmissionPolicy,
@@ -53,5 +57,21 @@ class SchedulerPolicyCommand(BaseModel):
 
 
 class SchedulerPolicyView(SchedulerPolicyCommand):
+    version: int
+    updated_at: datetime
+
+
+class ModelRoutingPolicyCommand(BaseModel):
+    fast: ModelRoute
+    slow: ModelRoute
+
+    def to_policy(self) -> ModelRoutingPolicy:
+        return ModelRoutingPolicy(fast=self.fast, slow=self.slow)
+
+
+class ModelRoutingPolicyView(ModelRoutingPolicyCommand):
+    available_models: list[str]
+    available_reasoning_efforts: list[str]
+    routing_snapshot_id: str
     version: int
     updated_at: datetime

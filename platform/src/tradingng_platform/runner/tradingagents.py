@@ -109,6 +109,18 @@ class TradingAgentsRunner:
             directories["working"],
             self.input.data_vendors,
             self.input.tool_vendors,
+            model_routes={
+                "codex-fast": {
+                    "route": "fast",
+                    "model": self.input.fast_codex_model,
+                    "reasoning_effort": self.input.fast_codex_reasoning_effort,
+                },
+                "codex-slow": {
+                    "route": "slow",
+                    "model": self.input.slow_codex_model,
+                    "reasoning_effort": self.input.slow_codex_reasoning_effort,
+                },
+            },
         )
         stage_tracker = StageTracker()
 
@@ -211,8 +223,8 @@ class TradingAgentsRunner:
         config.update(
             {
                 "llm_provider": "openai_compatible",
-                "deep_think_llm": "codex",
-                "quick_think_llm": "codex",
+                "deep_think_llm": "codex-slow",
+                "quick_think_llm": "codex-fast",
                 "backend_url": str(self.input.gateway_url).rstrip("/") + "/v1",
                 "output_language": self.input.language,
                 "max_debate_rounds": self.input.debate_rounds,
@@ -225,8 +237,14 @@ class TradingAgentsRunner:
                 "tool_vendors": dict(self.input.tool_vendors),
                 "llm_default_headers": {
                     "X-TradingNG-Run-ID": str(self.input.run_id),
-                    "X-TradingNG-Codex-Model": self.input.codex_model,
-                    "X-TradingNG-Codex-Reasoning-Effort": self.input.codex_reasoning_effort,
+                    "X-TradingNG-Codex-Fast-Model": self.input.fast_codex_model,
+                    "X-TradingNG-Codex-Fast-Reasoning-Effort": (
+                        self.input.fast_codex_reasoning_effort
+                    ),
+                    "X-TradingNG-Codex-Slow-Model": self.input.slow_codex_model,
+                    "X-TradingNG-Codex-Slow-Reasoning-Effort": (
+                        self.input.slow_codex_reasoning_effort
+                    ),
                 },
             }
         )

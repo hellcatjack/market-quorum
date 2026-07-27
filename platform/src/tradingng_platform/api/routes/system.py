@@ -14,6 +14,8 @@ from tradingng_platform.auth.tokens import (
 )
 from tradingng_platform.system.contracts import (
     CapacityView,
+    ModelRoutingPolicyCommand,
+    ModelRoutingPolicyView,
     SchedulerPolicyCommand,
     SchedulerPolicyView,
 )
@@ -64,6 +66,35 @@ async def update_scheduler_policy(
     principal: Annotated[Principal, Depends(require_scopes("assessments:admin"))],
 ) -> SchedulerPolicyView:
     return await request.app.state.system.update_scheduler_policy(
+        principal,
+        command,
+        request_id_for(request),
+    )
+
+
+@router.get(
+    "/system/model-routing",
+    response_model=ModelRoutingPolicyView,
+    operation_id="get_model_routing_policy",
+)
+async def model_routing_policy(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scopes("system:read"))],
+) -> ModelRoutingPolicyView:
+    return await request.app.state.system.get_model_routing(principal)
+
+
+@router.put(
+    "/system/model-routing",
+    response_model=ModelRoutingPolicyView,
+    operation_id="update_model_routing_policy",
+)
+async def update_model_routing_policy(
+    command: ModelRoutingPolicyCommand,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scopes("assessments:admin"))],
+) -> ModelRoutingPolicyView:
+    return await request.app.state.system.update_model_routing(
         principal,
         command,
         request_id_for(request),

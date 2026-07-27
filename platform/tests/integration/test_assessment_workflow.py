@@ -134,6 +134,17 @@ async def test_run_detail_exposes_immutable_execution_metadata(
                     "model": "gpt-5.6-sol",
                     "reasoning_effort": "xhigh",
                     "snapshot_id": "gateway-snapshot",
+                    "routes": {
+                        "fast": {
+                            "model": "gpt-5.6-terra",
+                            "reasoning_effort": "medium",
+                        },
+                        "slow": {
+                            "model": "gpt-5.6-sol",
+                            "reasoning_effort": "high",
+                        },
+                    },
+                    "routing_snapshot_id": "routing-snapshot",
                 },
                 "source": {
                     "root_commit": "root-commit",
@@ -177,6 +188,11 @@ async def test_run_detail_exposes_immutable_execution_metadata(
     assert detail.config_snapshot_sha256 == "a" * 64
     assert detail.gateway_model == "gpt-5.6-sol"
     assert detail.gateway_reasoning_effort == "xhigh"
+    assert detail.gateway_fast_model == "gpt-5.6-terra"
+    assert detail.gateway_fast_reasoning_effort == "medium"
+    assert detail.gateway_slow_model == "gpt-5.6-sol"
+    assert detail.gateway_slow_reasoning_effort == "high"
+    assert detail.model_routing_snapshot_id == "routing-snapshot"
     assert detail.root_commit == "root-commit"
     assert detail.tradingagents_commit == "ta-commit"
     assert detail.prompt_schema_version == "v1"

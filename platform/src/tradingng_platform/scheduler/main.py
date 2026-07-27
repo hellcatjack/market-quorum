@@ -11,6 +11,7 @@ from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.gateway.client import GatewayClient, GatewayStatusError
 from tradingng_platform.instruments.names import run_instrument_name_enrichment
+from tradingng_platform.model_routing import ModelRoutingPolicyRepository
 from tradingng_platform.scheduler.circuits import CircuitBreakerRepository
 from tradingng_platform.scheduler.probes import SystemProbe
 from tradingng_platform.scheduler.repository import (
@@ -102,6 +103,7 @@ async def run_scheduler() -> None:
                         gateway,
                         system_probe,
                         metadata,
+                        model_routing_repository=ModelRoutingPolicyRepository(session),
                     )
                     decision = await service.admit_one()
                 if decision.allowed:

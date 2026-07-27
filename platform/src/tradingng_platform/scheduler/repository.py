@@ -12,6 +12,7 @@ from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus, assert_transition
 from tradingng_platform.gateway.client import GatewaySnapshot
 from tradingng_platform.memory import HistoricalMemoryRepository, MemorySnapshot
+from tradingng_platform.model_routing import ModelRoutingPolicy
 from tradingng_platform.models import (
     AssessmentBatch,
     AssessmentRequest,
@@ -80,7 +81,9 @@ def build_run_snapshot(
     gateway: GatewaySnapshot,
     metadata: ExecutionMetadata,
     memory: MemorySnapshot,
+    model_routing: ModelRoutingPolicy | None = None,
 ) -> BuiltRunSnapshot:
+    routing = model_routing or ModelRoutingPolicy()
     depth = Depth(request_config["depth"])
     debate_rounds, risk_rounds = DEPTH_ROUNDS[depth]
     benchmark_ticker = str(request_config.get("benchmark_ticker") or "SPY")
@@ -95,6 +98,8 @@ def build_run_snapshot(
             "model": gateway.model,
             "reasoning_effort": gateway.reasoning_effort,
             "snapshot_id": gateway.snapshot_id,
+            "routes": routing.model_dump(mode="json"),
+            "routing_snapshot_id": routing.snapshot_id,
         },
         "source": {
             "root_commit": metadata.root_commit,
@@ -197,6 +202,7 @@ class SchedulerRepository:
         gateway: GatewaySnapshot,
         system: SystemSnapshot,
         metadata: ExecutionMetadata,
+        model_routing: ModelRoutingPolicy | None = None,
     ) -> AdmissionDecision:
         admission_lock = await acquire_transaction_lock(
             self.session,
@@ -296,7 +302,13 @@ class SchedulerRepository:
             analysis_date=request.analysis_date,
             mode=memory_mode,
         )
-        built = build_run_snapshot(request_config, gateway, metadata, memory)
+        built = build_run_snapshot(
+            request_config,
+            gateway,
+            metadata,
+            memory,
+            model_routing,
+        )
         snapshot = await self.session.scalar(
             select(RunConfigSnapshot).where(RunConfigSnapshot.sha256 == built.sha256)
         )

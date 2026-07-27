@@ -40,6 +40,10 @@ class RunnerInput(BaseModel):
     gateway_url: AnyHttpUrl
     codex_model: str = Field(min_length=1, max_length=128)
     codex_reasoning_effort: str = Field(min_length=1, max_length=32)
+    fast_codex_model: str = Field(min_length=1, max_length=128)
+    fast_codex_reasoning_effort: str = Field(min_length=1, max_length=32)
+    slow_codex_model: str = Field(min_length=1, max_length=128)
+    slow_codex_reasoning_effort: str = Field(min_length=1, max_length=32)
     work_dir: Path
     data_vendors: dict[str, str]
     tool_vendors: dict[str, str]
@@ -49,6 +53,24 @@ class RunnerInput(BaseModel):
     alpha_vantage_retry_base_seconds: float = Field(default=5, gt=0, le=300)
     alpha_vantage_retry_max_seconds: float = Field(default=60, gt=0, le=900)
     memory: MemorySnapshot = Field(default_factory=empty_memory_snapshot)
+
+    @model_validator(mode="before")
+    @classmethod
+    def expand_legacy_single_model_route(cls, value):
+        if not isinstance(value, dict):
+            return value
+        expanded = dict(value)
+        expanded.setdefault("fast_codex_model", expanded.get("codex_model"))
+        expanded.setdefault(
+            "fast_codex_reasoning_effort",
+            expanded.get("codex_reasoning_effort"),
+        )
+        expanded.setdefault("slow_codex_model", expanded.get("codex_model"))
+        expanded.setdefault(
+            "slow_codex_reasoning_effort",
+            expanded.get("codex_reasoning_effort"),
+        )
+        return expanded
 
     @model_validator(mode="after")
     def validate_alpha_vantage_retry_window(self):

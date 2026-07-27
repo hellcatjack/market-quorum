@@ -124,6 +124,11 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
       gateway_snapshot_id: "gateway-snapshot",
       gateway_model: "gpt-5.6-sol",
       gateway_reasoning_effort: "xhigh",
+      gateway_fast_model: "gpt-5.6-terra",
+      gateway_fast_reasoning_effort: "medium",
+      gateway_slow_model: "gpt-5.6-sol",
+      gateway_slow_reasoning_effort: "high",
+      model_routing_snapshot_id: "routing-snapshot",
       root_commit: "root-commit",
       tradingagents_commit: "ta-commit",
       prompt_schema_version: "v1",
@@ -163,6 +168,10 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
   expect(await screen.findByRole("heading", { name: "SPCX 评估详情" })).toBeInTheDocument();
   expect(screen.getByText("gpt-5.6-sol")).toBeInTheDocument();
   expect(screen.getByText("xhigh")).toBeInTheDocument();
+  expect(screen.getByText("快模型")).toBeInTheDocument();
+  expect(screen.getByText("gpt-5.6-terra · medium")).toBeInTheDocument();
+  expect(screen.getByText("慢模型")).toBeInTheDocument();
+  expect(screen.getByText("gpt-5.6-sol · high")).toBeInTheDocument();
   expect(screen.getByText("snapshot-sha")).toBeInTheDocument();
   expect(screen.getByText("历史辅助")).toBeInTheDocument();
   expect(screen.getByText("历史经验 1 条")).toBeInTheDocument();

@@ -154,6 +154,10 @@ def _runner_input(tmp_path):
         gateway_url="http://127.0.0.1:8000",
         codex_model="gpt-5.6-sol",
         codex_reasoning_effort="xhigh",
+        fast_codex_model="gpt-5.6-terra",
+        fast_codex_reasoning_effort="medium",
+        slow_codex_model="gpt-5.6-sol",
+        slow_codex_reasoning_effort="high",
         work_dir=tmp_path / "job",
         data_vendors={"core_stock_apis": "yfinance"},
         tool_vendors={"get_stock_data": "yfinance"},
@@ -175,9 +179,13 @@ def test_runner_isolated_config_artifacts_and_redaction(tmp_path):
     headers = _FakeGraph.last_config["llm_default_headers"]
     assert headers == {
         "X-TradingNG-Run-ID": str(runner_input.run_id),
-        "X-TradingNG-Codex-Model": "gpt-5.6-sol",
-        "X-TradingNG-Codex-Reasoning-Effort": "xhigh",
+        "X-TradingNG-Codex-Fast-Model": "gpt-5.6-terra",
+        "X-TradingNG-Codex-Fast-Reasoning-Effort": "medium",
+        "X-TradingNG-Codex-Slow-Model": "gpt-5.6-sol",
+        "X-TradingNG-Codex-Slow-Reasoning-Effort": "high",
     }
+    assert _FakeGraph.last_config["quick_think_llm"] == "codex-fast"
+    assert _FakeGraph.last_config["deep_think_llm"] == "codex-slow"
     assert _FakeGraph.last_config["max_debate_rounds"] == 3
     assert _FakeGraph.last_config["max_risk_discuss_rounds"] == 3
     assert [event.name for event in events if event.type == "stage"] == [
@@ -292,11 +300,23 @@ def test_historical_runner_uses_fred_vintage_available_on_analysis_date(tmp_path
 
 
 def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path):
-    callback = AuditCallback(tmp_path, {}, {})
+    callback = AuditCallback(
+        tmp_path,
+        {},
+        {},
+        model_routes={
+            "codex-fast": {
+                "route": "fast",
+                "model": "gpt-5.6-terra",
+                "reasoning_effort": "medium",
+            }
+        },
+    )
     callback.on_chat_model_start(
-        {"name": "codex"},
+        {"name": "LocalCompatibleChatOpenAI"},
         [[HumanMessage(content="visible prompt")]],
         run_id="llm-1",
+        invocation_params={"model_name": "codex-fast"},
     )
     response = SimpleNamespace(
         generations=[
@@ -325,6 +345,10 @@ def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path
     assert "must-not-leak" not in interaction
     assert "[REDACTED]" in interaction
     assert record["status"] == "completed"
+    assert record["route"] == "fast"
+    assert record["model_alias"] == "codex-fast"
+    assert record["physical_model"] == "gpt-5.6-terra"
+    assert record["reasoning_effort"] == "medium"
     assert record["completed_at"]
     assert isinstance(record["duration_ms"], int)
 

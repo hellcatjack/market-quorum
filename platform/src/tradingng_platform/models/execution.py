@@ -65,6 +65,16 @@ class SchedulerPolicyRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(PORTABLE_DATETIME)
 
 
+class ModelRoutingPolicyRecord(Base):
+    __tablename__ = "model_routing_policy"
+
+    key: Mapped[str] = mapped_column(String(32), primary_key=True, default="default")
+    content_json: Mapped[dict] = mapped_column(PORTABLE_JSON)
+    version: Mapped[int] = mapped_column(default=1)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(PORTABLE_DATETIME)
+
+
 class GatewayHealthSample(UuidPrimaryKey, Base):
     __tablename__ = "gateway_health_samples"
 

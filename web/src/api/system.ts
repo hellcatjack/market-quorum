@@ -4,6 +4,10 @@ import type { components } from "./schema";
 export type SchedulerPolicy = components["schemas"]["SchedulerPolicyView"];
 export type SchedulerPolicyCommand = components["schemas"]["SchedulerPolicyCommand"];
 
+export type ModelRoutingPolicy = components["schemas"]["ModelRoutingPolicyView"];
+export type ModelRoutingPolicyCommand =
+  components["schemas"]["ModelRoutingPolicyCommand"];
+
 export interface SystemStatus {
   gateway: {
     status: string;
@@ -33,6 +37,13 @@ export const getSchedulerPolicy = () =>
   apiRequest<SchedulerPolicy>("/api/v1/system/scheduler-policy");
 export const updateSchedulerPolicy = (command: SchedulerPolicyCommand) =>
   apiRequest<SchedulerPolicy>("/api/v1/system/scheduler-policy", {
+    method: "PUT",
+    body: jsonBody(command),
+  });
+export const getModelRoutingPolicy = () =>
+  apiRequest<ModelRoutingPolicy>("/api/v1/system/model-routing");
+export const updateModelRoutingPolicy = (command: ModelRoutingPolicyCommand) =>
+  apiRequest<ModelRoutingPolicy>("/api/v1/system/model-routing", {
     method: "PUT",
     body: jsonBody(command),
   });

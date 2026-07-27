@@ -5,6 +5,7 @@ from decimal import Decimal
 from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.gateway.client import GatewaySnapshot
 from tradingng_platform.memory.context import MemoryCandidate, build_memory_snapshot
+from tradingng_platform.model_routing import ModelRoute, ModelRoutingPolicy
 from tradingng_platform.scheduler import repository
 from tradingng_platform.scheduler.policy import AdmissionDecision, AdmissionPolicy, SystemSnapshot
 from tradingng_platform.scheduler.repository import ExecutionMetadata, build_run_snapshot
@@ -41,18 +42,31 @@ class _PolicyRepository:
         return AdmissionPolicy(max_running_total=self.calls)
 
 
+class _ModelRoutingRepository:
+    def __init__(self):
+        self.calls = 0
+
+    async def get(self):
+        self.calls += 1
+        return ModelRoutingPolicy(
+            fast=ModelRoute(model="gpt-5.6-terra", reasoning_effort="medium"),
+            slow=ModelRoute(model="gpt-5.6-sol", reasoning_effort="xhigh"),
+        )
+
+
 class _SchedulerRepository:
     def __init__(self):
         self.calls = []
 
-    async def admit_one(self, policy, gateway, system, metadata):
-        self.calls.append((policy, gateway, system, metadata))
+    async def admit_one(self, policy, gateway, system, metadata, model_routing):
+        self.calls.append((policy, gateway, system, metadata, model_routing))
         return AdmissionDecision(True, ())
 
 
 async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
     gateway = _Gateway()
     policy_repository = _PolicyRepository()
+    model_routing_repository = _ModelRoutingRepository()
     scheduler_repository = _SchedulerRepository()
     metadata = ExecutionMetadata(
         root_commit="root-sha",
@@ -75,6 +89,7 @@ async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
         gateway,
         _SystemProbe(),
         metadata,
+        model_routing_repository=model_routing_repository,
     )
 
     await service.admit_one()
@@ -82,8 +97,10 @@ async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
 
     assert gateway.calls == 2
     assert policy_repository.calls == 2
+    assert model_routing_repository.calls == 2
     assert [call[0].max_running_total for call in scheduler_repository.calls] == [1, 2]
     assert [call[1].active_completions for call in scheduler_repository.calls] == [0, 1]
+    assert all(call[4].fast.model == "gpt-5.6-terra" for call in scheduler_repository.calls)
 
 
 def test_configured_vendors_expands_ordered_fallback_chains():
@@ -169,3 +186,39 @@ def test_run_snapshot_is_canonical_and_resolves_depth_rounds():
     assert first.content["memory"]["entries"][0]["horizon"] == 5
     assert first.content["memory"]["snapshot_sha256"] == memory.snapshot_sha256
     assert first.content["vendor_policies"] == metadata.vendor_policies
+
+
+def test_run_snapshot_freezes_fast_and_slow_model_routes():
+    gateway = GatewaySnapshot(
+        status="ok",
+        active_completions=0,
+        model="gpt-5.6-sol",
+        reasoning_effort="xhigh",
+        snapshot_id="b" * 64,
+        latency_ms=9,
+    )
+    routing = ModelRoutingPolicy(
+        fast=ModelRoute(model="gpt-5.6-terra", reasoning_effort="medium"),
+        slow=ModelRoute(model="gpt-5.6-sol", reasoning_effort="high"),
+    )
+
+    snapshot = build_run_snapshot(
+        {
+            "ticker": "NVDA",
+            "asset_type": "stock",
+            "analysis_date": "2026-07-25",
+            "analysts": ["market"],
+            "depth": "shallow",
+            "language": "Chinese",
+        },
+        gateway,
+        ExecutionMetadata("root", "submodule", "v1", {}, {}),
+        build_memory_snapshot(MemoryMode.INDEPENDENT, "NVDA", date(2026, 7, 25), ()),
+        routing,
+    )
+
+    assert snapshot.content["gateway"]["routes"] == {
+        "fast": {"model": "gpt-5.6-terra", "reasoning_effort": "medium"},
+        "slow": {"model": "gpt-5.6-sol", "reasoning_effort": "high"},
+    }
+    assert snapshot.content["gateway"]["routing_snapshot_id"] == routing.snapshot_id

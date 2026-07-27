@@ -95,6 +95,13 @@ def build_runner_input(
     request = claim.snapshot["request"]
     resolved = claim.snapshot["resolved"]
     gateway = claim.snapshot["gateway"]
+    routes = dict(gateway.get("routes") or {})
+    legacy_route = {
+        "model": gateway["model"],
+        "reasoning_effort": gateway["reasoning_effort"],
+    }
+    fast_route = dict(routes.get("fast") or legacy_route)
+    slow_route = dict(routes.get("slow") or legacy_route)
     memory_payload = claim.snapshot.get("memory")
     memory = (
         MemorySnapshot.model_validate(memory_payload)
@@ -114,6 +121,10 @@ def build_runner_input(
         gateway_url=gateway_url,
         codex_model=gateway["model"],
         codex_reasoning_effort=gateway["reasoning_effort"],
+        fast_codex_model=fast_route["model"],
+        fast_codex_reasoning_effort=fast_route["reasoning_effort"],
+        slow_codex_model=slow_route["model"],
+        slow_codex_reasoning_effort=slow_route["reasoning_effort"],
         work_dir=job_dir / str(claim.run_id),
         data_vendors=claim.snapshot["data_vendors"],
         tool_vendors=claim.snapshot["tool_vendors"],

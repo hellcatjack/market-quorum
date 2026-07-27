@@ -83,6 +83,7 @@ class AuditCallback(BaseCallbackHandler):
         working_dir: Path,
         data_vendors: dict[str, str],
         tool_vendors: dict[str, str],
+        model_routes: dict[str, dict[str, str]] | None = None,
     ):
         self.working_dir = working_dir
         self.working_dir.mkdir(parents=True, exist_ok=True)
@@ -91,6 +92,7 @@ class AuditCallback(BaseCallbackHandler):
         self.health_path = self.working_dir / "dependency_health.jsonl"
         self.data_vendors = data_vendors
         self.tool_vendors = tool_vendors
+        self.model_routes = model_routes or {}
         self._tools: dict[Any, dict] = {}
         self._llm: dict[Any, dict] = {}
         self._lock = threading.Lock()
@@ -161,12 +163,25 @@ class AuditCallback(BaseCallbackHandler):
         run_id: Any = None,
         **kwargs,
     ) -> None:
-        self._llm[run_id] = {
+        invocation_params = kwargs.get("invocation_params") or {}
+        model_alias = invocation_params.get("model_name") or invocation_params.get("model")
+        route_metadata = self.model_routes.get(str(model_alias), {})
+        pending = {
             "model": serialized.get("name") or serialized.get("id") or "unknown_model",
             "messages": redact(messages),
             "started_at": datetime.now(timezone.utc).isoformat(),
             "started_monotonic": time.monotonic(),
         }
+        if route_metadata:
+            pending.update(
+                {
+                    "route": route_metadata["route"],
+                    "model_alias": str(model_alias),
+                    "physical_model": route_metadata["model"],
+                    "reasoning_effort": route_metadata["reasoning_effort"],
+                }
+            )
+        self._llm[run_id] = pending
 
     def on_llm_end(self, response: Any, *, run_id: Any = None, **kwargs) -> None:
         pending = self._llm.pop(run_id, {})

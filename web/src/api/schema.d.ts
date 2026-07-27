@@ -416,6 +416,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/system/model-routing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Model Routing Policy */
+        get: operations["get_model_routing_policy"];
+        /** Update Model Routing Policy */
+        put: operations["update_model_routing_policy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/system/scheduler-policy": {
         parameters: {
             query?: never;
@@ -1011,6 +1029,42 @@ export interface components {
              */
             validation_id: string;
         };
+        /** ModelRoute */
+        ModelRoute: {
+            /**
+             * Model
+             * @enum {string}
+             */
+            model: "gpt-5.6-terra" | "gpt-5.6-sol";
+            /**
+             * Reasoning Effort
+             * @enum {string}
+             */
+            reasoning_effort: "low" | "medium" | "high" | "xhigh" | "max" | "ultra";
+        };
+        /** ModelRoutingPolicyCommand */
+        ModelRoutingPolicyCommand: {
+            fast: components["schemas"]["ModelRoute"];
+            slow: components["schemas"]["ModelRoute"];
+        };
+        /** ModelRoutingPolicyView */
+        ModelRoutingPolicyView: {
+            /** Available Models */
+            available_models: string[];
+            /** Available Reasoning Efforts */
+            available_reasoning_efforts: string[];
+            fast: components["schemas"]["ModelRoute"];
+            /** Routing Snapshot Id */
+            routing_snapshot_id: string;
+            slow: components["schemas"]["ModelRoute"];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Version */
+            version: number;
+        };
         /** ReviewView */
         ReviewView: {
             /** Comment */
@@ -1059,10 +1113,18 @@ export interface components {
             };
             /** Exchange */
             exchange?: string | null;
+            /** Gateway Fast Model */
+            gateway_fast_model?: string | null;
+            /** Gateway Fast Reasoning Effort */
+            gateway_fast_reasoning_effort?: string | null;
             /** Gateway Model */
             gateway_model?: string | null;
             /** Gateway Reasoning Effort */
             gateway_reasoning_effort?: string | null;
+            /** Gateway Slow Model */
+            gateway_slow_model?: string | null;
+            /** Gateway Slow Reasoning Effort */
+            gateway_slow_reasoning_effort?: string | null;
             /** Gateway Snapshot Id */
             gateway_snapshot_id?: string | null;
             /**
@@ -1073,6 +1135,8 @@ export interface components {
             /** Instrument Name */
             instrument_name?: string | null;
             memory?: components["schemas"]["RunMemoryView"];
+            /** Model Routing Snapshot Id */
+            model_routing_snapshot_id?: string | null;
             /** Prompt Schema Version */
             prompt_schema_version?: string | null;
             /** Request Config */
@@ -2251,6 +2315,59 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CapacityView"];
+                };
+            };
+        };
+    };
+    get_model_routing_policy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelRoutingPolicyView"];
+                };
+            };
+        };
+    };
+    update_model_routing_policy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ModelRoutingPolicyCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelRoutingPolicyView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

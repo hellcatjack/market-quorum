@@ -80,6 +80,11 @@ class RunDetailView(RunView):
     gateway_snapshot_id: str | None = None
     gateway_model: str | None = None
     gateway_reasoning_effort: str | None = None
+    gateway_fast_model: str | None = None
+    gateway_fast_reasoning_effort: str | None = None
+    gateway_slow_model: str | None = None
+    gateway_slow_reasoning_effort: str | None = None
+    model_routing_snapshot_id: str | None = None
     root_commit: str | None = None
     tradingagents_commit: str | None = None
     prompt_schema_version: str | None = None

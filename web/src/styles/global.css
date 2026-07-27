@@ -1817,7 +1817,8 @@ pre {
 .collaboration-grid textarea,
 .collaboration-grid select,
 .collaboration-grid button,
-.policy-form input {
+.policy-form input,
+.policy-form select {
   min-height: 44px;
   padding: 9px 11px;
   border: 1px solid #bfc6ca;

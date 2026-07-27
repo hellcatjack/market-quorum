@@ -170,6 +170,8 @@ export function RunDetailPage() {
         <dl>
           <div><dt>Gateway 模型</dt><MetadataValue value={run.data.gateway_model} /></div>
           <div><dt>思考深度</dt><MetadataValue value={run.data.gateway_reasoning_effort} /></div>
+          <div><dt>快模型</dt><MetadataValue value={run.data.gateway_fast_model && run.data.gateway_fast_reasoning_effort ? `${run.data.gateway_fast_model} · ${run.data.gateway_fast_reasoning_effort}` : run.data.gateway_fast_model} /></div>
+          <div><dt>慢模型</dt><MetadataValue value={run.data.gateway_slow_model && run.data.gateway_slow_reasoning_effort ? `${run.data.gateway_slow_model} · ${run.data.gateway_slow_reasoning_effort}` : run.data.gateway_slow_model} /></div>
           <div><dt>评估模式</dt><MetadataValue value={memoryLabel} /></div>
           <div><dt>历史经验</dt><MetadataValue value={`${memory.sources.length} 条`} /></div>
           <div><dt>配置哈希</dt><MetadataValue value={run.data.config_snapshot_sha256} /></div>

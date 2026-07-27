@@ -341,6 +341,13 @@ class AssessmentRepository:
         base = self._run_view(run, request, instrument)
         content = dict(snapshot.content_json) if snapshot is not None else {}
         gateway = dict(content.get("gateway") or {})
+        routes = dict(gateway.get("routes") or {})
+        legacy_route = {
+            "model": gateway.get("model"),
+            "reasoning_effort": gateway.get("reasoning_effort"),
+        }
+        fast_route = dict(routes.get("fast") or legacy_route)
+        slow_route = dict(routes.get("slow") or legacy_route)
         source = dict(content.get("source") or {})
         memory_content = dict(content.get("memory") or {})
         memory_sources = tuple(
@@ -371,6 +378,11 @@ class AssessmentRepository:
             gateway_snapshot_id=(snapshot.gateway_snapshot_id if snapshot is not None else None),
             gateway_model=gateway.get("model"),
             gateway_reasoning_effort=gateway.get("reasoning_effort"),
+            gateway_fast_model=fast_route.get("model"),
+            gateway_fast_reasoning_effort=fast_route.get("reasoning_effort"),
+            gateway_slow_model=slow_route.get("model"),
+            gateway_slow_reasoning_effort=slow_route.get("reasoning_effort"),
+            model_routing_snapshot_id=gateway.get("routing_snapshot_id"),
             root_commit=source.get("root_commit"),
             tradingagents_commit=source.get("tradingagents_commit"),
             prompt_schema_version=content.get("prompt_schema_version"),

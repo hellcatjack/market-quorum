@@ -80,6 +80,16 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
             "gateway": {
                 "model": "gpt-5.6-sol",
                 "reasoning_effort": "xhigh",
+                "routes": {
+                    "fast": {
+                        "model": "gpt-5.6-terra",
+                        "reasoning_effort": "medium",
+                    },
+                    "slow": {
+                        "model": "gpt-5.6-sol",
+                        "reasoning_effort": "high",
+                    },
+                },
             },
             "data_vendors": {"core_stock_apis": "yfinance"},
             "tool_vendors": {},
@@ -110,12 +120,47 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
     assert runner_input.work_dir == tmp_path / "jobs" / str(run_id)
     assert runner_input.debate_rounds == 3
     assert runner_input.codex_reasoning_effort == "xhigh"
+    assert runner_input.fast_codex_model == "gpt-5.6-terra"
+    assert runner_input.fast_codex_reasoning_effort == "medium"
+    assert runner_input.slow_codex_model == "gpt-5.6-sol"
+    assert runner_input.slow_codex_reasoning_effort == "high"
     assert runner_input.memory.mode is MemoryMode.INDEPENDENT
     assert runner_input.alpha_vantage_requests_per_minute == 42
     assert runner_input.alpha_vantage_retry_attempts == 4
     assert runner_input.alpha_vantage_retry_base_seconds == 3
     assert runner_input.alpha_vantage_retry_max_seconds == 30
     assert runner_input.alpha_vantage_coordination_dir == tmp_path / "vendor-limits"
+
+
+def test_legacy_claim_snapshot_uses_single_gateway_pair_for_both_routes(tmp_path):
+    run_id = uuid.UUID(int=2)
+    claim = ClaimedRun(
+        run_id=run_id,
+        ticker="TSLA",
+        asset_type="stock",
+        analysis_date=date(2026, 7, 25),
+        snapshot={
+            "request": {"analysts": ["market"], "language": "Chinese"},
+            "resolved": {"debate_rounds": 1, "risk_rounds": 1},
+            "gateway": {
+                "model": "gpt-5.6-sol",
+                "reasoning_effort": "xhigh",
+            },
+            "data_vendors": {},
+            "tool_vendors": {},
+        },
+    )
+
+    runner_input = build_runner_input(
+        claim,
+        job_dir=tmp_path / "jobs",
+        gateway_url="http://127.0.0.1:8000",
+    )
+
+    assert runner_input.fast_codex_model == "gpt-5.6-sol"
+    assert runner_input.fast_codex_reasoning_effort == "xhigh"
+    assert runner_input.slow_codex_model == "gpt-5.6-sol"
+    assert runner_input.slow_codex_reasoning_effort == "xhigh"
 
 
 def test_old_claim_snapshot_without_memory_remains_independent(tmp_path):

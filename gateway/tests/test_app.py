@@ -77,7 +77,11 @@ def test_models_health_and_lifespan():
     runtime = FakeRuntime()
     with make_client(runtime) as http:
         assert http.get("/healthz").json() == {"status": "ok"}
-        assert http.get("/v1/models").json()["data"][0]["id"] == "codex"
+        assert [model["id"] for model in http.get("/v1/models").json()["data"]] == [
+            "codex",
+            "codex-fast",
+            "codex-slow",
+        ]
     assert runtime.started and runtime.stopped
 
 
@@ -123,6 +127,64 @@ def test_platform_headers_pin_config_for_one_run():
     assert runtime.completion_calls[0]["run_id"] == "run-1"
     assert runtime.completion_calls[0]["retry_count"] == 2
     assert len(runtime.completion_calls[0]["request_id"]) == 32
+
+
+@pytest.mark.parametrize(
+    ("alias", "expected"),
+    [
+        ("codex-fast", EffectiveCodexConfig("gpt-5.6-terra", "medium")),
+        ("codex-slow", EffectiveCodexConfig("gpt-5.6-sol", "high")),
+    ],
+)
+def test_route_alias_selects_frozen_fast_or_slow_config(alias, expected):
+    runtime = FakeRuntime()
+    headers = {
+        "X-TradingNG-Run-ID": "run-routed",
+        "X-TradingNG-Codex-Fast-Model": "gpt-5.6-terra",
+        "X-TradingNG-Codex-Fast-Reasoning-Effort": "medium",
+        "X-TradingNG-Codex-Slow-Model": "gpt-5.6-sol",
+        "X-TradingNG-Codex-Slow-Reasoning-Effort": "high",
+    }
+
+    with make_client(runtime) as http:
+        response = http.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": alias,
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert runtime.pinned_configs == [expected]
+    assert runtime.completion_calls[0]["run_id"] == "run-routed"
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"X-TradingNG-Run-ID": "run-routed"},
+        {
+            "X-TradingNG-Run-ID": "run-routed",
+            "X-TradingNG-Codex-Fast-Model": "gpt-5.6-terra",
+            "X-TradingNG-Codex-Fast-Reasoning-Effort": "high",
+        },
+    ],
+)
+def test_route_alias_requires_complete_frozen_route_bundle(headers):
+    with make_client() as http:
+        response = http.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "codex-fast",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_request"
 
 
 @pytest.mark.parametrize("value", ["-1", "not-a-number", "101"])

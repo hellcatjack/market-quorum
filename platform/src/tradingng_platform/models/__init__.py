@@ -12,6 +12,7 @@ from tradingng_platform.models.coordination import CoordinationLock
 from tradingng_platform.models.execution import (
     CircuitBreaker,
     GatewayHealthSample,
+    ModelRoutingPolicyRecord,
     RunStep,
     SchedulerPolicyRecord,
     VendorHealthSample,
@@ -40,6 +41,7 @@ __all__ = [
     "EvidenceItem",
     "GatewayHealthSample",
     "Instrument",
+    "ModelRoutingPolicyRecord",
     "Role",
     "Review",
     "RunConfigSnapshot",

@@ -24,7 +24,7 @@ from tradingng_platform.models import (
 from tradingng_platform.records.contracts import InstrumentOverviewFilters
 from tradingng_platform.records.service import ArtifactIntegrityError, RecordService
 from tradingng_platform.scheduler.policy import SystemSnapshot
-from tradingng_platform.system.contracts import SchedulerPolicyCommand
+from tradingng_platform.system.contracts import ModelRoutingPolicyCommand, SchedulerPolicyCommand
 from tradingng_platform.system.service import SystemService
 
 
@@ -200,6 +200,40 @@ async def test_system_capacity_and_policy_update_are_bounded_and_audited(
     async with session_factory() as session:
         actions = tuple(await session.scalars(select(AuditEvent.action)))
     assert "scheduler.policy.update" in actions
+
+
+async def test_model_routing_defaults_are_persistent_and_updates_are_audited(
+    session_factory,
+):
+    principal = _admin()
+    service = SystemService(session_factory, _Gateway(), _Probe())
+
+    current = await service.get_model_routing(principal)
+
+    assert current.fast.model == "gpt-5.6-terra"
+    assert current.fast.reasoning_effort == "high"
+    assert current.slow.model == "gpt-5.6-sol"
+    assert current.slow.reasoning_effort == "high"
+    assert current.available_models == ["gpt-5.6-terra", "gpt-5.6-sol"]
+    assert "high" in current.available_reasoning_efforts
+    assert current.version == 1
+
+    updated = await service.update_model_routing(
+        principal,
+        ModelRoutingPolicyCommand(
+            fast={"model": "gpt-5.6-sol", "reasoning_effort": "medium"},
+            slow={"model": "gpt-5.6-sol", "reasoning_effort": "xhigh"},
+        ),
+        "request-model-routing",
+    )
+
+    assert updated.fast.reasoning_effort == "medium"
+    assert updated.slow.reasoning_effort == "xhigh"
+    assert updated.version == 2
+    assert (await service.get_model_routing(principal)).version == 2
+    async with session_factory() as session:
+        actions = tuple(await session.scalars(select(AuditEvent.action)))
+    assert "model_routing.policy.update" in actions
 
 
 async def test_system_status_only_lists_workers_with_recent_heartbeats(session_factory):

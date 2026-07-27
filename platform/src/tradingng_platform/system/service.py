@@ -5,9 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
+from tradingng_platform.model_routing import (
+    AVAILABLE_CODEX_MODELS,
+    AVAILABLE_REASONING_EFFORTS,
+    ModelRoutingPolicyRepository,
+)
 from tradingng_platform.models import (
     AssessmentRun,
     CircuitBreaker,
+    ModelRoutingPolicyRecord,
     SchedulerPolicyRecord,
     Worker,
 )
@@ -19,6 +25,8 @@ from tradingng_platform.scheduler.repository import (
 )
 from tradingng_platform.system.contracts import (
     CapacityView,
+    ModelRoutingPolicyCommand,
+    ModelRoutingPolicyView,
     SchedulerPolicyCommand,
     SchedulerPolicyView,
 )
@@ -151,6 +159,48 @@ class SystemService:
             record = await session.get(SchedulerPolicyRecord, "default")
             return SchedulerPolicyView(
                 **policy.as_dict(),
+                version=record.version,
+                updated_at=record.updated_at,
+            )
+
+    async def get_model_routing(self, principal: Principal) -> ModelRoutingPolicyView:
+        principal.require("system:read")
+        async with self.sessions() as session, session.begin():
+            policy = await ModelRoutingPolicyRepository(session).get()
+            record = await session.get(ModelRoutingPolicyRecord, "default")
+            if record is None:
+                raise RuntimeError("model routing policy is unavailable")
+            return ModelRoutingPolicyView(
+                **policy.model_dump(),
+                available_models=list(AVAILABLE_CODEX_MODELS),
+                available_reasoning_efforts=list(AVAILABLE_REASONING_EFFORTS),
+                routing_snapshot_id=policy.snapshot_id,
+                version=record.version,
+                updated_at=record.updated_at,
+            )
+
+    async def update_model_routing(
+        self,
+        principal: Principal,
+        command: ModelRoutingPolicyCommand,
+        request_id: str,
+    ) -> ModelRoutingPolicyView:
+        principal.require("assessments:admin")
+        async with self.sessions() as session, session.begin():
+            await AssessmentRepository(session).upsert_user(principal)
+            policy = await ModelRoutingPolicyRepository(session).update(
+                principal,
+                command.to_policy(),
+                request_id,
+            )
+            record = await session.get(ModelRoutingPolicyRecord, "default")
+            if record is None:
+                raise RuntimeError("model routing policy is unavailable")
+            return ModelRoutingPolicyView(
+                **policy.model_dump(),
+                available_models=list(AVAILABLE_CODEX_MODELS),
+                available_reasoning_efforts=list(AVAILABLE_REASONING_EFFORTS),
+                routing_snapshot_id=policy.snapshot_id,
                 version=record.version,
                 updated_at=record.updated_at,
             )

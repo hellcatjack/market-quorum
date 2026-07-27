@@ -28,6 +28,7 @@ from codex_gateway.runtime import CodexRuntime
 logger = logging.getLogger(__name__)
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _RETRY_COUNT = re.compile(r"^[0-9]{1,3}$")
+_PUBLIC_MODELS = ("codex", "codex-fast", "codex-slow")
 
 
 def _parse_retry_count(raw: str | None) -> int:
@@ -123,7 +124,10 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
     async def models():
         return {
             "object": "list",
-            "data": [{"id": "codex", "object": "model", "owned_by": "local"}],
+            "data": [
+                {"id": model, "object": "model", "owned_by": "local"}
+                for model in _PUBLIC_MODELS
+            ],
         }
 
     @app.get("/internal/status", response_model=GatewayStatus)
@@ -153,6 +157,22 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
             str | None,
             Header(alias="X-TradingNG-Codex-Reasoning-Effort"),
         ] = None,
+        fast_codex_model: Annotated[
+            str | None,
+            Header(alias="X-TradingNG-Codex-Fast-Model"),
+        ] = None,
+        fast_codex_reasoning_effort: Annotated[
+            str | None,
+            Header(alias="X-TradingNG-Codex-Fast-Reasoning-Effort"),
+        ] = None,
+        slow_codex_model: Annotated[
+            str | None,
+            Header(alias="X-TradingNG-Codex-Slow-Model"),
+        ] = None,
+        slow_codex_reasoning_effort: Annotated[
+            str | None,
+            Header(alias="X-TradingNG-Codex-Slow-Reasoning-Effort"),
+        ] = None,
         x_stainless_retry_count: Annotated[
             str | None,
             Header(alias="x-stainless-retry-count"),
@@ -162,25 +182,83 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
         started = time.monotonic()
         try:
             retry_count = _parse_retry_count(x_stainless_retry_count)
-            if body.model != "codex":
+            if body.model not in _PUBLIC_MODELS:
                 raise ModelNotFound(body.model)
-            pin_values = (tradingng_run_id, codex_model, codex_reasoning_effort)
             pinned_config = None
-            if any(value is not None for value in pin_values):
-                if not all(value is not None and value.strip() for value in pin_values):
-                    raise InvalidRequest("TradingNG run pin headers must be supplied together")
-                if not _RUN_ID.fullmatch(tradingng_run_id):
+            route_values = (
+                tradingng_run_id,
+                fast_codex_model,
+                fast_codex_reasoning_effort,
+                slow_codex_model,
+                slow_codex_reasoning_effort,
+            )
+            legacy_values = (tradingng_run_id, codex_model, codex_reasoning_effort)
+            if body.model == "codex":
+                if any(
+                    value is not None
+                    for value in (
+                        fast_codex_model,
+                        fast_codex_reasoning_effort,
+                        slow_codex_model,
+                        slow_codex_reasoning_effort,
+                    )
+                ):
+                    raise InvalidRequest("TradingNG route pin headers require a route model alias")
+                if any(value is not None for value in legacy_values):
+                    if not all(value is not None and value.strip() for value in legacy_values):
+                        raise InvalidRequest("TradingNG run pin headers must be supplied together")
+                    pinned_config = EffectiveCodexConfig(
+                        model=codex_model,
+                        reasoning_effort=codex_reasoning_effort,
+                    ).require_complete()
+            else:
+                if codex_model is not None or codex_reasoning_effort is not None:
+                    raise InvalidRequest("Legacy and route pin headers cannot be mixed")
+                if not all(value is not None and value.strip() for value in route_values):
+                    raise InvalidRequest(
+                        "TradingNG route pin headers must be supplied together"
+                    )
+                if body.model == "codex-fast":
+                    pinned_config = EffectiveCodexConfig(
+                        model=fast_codex_model,
+                        reasoning_effort=fast_codex_reasoning_effort,
+                    ).require_complete()
+                else:
+                    pinned_config = EffectiveCodexConfig(
+                        model=slow_codex_model,
+                        reasoning_effort=slow_codex_reasoning_effort,
+                    ).require_complete()
+
+            if pinned_config is not None:
+                if tradingng_run_id is None or not _RUN_ID.fullmatch(tradingng_run_id):
                     raise InvalidRequest("X-TradingNG-Run-ID is invalid")
-                if len(codex_model) > 128 or len(codex_reasoning_effort) > 32:
+                pinned_values = (
+                    fast_codex_model,
+                    fast_codex_reasoning_effort,
+                    slow_codex_model,
+                    slow_codex_reasoning_effort,
+                )
+                if body.model == "codex":
+                    pinned_values = (codex_model, codex_reasoning_effort)
+                if any(
+                    len(value) > (32 if "effort" in name else 128)
+                    for name, value in zip(
+                        (
+                            "model",
+                            "effort",
+                            "model",
+                            "effort",
+                        ),
+                        (value for value in pinned_values if value is not None),
+                        strict=False,
+                    )
+                ):
                     raise InvalidRequest("TradingNG Codex pin header is too long")
-                pinned_config = EffectiveCodexConfig(
-                    model=codex_model,
-                    reasoning_effort=codex_reasoning_effort,
-                ).require_complete()
                 logger.info(
-                    "request_id=%s tradingng_run_id=%s codex_snapshot_id=%s",
+                    "request_id=%s tradingng_run_id=%s route=%s codex_snapshot_id=%s",
                     request_id,
                     tradingng_run_id,
+                    body.model,
                     pinned_config.snapshot_id,
                 )
             adapted = build_codex_prompt(body)
