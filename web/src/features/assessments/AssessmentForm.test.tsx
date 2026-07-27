@@ -64,7 +64,16 @@ test("defaults to Chinese, Deep and all analysts, then routes after a batch subm
 
   expect(screen.getByRole("combobox", { name: "分析深度" })).toHaveValue("deep");
   expect(screen.getByRole("combobox", { name: "输出语言" })).toHaveValue("Chinese");
-  expect(screen.getByRole("combobox", { name: "评估记忆" })).toHaveValue("independent");
+  const historical = screen.getByRole("radio", { name: /历史辅助/ });
+  const independent = screen.getByRole("radio", { name: /独立评估/ });
+  expect(historical).toBeChecked();
+  expect(independent).not.toBeChecked();
+  expect(screen.queryByRole("combobox", { name: "评估记忆" })).not.toBeInTheDocument();
+  expect(screen.getByText("推荐")).toBeInTheDocument();
+  expect(screen.getByText(/最多 5 条/)).toBeInTheDocument();
+  expect(screen.getByText(/零记忆继续运行/)).toBeInTheDocument();
+  expect(screen.getByText(/不会训练或修改模型/)).toBeInTheDocument();
+  expect(screen.getByText(/当前证据优先/)).toBeInTheDocument();
   expect(screen.queryByRole("combobox", { name: "资产类型" })).not.toBeInTheDocument();
   expect(screen.getAllByRole("checkbox")).toHaveLength(4);
   for (const checkbox of screen.getAllByRole("checkbox")) expect(checkbox).toBeChecked();
@@ -83,12 +92,12 @@ test("defaults to Chinese, Deep and all analysts, then routes after a batch subm
   expect(payload.items.every((item: object) => !("asset_type" in item))).toBe(true);
   expect(payload.analysts).toEqual(["market", "social", "news", "fundamentals"]);
   expect(payload.depth).toBe("deep");
-  expect(payload.memory_mode).toBe("independent");
+  expect(payload.memory_mode).toBe("historical");
   expect(payload.language).toBe("Chinese");
   expect(payload.idempotency_key).toBe("00000000-0000-4000-8000-000000000001");
 });
 
-test("can explicitly request a look-ahead-safe historical assessment", async () => {
+test("can explicitly request an independent assessment", async () => {
   const user = userEvent.setup();
   const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response(
@@ -112,15 +121,13 @@ test("can explicitly request a look-ahead-safe historical assessment", async () 
   await user.type(screen.getByRole("textbox", { name: "标的代码" }), "NVDA");
   await user.clear(screen.getByLabelText("分析日期"));
   await user.type(screen.getByLabelText("分析日期"), "2026-07-25");
-  await user.selectOptions(
-    screen.getByRole("combobox", { name: "评估记忆" }),
-    "historical",
-  );
+  await user.click(screen.getByRole("radio", { name: /独立评估/ }));
+  expect(screen.getByRole("radio", { name: /独立评估/ })).toBeChecked();
   await user.click(screen.getByRole("button", { name: "派发评估" }));
 
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   const payload = JSON.parse(String(fetchMock.mock.calls[0][1]?.body));
-  expect(payload.memory_mode).toBe("historical");
+  expect(payload.memory_mode).toBe("independent");
 });
 
 test("validates dates and renders a server error next to the form", async () => {

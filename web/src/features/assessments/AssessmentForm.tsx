@@ -27,7 +27,7 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
   const [analysisDate, setAnalysisDate] = useState(localToday());
   const [depth, setDepth] = useState<SubmitAssessmentBatch["depth"]>("deep");
   const [memoryMode, setMemoryMode] =
-    useState<SubmitAssessmentBatch["memory_mode"]>("independent");
+    useState<SubmitAssessmentBatch["memory_mode"]>("historical");
   const [language, setLanguage] = useState("Chinese");
   const [analysts, setAnalysts] = useState<string[]>(ANALYSTS.map(([value]) => value));
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -48,6 +48,11 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
     setAnalysts((selected) =>
       selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value],
     );
+  }
+
+  function selectMemoryMode(value: SubmitAssessmentBatch["memory_mode"]) {
+    setMemoryMode(value);
+    idempotencyKey.current = globalThis.crypto.randomUUID();
   }
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -145,19 +150,46 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
               <option value="English">English</option>
             </select>
           </label>
-          <label className="field">
-            <span>评估记忆</span>
-            <select aria-label="评估记忆" value={memoryMode} onChange={(event) => {
-              setMemoryMode(event.target.value as typeof memoryMode);
-              idempotencyKey.current = globalThis.crypto.randomUUID();
-            }}>
-              <option value="independent">独立评估（默认）</option>
-              <option value="historical">历史辅助（仅限已验证记录）</option>
-            </select>
-            <small>
-              历史辅助最多引用 5 次同标的旧评估，且只使用分析日前已完成的表现验证。
-            </small>
-          </label>
+          <fieldset className="memory-mode-fieldset">
+            <legend>评估记忆</legend>
+            <div className="memory-mode-options">
+              <label className="memory-mode-option">
+                <input
+                  type="radio"
+                  name="memory-mode"
+                  value="historical"
+                  checked={memoryMode === "historical"}
+                  onChange={() => selectMemoryMode("historical")}
+                />
+                <span className="memory-mode-copy">
+                  <span className="memory-mode-title">
+                    <strong>历史辅助</strong>
+                    <em>推荐</em>
+                  </span>
+                  <span>参考同标的、分析日前已经完成表现验证的旧评估。</span>
+                  <small>最多 5 条；没有合格记录时，以零记忆继续运行。</small>
+                  <small>当前证据优先，历史结论不是投票。</small>
+                </span>
+              </label>
+              <label className="memory-mode-option">
+                <input
+                  type="radio"
+                  name="memory-mode"
+                  value="independent"
+                  checked={memoryMode === "independent"}
+                  onChange={() => selectMemoryMode("independent")}
+                />
+                <span className="memory-mode-copy">
+                  <span className="memory-mode-title"><strong>独立评估</strong></span>
+                  <span>不读取任何旧评估结论。</span>
+                  <small>适合基准对照、争议复核或需要隔离历史观点的任务。</small>
+                </span>
+              </label>
+            </div>
+            <p className="memory-mode-note">
+              历史辅助不会训练或修改模型，只向最终投资判断提供可审计的历史校准信息。
+            </p>
+          </fieldset>
         </div>
         <fieldset className="analyst-fieldset">
           <legend>参与分析师</legend>
