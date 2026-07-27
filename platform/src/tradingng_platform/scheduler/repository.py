@@ -57,6 +57,17 @@ class ExecutionMetadata:
     tool_vendors: dict[str, str]
 
 
+def _configured_vendors(metadata: ExecutionMetadata) -> set[str]:
+    configured: set[str] = set()
+    for vendor_chain in (*metadata.data_vendors.values(), *metadata.tool_vendors.values()):
+        configured.update(
+            vendor
+            for vendor in (item.strip() for item in str(vendor_chain).split(","))
+            if vendor and vendor != "default"
+        )
+    return configured
+
+
 @dataclass(frozen=True)
 class BuiltRunSnapshot:
     content: dict
@@ -258,10 +269,7 @@ class SchedulerRepository:
             or 0
         )
         circuits = CircuitBreakerRepository(self.session)
-        configured_vendors = {
-            str(vendor)
-            for vendor in (*metadata.data_vendors.values(), *metadata.tool_vendors.values())
-        }
+        configured_vendors = _configured_vendors(metadata)
         open_circuits = await circuits.blockers(now, vendors=configured_vendors)
         capacity = CapacitySnapshot(active_runs, gateway, system, open_circuits)
         decision = policy.evaluate(capacity)

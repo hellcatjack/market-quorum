@@ -5,6 +5,7 @@ from decimal import Decimal
 from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.gateway.client import GatewaySnapshot
 from tradingng_platform.memory.context import MemoryCandidate, build_memory_snapshot
+from tradingng_platform.scheduler import repository
 from tradingng_platform.scheduler.policy import AdmissionDecision, AdmissionPolicy, SystemSnapshot
 from tradingng_platform.scheduler.repository import ExecutionMetadata, build_run_snapshot
 from tradingng_platform.scheduler.service import AdmissionService
@@ -75,6 +76,21 @@ async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
     assert policy_repository.calls == 2
     assert [call[0].max_running_total for call in scheduler_repository.calls] == [1, 2]
     assert [call[1].active_completions for call in scheduler_repository.calls] == [0, 1]
+
+
+def test_configured_vendors_expands_ordered_fallback_chains():
+    metadata = ExecutionMetadata(
+        root_commit="root-sha",
+        tradingagents_commit="submodule-sha",
+        prompt_schema_version="v1",
+        data_vendors={
+            "market_data": "alpha_vantage,yfinance",
+            "news_data": "default",
+        },
+        tool_vendors={"get_stock_data": " yfinance, alpha_vantage "},
+    )
+
+    assert repository._configured_vendors(metadata) == {"alpha_vantage", "yfinance"}
 
 
 def test_run_snapshot_is_canonical_and_resolves_depth_rounds():

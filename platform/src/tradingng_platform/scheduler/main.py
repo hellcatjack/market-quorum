@@ -22,6 +22,13 @@ from tradingng_platform.scheduler.service import AdmissionService
 
 logger = logging.getLogger(__name__)
 
+_ALPHA_VANTAGE_RESEARCH_CATEGORIES = (
+    "core_stock_apis",
+    "technical_indicators",
+    "fundamental_data",
+    "news_data",
+)
+
 
 def _commit(path: Path) -> str:
     revision = subprocess.run(
@@ -47,13 +54,17 @@ def _commit(path: Path) -> str:
     return revision.stdout.strip() + suffix
 
 
-def _execution_metadata() -> ExecutionMetadata:
+def _execution_metadata(settings: Settings) -> ExecutionMetadata:
     project_root = Path(__file__).resolve().parents[4]
+    data_vendors = dict(DEFAULT_CONFIG["data_vendors"])
+    research_vendor_chain = ",".join(settings.research_data_vendor_chain)
+    for category in _ALPHA_VANTAGE_RESEARCH_CATEGORIES:
+        data_vendors[category] = research_vendor_chain
     return ExecutionMetadata(
         root_commit=_commit(project_root),
         tradingagents_commit=_commit(project_root / "TradingAgents"),
         prompt_schema_version="v1",
-        data_vendors=dict(DEFAULT_CONFIG["data_vendors"]),
+        data_vendors=data_vendors,
         tool_vendors=dict(DEFAULT_CONFIG["tool_vendors"]),
     )
 
@@ -63,7 +74,7 @@ async def run_scheduler() -> None:
     database = Database(settings)
     gateway = GatewayClient(str(settings.gateway_url))
     system_probe = SystemProbe(settings.data_dir)
-    metadata = _execution_metadata()
+    metadata = _execution_metadata(settings)
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGINT, signal.SIGTERM):

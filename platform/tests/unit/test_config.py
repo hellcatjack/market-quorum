@@ -75,6 +75,7 @@ def test_public_identity_and_mcp_defaults_use_the_canonical_origin():
     assert str(settings.mcp_resource_uri) == "https://ushome.amycat.com/mcp"
     assert settings.validation_price_providers == ("yfinance",)
     assert settings.alpha_vantage_api_key is None
+    assert settings.research_data_vendor_chain == ("alpha_vantage", "yfinance")
 
 
 def test_validation_provider_order_and_alpha_key_are_secret(monkeypatch):
@@ -89,6 +90,33 @@ def test_validation_provider_order_and_alpha_key_are_secret(monkeypatch):
     assert settings.validation_price_providers == ("alphavantage", "yfinance")
     assert settings.alpha_vantage_api_key.get_secret_value() == "premium-secret"
     assert "premium-secret" not in repr(settings)
+
+
+def test_research_vendor_chain_preserves_explicit_order(monkeypatch):
+    monkeypatch.setenv(
+        "TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN",
+        "yfinance,alpha_vantage",
+    )
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+    )
+
+    assert settings.research_data_vendor_chain == ("yfinance", "alpha_vantage")
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["alpha_vantage,alpha_vantage", "unknown,yfinance", ""],
+)
+def test_research_vendor_chain_rejects_invalid_values(monkeypatch, value):
+    monkeypatch.setenv("TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN", value)
+
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+        )
 
 
 @pytest.mark.parametrize("name", ["tradingNG;DROP", "../tradingNG", "trading-NG"])

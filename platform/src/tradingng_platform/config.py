@@ -73,6 +73,10 @@ class Settings(BaseSettings):
     alpha_vantage_api_key: SecretStr | None = Field(default=None, repr=False)
     validation_provider_timeout_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
     alpha_vantage_requests_per_minute: int = Field(default=75, ge=1, le=10000)
+    research_data_vendor_chain: Annotated[tuple[str, ...], NoDecode] = (
+        "alpha_vantage",
+        "yfinance",
+    )
 
     @model_validator(mode="after")
     def resolve_database_url(self):
@@ -103,6 +107,7 @@ class Settings(BaseSettings):
         "mcp_allowed_origins",
         "webhook_private_host_allowlist",
         "validation_price_providers",
+        "research_data_vendor_chain",
         mode="before",
     )
     @classmethod
@@ -120,6 +125,17 @@ class Settings(BaseSettings):
             raise ValueError("validation price providers must be unique and non-empty")
         if any(item not in allowed for item in normalized):
             raise ValueError("unsupported validation price provider")
+        return normalized
+
+    @field_validator("research_data_vendor_chain")
+    @classmethod
+    def validate_research_data_vendor_chain(cls, value):
+        normalized = tuple(item.strip().lower() for item in value if item.strip())
+        allowed = {"alpha_vantage", "yfinance"}
+        if not normalized or len(set(normalized)) != len(normalized):
+            raise ValueError("research data vendor chain must be unique and non-empty")
+        if any(item not in allowed for item in normalized):
+            raise ValueError("unsupported research data vendor")
         return normalized
 
     @computed_field

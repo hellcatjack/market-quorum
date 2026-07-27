@@ -178,14 +178,30 @@ npm --prefix web run dev
 API 默认监听 `127.0.0.1:8010`。存活与就绪检查分别位于 `/health/live` 和
 `/health/ready`；需要身份认证的业务接口使用 `/api/v1`。
 
+### Alpha Vantage 研究数据源
+
+新准入的评估默认在行情、技术指标、基本面和新闻四类研究中优先使用 Alpha Vantage，
+并在未配置、限流或无数据时回退到 yfinance。宏观数据继续使用 FRED，预测市场继续
+使用 Polymarket。该顺序由 TradingNG 外部调度层写入不可变运行快照，不修改
+TradingAgents：
+
+```dotenv
+ALPHA_VANTAGE_API_KEY=replace-with-secret
+TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
+```
+
+`ALPHA_VANTAGE_API_KEY` 由 TradingAgents 研究 Worker 读取；修改配置后需要重启
+调度器和 Worker，且只影响之后准入的任务。运行详情中的数据源快照会保留实际配置，
+便于追溯和复现。
+
 ### 表现验证数据源
 
 新安排的表现验证使用 `validation.v2`：系统按交易所日历固化精确入场、退出和成熟
 时间，分别保存价格回报与包含现金分配的总回报，并记录供应商、请求指纹、适配器版本、
 标准化版本和数据质量核对结果。旧记录继续保持 `validation.v1`，不会被自动重算。
 
-默认数据源为 yfinance。未来启用支持 `TIME_SERIES_DAILY_ADJUSTED` 的 Alpha Vantage
-方案时，只需在 `.env.platform` 中配置，不需要修改 TradingAgents：
+表现验证与研究任务使用独立的供应商配置。支持 `TIME_SERIES_DAILY_ADJUSTED` 的
+Alpha Vantage 方案可在 `.env.platform` 中启用：
 
 ```dotenv
 TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance

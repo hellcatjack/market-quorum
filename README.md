@@ -195,6 +195,24 @@ The API listens on `127.0.0.1:8010`. Liveness and readiness are available at
 `/health/live` and `/health/ready`; authenticated business routes use
 `/api/v1`.
 
+### Alpha Vantage research providers
+
+Newly admitted assessments prefer Alpha Vantage for core prices, technical
+indicators, fundamentals, and news, then fall back to yfinance when the primary
+vendor is unconfigured, rate-limited, or has no data. Macro data remains on FRED
+and prediction markets remain on Polymarket. TradingNG freezes this external
+overlay into every immutable run snapshot without modifying TradingAgents:
+
+```dotenv
+ALPHA_VANTAGE_API_KEY=replace-with-secret
+TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
+```
+
+TradingAgents research Workers read `ALPHA_VANTAGE_API_KEY`. Restart the
+scheduler and Workers after changing it; only subsequently admitted runs are
+affected. Run details retain the configured vendor snapshot for audit and
+reproduction.
+
 ### Outcome-validation providers
 
 New validation jobs use `validation.v2`. Exact entry, exit, and maturity times
@@ -203,9 +221,9 @@ cash distributions are stored separately with provider, request fingerprint,
 adapter, normalization, and data-quality provenance. Existing rows remain
 `validation.v1` and are never silently recalculated.
 
-yfinance is the default provider. A future Alpha Vantage plan that supports
-`TIME_SERIES_DAILY_ADJUSTED` can be enabled entirely in `.env.platform`, without
-modifying TradingAgents:
+Outcome validation has a separate provider configuration from assessment
+research. An Alpha Vantage plan that supports `TIME_SERIES_DAILY_ADJUSTED` can
+be enabled in `.env.platform`:
 
 ```dotenv
 TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
