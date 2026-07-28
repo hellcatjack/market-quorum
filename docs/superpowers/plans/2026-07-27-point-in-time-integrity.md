@@ -146,7 +146,8 @@ def test_statement_after_analysis_date_is_removed():
         resolver=resolver,
     )
     assert json.loads(result)["quarterlyReports"] == []
-    assert findings[0].reason_code == "future_publication"
+    assert findings[0].status is IntegrityStatus.SAFE
+    assert findings[0].reason_code == "future_publication_filtered"
 
 
 def test_statement_available_on_analysis_date_is_retained():
@@ -171,8 +172,8 @@ def test_missing_availability_is_removed_instead_of_using_fiscal_end():
         resolver=StubResolver({}),
     )
     assert json.loads(result)["quarterlyReports"] == []
-    assert findings[0].status is IntegrityStatus.UNKNOWN
-    assert findings[0].reason_code == "publication_unverified"
+    assert findings[0].status is IntegrityStatus.SAFE
+    assert findings[0].reason_code == "publication_unverified_filtered"
 ```
 
 Add SEC fixture tests that map `reportDate=2025-06-30`, `form=10-Q`, `filingDate=2025-07-24`, reject amendments as the original availability date, reject ambiguous ticker mappings, and accept Alpha `reportedDate` only for one valid quarterly match.
@@ -262,8 +263,8 @@ def test_historical_runner_filters_financial_statements_by_publication_and_resto
     assert json.loads(_FinancialProbeGraph.observed_tools["get_income_statement"])["quarterlyReports"] == []
     assert VENDOR_METHODS["get_income_statement"]["alpha_vantage"] is original_route
     audit = json.loads((runner_input.work_dir / "working/point_in_time_integrity.json").read_text())
-    assert audit["status"] == "at_risk"
-    assert audit["findings"][0]["reason_code"] == "future_publication"
+    assert audit["status"] == "safe"
+    assert audit["findings"][0]["reason_code"] == "future_publication_filtered"
 ```
 
 Add callback tests asserting evidence rows now contain deterministic `effective_at` and `freshness` for date-bounded prices/news/FRED and `point_in_time_filtered` statements.

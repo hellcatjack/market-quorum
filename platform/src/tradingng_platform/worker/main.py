@@ -45,6 +45,9 @@ async def run_worker() -> None:
             settings.alpha_vantage_broker_request_timeout_seconds
         ),
         alpha_vantage_auto_retry_attempts=settings.alpha_vantage_auto_retry_attempts,
+        sec_user_agent=settings.sec_user_agent,
+        sec_request_timeout_seconds=settings.sec_request_timeout_seconds,
+        sec_cache_dir=settings.sec_cache_dir,
     )
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()

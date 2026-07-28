@@ -93,6 +93,9 @@ def build_runner_input(
     gateway_url: str,
     alpha_vantage_broker_url: str = "http://127.0.0.1:8020",
     alpha_vantage_broker_request_timeout_seconds: float = 2100,
+    sec_user_agent: str = "MarketQuorum/0.1 (+https://ushome.amycat.com)",
+    sec_request_timeout_seconds: float = 10,
+    sec_cache_dir: Path | None = None,
 ) -> RunnerInput:
     request = claim.snapshot["request"]
     resolved = claim.snapshot["resolved"]
@@ -137,6 +140,9 @@ def build_runner_input(
         alpha_vantage_retry_attempts=alpha_policy.get("retry_attempts", 6),
         alpha_vantage_retry_base_seconds=alpha_policy.get("retry_base_seconds", 5),
         alpha_vantage_retry_max_seconds=alpha_policy.get("retry_max_seconds", 60),
+        sec_user_agent=sec_user_agent,
+        sec_request_timeout_seconds=sec_request_timeout_seconds,
+        sec_cache_dir=sec_cache_dir or job_dir.parent / "vendor-cache" / "sec",
         memory=memory,
     )
 
@@ -152,6 +158,9 @@ class WorkerService:
         alpha_vantage_broker_url: str = "http://127.0.0.1:8020",
         alpha_vantage_broker_request_timeout_seconds: float = 2100,
         alpha_vantage_auto_retry_attempts: int = 2,
+        sec_user_agent: str = "MarketQuorum/0.1 (+https://ushome.amycat.com)",
+        sec_request_timeout_seconds: float = 10,
+        sec_cache_dir: Path | None = None,
         python_bin: str = sys.executable,
         process_controller: ProcessController | None = None,
         cancellation_controller: CancellationController | None = None,
@@ -166,6 +175,9 @@ class WorkerService:
             alpha_vantage_broker_request_timeout_seconds
         )
         self.alpha_vantage_auto_retry_attempts = alpha_vantage_auto_retry_attempts
+        self.sec_user_agent = sec_user_agent
+        self.sec_request_timeout_seconds = sec_request_timeout_seconds
+        self.sec_cache_dir = sec_cache_dir or job_dir.parent / "vendor-cache" / "sec"
         self.python_bin = python_bin
         self.process_controller = process_controller or ProcessController()
         self.cancellation_controller = cancellation_controller or CancellationController()
@@ -185,6 +197,9 @@ class WorkerService:
             alpha_vantage_broker_request_timeout_seconds=(
                 self.alpha_vantage_broker_request_timeout_seconds
             ),
+            sec_user_agent=self.sec_user_agent,
+            sec_request_timeout_seconds=self.sec_request_timeout_seconds,
+            sec_cache_dir=self.sec_cache_dir,
         )
         work_dir = runner_input.work_dir
         work_dir.mkdir(parents=True, exist_ok=True)

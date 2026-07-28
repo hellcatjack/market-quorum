@@ -61,6 +61,13 @@ class RunnerInput(BaseModel):
     alpha_vantage_retry_attempts: int = Field(default=6, ge=1, le=20)
     alpha_vantage_retry_base_seconds: float = Field(default=5, gt=0, le=300)
     alpha_vantage_retry_max_seconds: float = Field(default=60, gt=0, le=900)
+    sec_user_agent: str = Field(
+        default="MarketQuorum/0.1 (+https://ushome.amycat.com)",
+        min_length=1,
+        max_length=512,
+    )
+    sec_request_timeout_seconds: float = Field(default=10, ge=1, le=60)
+    sec_cache_dir: Path | None = None
     memory: MemorySnapshot = Field(default_factory=empty_memory_snapshot)
 
     @model_validator(mode="before")

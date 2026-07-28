@@ -103,6 +103,8 @@ class Settings(BaseSettings):
         le=86400,
     )
     alpha_vantage_auto_retry_attempts: int = Field(default=2, ge=0, le=5)
+    sec_user_agent: str = "MarketQuorum/0.1 (+https://ushome.amycat.com)"
+    sec_request_timeout_seconds: float = Field(default=10, ge=1, le=60)
     research_data_vendor_chain: Annotated[tuple[str, ...], NoDecode] = (
         "alpha_vantage",
         "yfinance",
@@ -174,6 +176,14 @@ class Settings(BaseSettings):
             raise ValueError("unsupported research data vendor")
         return normalized
 
+    @field_validator("sec_user_agent")
+    @classmethod
+    def validate_sec_user_agent(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("SEC User-Agent cannot be empty")
+        return normalized
+
     @property
     def effective_research_data_vendor_chain(self) -> tuple[str, ...]:
         if self.research_alpha_vantage_api_key is not None:
@@ -200,6 +210,11 @@ class Settings(BaseSettings):
     @property
     def alpha_vantage_cache_dir(self) -> Path:
         return self.data_dir / "vendor-cache" / "alpha-vantage"
+
+    @computed_field
+    @property
+    def sec_cache_dir(self) -> Path:
+        return self.data_dir / "vendor-cache" / "sec"
 
     @computed_field
     @property

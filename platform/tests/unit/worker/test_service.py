@@ -114,6 +114,9 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
         claim,
         job_dir=tmp_path / "jobs",
         gateway_url="http://127.0.0.1:8000",
+        sec_user_agent="MarketQuorum tests@example.invalid",
+        sec_request_timeout_seconds=7,
+        sec_cache_dir=tmp_path / "sec-cache",
     )
 
     assert runner_input.run_id == run_id
@@ -132,6 +135,9 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
     assert runner_input.alpha_vantage_coordination_dir == tmp_path / "vendor-limits"
     assert str(runner_input.alpha_vantage_broker_url) == "http://127.0.0.1:8020/"
     assert runner_input.alpha_vantage_broker_request_timeout_seconds == 2100
+    assert runner_input.sec_user_agent == "MarketQuorum tests@example.invalid"
+    assert runner_input.sec_request_timeout_seconds == 7
+    assert runner_input.sec_cache_dir == tmp_path / "sec-cache"
 
 
 def test_legacy_claim_snapshot_uses_single_gateway_pair_for_both_routes(tmp_path):

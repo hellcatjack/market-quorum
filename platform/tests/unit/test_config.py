@@ -37,6 +37,9 @@ def test_settings_are_loopback_and_project_local(monkeypatch, tmp_path: Path):
     assert settings.artifact_dir == tmp_path / "artifacts"
     assert settings.job_dir == tmp_path / "jobs"
     assert settings.alpha_vantage_cache_dir == tmp_path / "vendor-cache" / "alpha-vantage"
+    assert settings.sec_cache_dir == tmp_path / "vendor-cache" / "sec"
+    assert settings.sec_user_agent == "MarketQuorum/0.1 (+https://ushome.amycat.com)"
+    assert settings.sec_request_timeout_seconds == 10
     assert settings.allowed_origins == ("https://one.test", "https://two.test")
     assert settings.webhook_encryption_key.get_secret_value() == webhook_key
     assert settings.webhook_private_host_allowlist == (
@@ -84,6 +87,15 @@ def test_public_identity_and_mcp_defaults_use_the_canonical_origin():
     assert settings.validation_price_providers == ("yfinance",)
     assert settings.alpha_vantage_api_key is None
     assert settings.research_data_vendor_chain == ("alpha_vantage", "yfinance")
+
+
+def test_sec_user_agent_cannot_be_blank():
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+            sec_user_agent="   ",
+        )
 
 
 def test_validation_provider_order_and_alpha_key_are_secret(monkeypatch):
