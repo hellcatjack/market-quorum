@@ -13,6 +13,7 @@ MCP_SCOPES = [
     "assessments:read",
     "assessments:submit",
     "assessments:cancel",
+    "assessments:admin",
     "validations:read",
     "validations:write",
     "system:read",

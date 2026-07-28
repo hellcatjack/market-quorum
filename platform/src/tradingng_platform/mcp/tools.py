@@ -180,6 +180,23 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
 
     @server.tool(structured_output=True)
     @safe_tool
+    async def clean_reassess_assessment(run_id: uuid.UUID) -> OperationResult:
+        """Queue an independent clean reassessment of an unsafe stored run."""
+        if services.integrity is None:
+            raise RuntimeError("integrity service is unavailable")
+        run = await services.integrity.clean_reassess(
+            current_principal(),
+            run_id,
+            _request_id(),
+        )
+        return OperationResult(
+            run_id=run.id,
+            status=run.status,
+            message="Clean reassessment was queued",
+        )
+
+    @server.tool(structured_output=True)
+    @safe_tool
     async def compare_assessments(
         run_ids: Annotated[list[uuid.UUID], Field(min_length=2, max_length=10)],
     ) -> ComparisonView:

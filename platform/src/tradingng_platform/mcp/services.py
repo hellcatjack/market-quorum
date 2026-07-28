@@ -8,6 +8,7 @@ from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.gateway.client import GatewayClient
 from tradingng_platform.instruments.classification import YahooInstrumentClassifier
+from tradingng_platform.integrity.service import IntegrityService
 from tradingng_platform.records.service import RecordService
 from tradingng_platform.scheduler.probes import SystemProbe
 from tradingng_platform.system.service import SystemService
@@ -22,6 +23,7 @@ class McpServices:
     records: RecordService
     system: SystemService
     validation: ValidationService | None = None
+    integrity: IntegrityService | None = None
 
     @classmethod
     def from_database(
@@ -50,4 +52,5 @@ class McpServices:
                 alpha_broker_queue_limit=settings.alpha_vantage_broker_admission_queue_limit,
             ),
             validation=ValidationService(ValidationRepository(database.sessions)),
+            integrity=IntegrityService(database.sessions),
         )

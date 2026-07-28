@@ -7,6 +7,7 @@ import pytest
 from tradingng_platform.assessments.contracts import RunDetailView
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
+from tradingng_platform.integrity.contracts import IntegrityView
 from tradingng_platform.mcp.context import reset_principal, set_principal
 from tradingng_platform.mcp.server import create_mcp_server
 from tradingng_platform.mcp.services import McpServices
@@ -80,6 +81,21 @@ class _System:
         return _Dump(admission_allowed=True, queued=2)
 
 
+class _Integrity:
+    async def get(self, principal, run_id):
+        principal.require("assessments:read")
+        return IntegrityView(
+            run_id=run_id,
+            status="safe",
+            audit_mode="live",
+            temporal_scope="contemporaneous",
+            analysis_date=date(2026, 7, 25),
+            checked_at=NOW,
+            reason_codes=("live_current_snapshot",),
+            input_fingerprint="a" * 64,
+        )
+
+
 class _Dump:
     def __init__(self, **values):
         self.values = values
@@ -104,13 +120,16 @@ async def _read(server, principal, uri):
 
 @pytest.mark.asyncio
 async def test_resource_templates_are_authorized_deterministic_and_redacted():
-    server = create_mcp_server(McpServices(_Assessments(), _Records(), _System()))
+    server = create_mcp_server(
+        McpServices(_Assessments(), _Records(), _System(), integrity=_Integrity())
+    )
     templates = {str(item.uri_template) for item in server._resource_manager.list_templates()}
     assert templates == {
         "tradingng://assessments/{run_id}/summary",
         "tradingng://assessments/{run_id}/report/{section}",
         "tradingng://assessments/{run_id}/evidence",
         "tradingng://assessments/{run_id}/validations",
+        "tradingng://assessments/{run_id}/integrity",
         "tradingng://instruments/{ticker}/history",
     }
     resources = {str(item.uri) for item in server._resource_manager.list_resources()}
@@ -126,11 +145,18 @@ async def test_resource_templates_are_authorized_deterministic_and_redacted():
         _principal("assessments:read"),
         f"tradingng://assessments/{RUN_ID}/evidence",
     )
+    integrity = await _read(
+        server,
+        _principal("assessments:read"),
+        f"tradingng://assessments/{RUN_ID}/integrity",
+    )
 
     assert json.loads(summary)["ticker"] == "NVDA"
     assert summary == json.dumps(json.loads(summary), sort_keys=True, separators=(",", ":"))
     assert "storage_key" not in evidence
     assert "/tmp/" not in evidence
+    assert json.loads(integrity)["policy_version"] == "point-in-time.v1"
+    assert json.loads(integrity)["status"] == "safe"
 
 
 @pytest.mark.asyncio

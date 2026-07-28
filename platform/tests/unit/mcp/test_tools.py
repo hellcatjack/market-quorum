@@ -95,6 +95,25 @@ class _Validation:
         )
 
 
+class _Integrity:
+    def __init__(self):
+        self.clean_calls = []
+
+    async def clean_reassess(self, principal, run_id, request_id):
+        principal.require("assessments:admin", "assessments:submit")
+        self.clean_calls.append((run_id, request_id))
+        return RunView(
+            id=uuid.UUID("33333333-3333-3333-3333-333333333333"),
+            request_id=uuid.UUID("44444444-4444-4444-4444-444444444444"),
+            ticker="NVDA",
+            asset_type="stock",
+            analysis_date=date(2026, 7, 25),
+            status=RunStatus.QUEUED,
+            attempt=1,
+            created_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+        )
+
+
 def _principal(*scopes):
     return Principal(
         issuer="https://issuer.example",
@@ -116,7 +135,16 @@ async def _call(server, principal, name, arguments):
 async def test_tool_inventory_and_submit_use_existing_application_command():
     assessments = _Assessments()
     validation = _Validation()
-    server = create_mcp_server(McpServices(assessments, _Records(), _System(), validation))
+    integrity = _Integrity()
+    server = create_mcp_server(
+        McpServices(
+            assessments,
+            _Records(),
+            _System(),
+            validation,
+            integrity,
+        )
+    )
 
     assert {tool.name for tool in server._tool_manager.list_tools()} == {
         "submit_assessment",
@@ -131,6 +159,7 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
         "get_system_capacity",
         "schedule_validation",
         "retry_validation",
+        "clean_reassess_assessment",
     }
 
     result = await _call(
@@ -185,6 +214,17 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
     )
     assert retried.model_dump(mode="json")["status"] == "scheduled"
     assert validation.retry_calls[0][0] == validation_id
+
+    cleaned = await _call(
+        server,
+        _principal("assessments:admin", "assessments:submit"),
+        "clean_reassess_assessment",
+        {"run_id": "11111111-1111-1111-1111-111111111111"},
+    )
+    assert cleaned.model_dump(mode="json")["status"] == "queued"
+    assert integrity.clean_calls[0][0] == uuid.UUID(
+        "11111111-1111-1111-1111-111111111111"
+    )
 
 
 @pytest.mark.asyncio

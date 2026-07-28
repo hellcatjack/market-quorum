@@ -1,8 +1,9 @@
 import asyncio
 import json
 import socket
+import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timezone
 
 import httpx
 import uvicorn
@@ -18,6 +19,9 @@ from tradingng_platform.auth.principal import Principal
 from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.gateway.client import GatewaySnapshot
+from tradingng_platform.integrity.contracts import IntegrityStatus
+from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.mcp.inspection import inspect_inventory
 from tradingng_platform.models import AssessmentRun
 from tradingng_platform.scheduler.policy import SystemSnapshot
@@ -38,13 +42,14 @@ MCP_PRINCIPAL = Principal(
             "assessments:read",
             "assessments:submit",
             "assessments:cancel",
+            "assessments:admin",
             "artifacts:read",
             "system:read",
             "validations:read",
         }
     ),
     display_name="MCP Analyst",
-    roles=frozenset({"Analyst"}),
+    roles=frozenset({"Admin"}),
 )
 
 
@@ -156,9 +161,10 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                             "get_system_capacity",
                             "schedule_validation",
                             "retry_validation",
+                            "clean_reassess_assessment",
                         }
                         templates = await session.list_resource_templates()
-                        assert len(templates.resourceTemplates) == 5
+                        assert len(templates.resourceTemplates) == 6
                         resources = await session.list_resources()
                         assert [str(item.uri) for item in resources.resources] == [
                             "tradingng://system/capacity"
@@ -203,6 +209,38 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                             await session.call_tool("retry_assessment", {"run_id": run_id})
                         )
                         retry_id = retried["run_id"]
+                        async with session_factory() as db_session, db_session.begin():
+                            retry_run = await db_session.get(
+                                AssessmentRun,
+                                uuid.UUID(retry_id),
+                            )
+                            retry_run.status = "succeeded"
+                            recorder = PointInTimeRecorder(
+                                date(2026, 7, 25),
+                                now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+                            )
+                            recorder.record(
+                                "get_fundamentals",
+                                IntegrityStatus.AT_RISK,
+                                "current_snapshot_exposed",
+                            )
+                            await IntegrityRepository(db_session).persist_document(
+                                retry_run.id,
+                                recorder.finalize(),
+                                artifact_id=None,
+                                audit_mode="retrospective",
+                            )
+                        integrity = await session.read_resource(
+                            AnyUrl(f"tradingng://assessments/{retry_id}/integrity")
+                        )
+                        assert json.loads(integrity.contents[0].text)["status"] == "at_risk"
+                        cleaned = _tool_payload(
+                            await session.call_tool(
+                                "clean_reassess_assessment",
+                                {"run_id": retry_id},
+                            )
+                        )
+                        assert cleaned["status"] == "queued"
                         compared = _tool_payload(
                             await session.call_tool(
                                 "compare_assessments",
@@ -246,7 +284,7 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
             inventory = await inspect_inventory(mcp_url, "valid-mcp-token")
             assert inventory["tools"] == sorted(tool.name for tool in tools.tools)
             assert inventory["resources"] == ["tradingng://system/capacity"]
-            assert len(inventory["resource_templates"]) == 5
+            assert len(inventory["resource_templates"]) == 6
             assert len(inventory["prompts"]) == 4
 
             async with httpx.AsyncClient(base_url=origin, timeout=10) as rest:

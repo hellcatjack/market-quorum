@@ -79,6 +79,20 @@ def register_resources(server: FastMCP, services: McpServices) -> None:
         return canonical_json([item.model_dump(mode="json") for item in evidence])
 
     @server.resource(
+        "tradingng://assessments/{run_id}/integrity",
+        mime_type="application/json",
+    )
+    @safe_resource
+    async def assessment_integrity(run_id: str) -> str:
+        if services.integrity is None:
+            raise RuntimeError("integrity service is unavailable")
+        integrity = await services.integrity.get(
+            current_principal(),
+            uuid.UUID(run_id),
+        )
+        return canonical_json(integrity.model_dump(mode="json"))
+
+    @server.resource(
         "tradingng://assessments/{run_id}/validations",
         mime_type="application/json",
     )

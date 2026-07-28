@@ -65,8 +65,9 @@ def test_protected_resource_metadata_uses_canonical_mcp_resource(monkeypatch):
         "scopes_supported": [
             "assessments:read",
             "assessments:submit",
-            "assessments:cancel",
-            "validations:read",
+                "assessments:cancel",
+                "assessments:admin",
+                "validations:read",
             "validations:write",
             "system:read",
             "artifacts:read",
