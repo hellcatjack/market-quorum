@@ -80,7 +80,8 @@
 - `run_id`。
 - `policy_version`。
 - `status`：`safe`、`at_risk`、`unknown`。
-- `scope`：`live` 或 `retrospective`。
+- `audit_mode`：`live` 或 `retrospective`，表示判定是在运行结束时生成，还是对封存证据离线重审。
+- `temporal_scope`：`contemporaneous` 或 `historical_reconstruction`，表示评估是在分析日当日运行，还是事后重建历史日期。
 - `checked_at`。
 - `analysis_date`。
 - `reason_codes_json`。
@@ -234,4 +235,3 @@ Web：
 - clean reassessment 不覆盖原记录，也不继承受污染 memory。
 - API、MCP 和 Web 清楚显示合格与排除样本。
 - `git diff -- TradingAgents` 为空，TradingAgents 子模块指针不变。
-
