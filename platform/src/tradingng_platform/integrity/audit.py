@@ -19,7 +19,10 @@ from tradingng_platform.integrity.contracts import (
     IntegrityStatus,
 )
 from tradingng_platform.integrity.financials import FilingAvailabilityResolver
-from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.policy import (
+    PointInTimeRecorder,
+    visible_tool_output_text,
+)
 from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.models import (
     Artifact,
@@ -260,7 +263,7 @@ def audit_evidence(
                 "current_snapshot_blocked" if blocked else "current_snapshot_exposed",
             )
         elif tool_name == "get_macro_indicators":
-            vintage = _render(output).startswith("POINT_IN_TIME_VINTAGE:")
+            vintage = visible_tool_output_text(output).startswith("POINT_IN_TIME_VINTAGE:")
             recorder.record(
                 tool_name,
                 IntegrityStatus.SAFE if vintage else IntegrityStatus.AT_RISK,
@@ -375,6 +378,8 @@ def _audit_date_bounded_output(
 
 def _mapping(value) -> dict | None:
     if isinstance(value, dict):
+        if "content" in value:
+            return _mapping(value["content"])
         return value
     if not isinstance(value, str):
         return None

@@ -33,6 +33,25 @@ def parse_args(argv: list[str] | None = None):
     return parser.parse_args(argv)
 
 
+def _alpha_availability_resolver(
+    settings: Settings,
+    client: httpx.Client,
+) -> AlphaEarningsAvailabilityResolver:
+    broker = SyncAlphaVantageBrokerClient(
+        str(settings.alpha_vantage_broker_url),
+        consumer="research",
+        timeout=settings.alpha_vantage_broker_request_timeout_seconds,
+        client=client,
+    )
+    return AlphaEarningsAvailabilityResolver(
+        lambda ticker: broker.query(
+            "EARNINGS",
+            {"symbol": ticker},
+            run_id="integrity-audit",
+        )
+    )
+
+
 async def run(arguments) -> int:
     settings = Settings()
     database = Database(settings)
@@ -47,19 +66,7 @@ async def run(arguments) -> int:
                 cache_dir=settings.sec_cache_dir,
                 timeout_seconds=settings.sec_request_timeout_seconds,
             )
-            broker = SyncAlphaVantageBrokerClient(
-                str(settings.alpha_vantage_broker_url),
-                consumer="audit",
-                timeout=settings.alpha_vantage_broker_request_timeout_seconds,
-                client=client,
-            )
-            alpha = AlphaEarningsAvailabilityResolver(
-                lambda ticker: broker.query(
-                    "EARNINGS",
-                    {"symbol": ticker},
-                    run_id="integrity-audit",
-                )
-            )
+            alpha = _alpha_availability_resolver(settings, client)
             service = RetrospectiveAuditService(
                 database.sessions,
                 LocalArtifactStore(settings.artifact_dir),

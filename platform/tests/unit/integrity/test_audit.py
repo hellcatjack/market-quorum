@@ -73,6 +73,38 @@ def test_retrospective_audit_marks_confirmed_future_statement_at_risk(tmp_path):
     assert "future_publication_exposed" in result.reason_codes
 
 
+def test_retrospective_audit_unwraps_archived_statement_tool_message(tmp_path):
+    evidence = _write_evidence(
+        tmp_path / "evidence.jsonl",
+        tool_name="get_income_statement",
+        output={
+            "content": json.dumps(
+                {
+                    "annualReports": [],
+                    "quarterlyReports": [{"fiscalDateEnding": "2025-06-30"}],
+                }
+            ),
+            "name": "get_income_statement",
+            "type": "tool",
+        },
+    )
+    resolver = StubResolver(
+        {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
+    )
+
+    result = audit_evidence(
+        evidence,
+        ticker="NVDA",
+        analysis_date=date(2025, 7, 1),
+        resolver=resolver,
+        now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert result.status is IntegrityStatus.AT_RISK
+    assert "future_publication_exposed" in result.reason_codes
+    assert "no_statement_records" not in result.reason_codes
+
+
 def test_retrospective_audit_accepts_statement_published_by_analysis_date(tmp_path):
     evidence = _write_evidence(
         tmp_path / "evidence.jsonl",
@@ -154,6 +186,33 @@ def test_retrospective_audit_detects_current_snapshot_exposure(tmp_path):
 
     assert result.status is IntegrityStatus.AT_RISK
     assert "current_snapshot_exposed" in result.reason_codes
+
+
+def test_retrospective_audit_accepts_archived_fred_vintage_message(tmp_path):
+    evidence = _write_evidence(
+        tmp_path / "evidence.jsonl",
+        tool_name="get_macro_indicators",
+        output={
+            "content": (
+                "POINT_IN_TIME_VINTAGE: FRED observations are limited to values "
+                "available on 2025-07-01."
+            ),
+            "name": "get_macro_indicators",
+            "type": "tool",
+        },
+    )
+
+    result = audit_evidence(
+        evidence,
+        ticker="NVDA",
+        analysis_date=date(2025, 7, 1),
+        resolver=StubResolver({}),
+        now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert result.status is IntegrityStatus.SAFE
+    assert "sealed_evidence_verified" in result.reason_codes
+    assert "fred_vintage_applied" in result.reason_codes
 
 
 async def test_retrospective_service_archives_once_and_is_idempotent(tmp_path):

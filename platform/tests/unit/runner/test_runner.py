@@ -5,7 +5,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 import pandas as pd
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from tradingagents.agents.analysts import sentiment_analyst
 from tradingagents.dataflows import alpha_vantage_common, alpha_vantage_fundamentals, fred
 from tradingagents.dataflows.alpha_vantage_common import AlphaVantageRateLimitError
@@ -377,6 +377,35 @@ def test_callback_records_temporal_evidence_metadata(tmp_path):
     evidence = json.loads(callback.evidence_path.read_text().splitlines()[0])
     assert evidence["effective_at"] == "2025-07-01T23:59:59.999999+00:00"
     assert evidence["freshness"] == "point_in_time_bounded"
+
+
+def test_callback_records_fred_vintage_tool_message_metadata(tmp_path):
+    callback = AuditCallback(
+        tmp_path,
+        {"macro_data": "fred"},
+        {},
+        analysis_date=date(2025, 7, 1),
+    )
+    callback.on_tool_start(
+        {"name": "get_macro_indicators"},
+        '{"indicator":"vix","curr_date":"2025-07-01"}',
+        run_id="macro-tool",
+    )
+
+    callback.on_tool_end(
+        ToolMessage(
+            content=(
+                "POINT_IN_TIME_VINTAGE: FRED observations are limited to values "
+                "available on 2025-07-01."
+            ),
+            tool_call_id="macro-tool-call",
+        ),
+        run_id="macro-tool",
+    )
+
+    evidence = json.loads(callback.evidence_path.read_text().splitlines()[0])
+    assert evidence["effective_at"] == "2025-07-01T23:59:59.999999+00:00"
+    assert evidence["freshness"] == "point_in_time_vintage"
 
 
 def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path):

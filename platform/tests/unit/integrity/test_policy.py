@@ -1,7 +1,13 @@
 from datetime import date, datetime, timezone
 
+from langchain_core.messages import ToolMessage
+
 from tradingng_platform.integrity.contracts import IntegrityStatus
-from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.policy import (
+    PointInTimeRecorder,
+    evidence_temporal_metadata,
+    record_observed_tool,
+)
 
 
 def test_at_risk_dominates_unknown_and_safe():
@@ -76,3 +82,31 @@ def test_checked_at_is_not_part_of_the_input_fingerprint():
         recorder.record("get_stock_data", IntegrityStatus.SAFE, "date_bounded")
 
     assert first.finalize().input_fingerprint == second.finalize().input_fingerprint
+
+
+def test_fred_vintage_tool_message_is_safe_and_time_bounded():
+    analysis_date = date(2025, 7, 1)
+    recorder = PointInTimeRecorder(
+        analysis_date,
+        now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+    output = ToolMessage(
+        content=(
+            "POINT_IN_TIME_VINTAGE: FRED observations are limited to values "
+            "available on 2025-07-01."
+        ),
+        tool_call_id="macro-1",
+    )
+
+    record_observed_tool(recorder, "get_macro_indicators", output)
+    effective_at, freshness = evidence_temporal_metadata(
+        "get_macro_indicators",
+        analysis_date,
+        output,
+    )
+
+    document = recorder.finalize()
+    assert document.status is IntegrityStatus.SAFE
+    assert document.reason_codes == ("fred_vintage_applied",)
+    assert effective_at == "2025-07-01T23:59:59.999999+00:00"
+    assert freshness == "point_in_time_vintage"

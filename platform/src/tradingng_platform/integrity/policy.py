@@ -33,6 +33,24 @@ _CURRENT_SNAPSHOT_TOOLS = frozenset(
 )
 
 
+def visible_tool_output_text(output) -> str:
+    """Return the user-visible text from live or archived tool output wrappers."""
+    if isinstance(output, str):
+        return output
+    if isinstance(output, dict):
+        if "content" in output:
+            return visible_tool_output_text(output["content"])
+        if "text" in output:
+            return visible_tool_output_text(output["text"])
+        return json.dumps(output, sort_keys=True, ensure_ascii=False, default=str)
+    if isinstance(output, (list, tuple)):
+        return "\n".join(visible_tool_output_text(item) for item in output)
+    content = getattr(output, "content", None)
+    if content is not None and content is not output:
+        return visible_tool_output_text(content)
+    return str(output)
+
+
 class PointInTimeRecorder:
     def __init__(self, analysis_date: date, *, now: datetime | None = None):
         resolved_now = now or datetime.now(timezone.utc)
@@ -122,7 +140,7 @@ def record_observed_tool(
 ) -> None:
     if recorder is None or not recorder.is_historical:
         return
-    rendered = str(output)
+    rendered = visible_tool_output_text(output)
     if tool_name in _DATE_BOUNDED_TOOLS:
         recorder.record(tool_name, IntegrityStatus.SAFE, "date_bounded_route")
     elif tool_name in _FINANCIAL_STATEMENT_TOOLS:
@@ -146,7 +164,7 @@ def evidence_temporal_metadata(
     if analysis_date is None:
         return None, None
     effective_at = datetime.combine(analysis_date, time.max, timezone.utc).isoformat()
-    rendered = str(output)
+    rendered = visible_tool_output_text(output)
     if tool_name in _DATE_BOUNDED_TOOLS:
         return effective_at, "point_in_time_bounded"
     if tool_name in _FINANCIAL_STATEMENT_TOOLS:
