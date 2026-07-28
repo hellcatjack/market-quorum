@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
 
 from tradingng_platform.integrity.contracts import (
     CURRENT_POLICY_VERSION,
@@ -16,6 +16,21 @@ _STATUS_PRIORITY = {
     IntegrityStatus.UNKNOWN: 1,
     IntegrityStatus.AT_RISK: 2,
 }
+_DATE_BOUNDED_TOOLS = frozenset(
+    {
+        "get_stock_data",
+        "get_verified_market_snapshot",
+        "get_indicators",
+        "get_news",
+        "get_global_news",
+    }
+)
+_FINANCIAL_STATEMENT_TOOLS = frozenset(
+    {"get_balance_sheet", "get_cashflow", "get_income_statement"}
+)
+_CURRENT_SNAPSHOT_TOOLS = frozenset(
+    {"get_fundamentals", "get_insider_transactions", "get_prediction_markets"}
+)
 
 
 class PointInTimeRecorder:
@@ -31,6 +46,10 @@ class PointInTimeRecorder:
             else "historical_reconstruction"
         )
         self._findings: list[IntegrityFinding] = []
+
+    @property
+    def is_historical(self) -> bool:
+        return self.temporal_scope == "historical_reconstruction"
 
     def record(
         self,
@@ -94,3 +113,46 @@ class PointInTimeRecorder:
             reason_codes=reason_codes,
             input_fingerprint=hashlib.sha256(canonical).hexdigest(),
         )
+
+
+def record_observed_tool(
+    recorder: PointInTimeRecorder | None,
+    tool_name: str,
+    output,
+) -> None:
+    if recorder is None or not recorder.is_historical:
+        return
+    rendered = str(output)
+    if tool_name in _DATE_BOUNDED_TOOLS:
+        recorder.record(tool_name, IntegrityStatus.SAFE, "date_bounded_route")
+    elif tool_name in _FINANCIAL_STATEMENT_TOOLS:
+        recorder.record(tool_name, IntegrityStatus.SAFE, "point_in_time_filtered")
+    elif tool_name == "get_macro_indicators" and rendered.startswith("POINT_IN_TIME_VINTAGE:"):
+        recorder.record(tool_name, IntegrityStatus.SAFE, "fred_vintage_applied")
+    elif tool_name in _CURRENT_SNAPSHOT_TOOLS:
+        if "POINT_IN_TIME_DATA_UNAVAILABLE:" in rendered:
+            recorder.record(tool_name, IntegrityStatus.SAFE, "current_snapshot_blocked")
+        else:
+            recorder.record(tool_name, IntegrityStatus.AT_RISK, "current_snapshot_exposed")
+    else:
+        recorder.record(tool_name, IntegrityStatus.UNKNOWN, "unregistered_tool")
+
+
+def evidence_temporal_metadata(
+    tool_name: str,
+    analysis_date: date | None,
+    output,
+) -> tuple[str | None, str | None]:
+    if analysis_date is None:
+        return None, None
+    effective_at = datetime.combine(analysis_date, time.max, timezone.utc).isoformat()
+    rendered = str(output)
+    if tool_name in _DATE_BOUNDED_TOOLS:
+        return effective_at, "point_in_time_bounded"
+    if tool_name in _FINANCIAL_STATEMENT_TOOLS:
+        return effective_at, "point_in_time_filtered"
+    if tool_name == "get_macro_indicators" and rendered.startswith("POINT_IN_TIME_VINTAGE:"):
+        return effective_at, "point_in_time_vintage"
+    if "POINT_IN_TIME_DATA_UNAVAILABLE:" in rendered:
+        return None, "point_in_time_unavailable"
+    return None, "current_snapshot" if analysis_date >= datetime.now(timezone.utc).date() else None

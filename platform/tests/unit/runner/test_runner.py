@@ -12,6 +12,7 @@ from tradingagents.dataflows.alpha_vantage_common import AlphaVantageRateLimitEr
 from tradingagents.dataflows.interface import VENDOR_METHODS
 
 from tradingng_platform.assessments.contracts import MemoryMode
+from tradingng_platform.integrity.financials import Availability
 from tradingng_platform.memory import MemoryCandidate, build_memory_snapshot
 from tradingng_platform.runner.callbacks import AuditCallback
 from tradingng_platform.runner.contracts import RunnerInput
@@ -114,6 +115,24 @@ class _FredTemporalProbeGraph(_FakeGraph):
             "cpi", "2099-12-31", 365
         )
         return super().propagate(ticker, analysis_date, asset_type)
+
+
+class _FinancialTemporalProbeGraph(_FakeGraph):
+    observed_statement = None
+
+    def propagate(self, ticker, analysis_date, asset_type="stock"):
+        type(self).observed_statement = VENDOR_METHODS["get_income_statement"][
+            "alpha_vantage"
+        ](ticker, "quarterly", analysis_date)
+        return super().propagate(ticker, analysis_date, asset_type)
+
+
+class _AvailabilityResolver:
+    def __init__(self, available_at: date):
+        self.available_at = available_at
+
+    def resolve(self, ticker, fiscal_end, frequency):
+        return Availability(self.available_at, "sec", "high")
 
 
 def _runner_input(tmp_path):
@@ -298,6 +317,66 @@ def test_historical_runner_uses_fred_vintage_available_on_analysis_date(tmp_path
         "POINT_IN_TIME_VINTAGE: FRED observations are limited to values available on 2000-01-03."
     )
     assert VENDOR_METHODS["get_macro_indicators"]["fred"] is original_route
+
+
+def test_historical_runner_filters_financial_statements_and_restores_routes(
+    tmp_path,
+    monkeypatch,
+):
+    def original_route(ticker, freq="quarterly", curr_date=None):
+        return json.dumps(
+            {
+                "symbol": ticker,
+                "annualReports": [],
+                "quarterlyReports": [
+                    {"fiscalDateEnding": "2025-06-30", "totalRevenue": "100"}
+                ],
+            }
+        )
+    monkeypatch.setitem(
+        VENDOR_METHODS["get_income_statement"],
+        "alpha_vantage",
+        original_route,
+    )
+    runner_input = _runner_input(tmp_path).model_copy(
+        update={"analysis_date": date(2025, 7, 1)}
+    )
+
+    TradingAgentsRunner(
+        runner_input,
+        graph_factory=_FinancialTemporalProbeGraph,
+        availability_resolver=_AvailabilityResolver(date(2025, 7, 24)),
+    ).run()
+
+    assert json.loads(_FinancialTemporalProbeGraph.observed_statement)[
+        "quarterlyReports"
+    ] == []
+    assert VENDOR_METHODS["get_income_statement"]["alpha_vantage"] is original_route
+    audit = json.loads(
+        (runner_input.work_dir / "working" / "point_in_time_integrity.json").read_text()
+    )
+    assert audit["status"] == "safe"
+    assert "future_publication_filtered" in audit["reason_codes"]
+
+
+def test_callback_records_temporal_evidence_metadata(tmp_path):
+    callback = AuditCallback(
+        tmp_path,
+        {"core_stock_apis": "alpha_vantage"},
+        {},
+        analysis_date=date(2025, 7, 1),
+    )
+    callback.on_tool_start(
+        {"name": "get_stock_data"},
+        '{"ticker":"NVDA","end_date":"2025-07-01"}',
+        run_id="bounded-tool",
+    )
+
+    callback.on_tool_end({"close": 100}, run_id="bounded-tool")
+
+    evidence = json.loads(callback.evidence_path.read_text().splitlines()[0])
+    assert evidence["effective_at"] == "2025-07-01T23:59:59.999999+00:00"
+    assert evidence["freshness"] == "point_in_time_bounded"
 
 
 def test_callback_records_visible_llm_exchange_without_hidden_reasoning(tmp_path):

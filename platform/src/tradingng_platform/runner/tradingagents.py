@@ -13,6 +13,7 @@ from io import StringIO
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pandas as pd
 import requests
 from tradingagents.agents.analysts import sentiment_analyst
@@ -34,6 +35,14 @@ from tradingagents.dataflows.interface import VENDOR_METHODS
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
+from tradingng_platform.integrity.contracts import IntegrityStatus
+from tradingng_platform.integrity.financials import (
+    AlphaEarningsAvailabilityResolver,
+    CompositeAvailabilityResolver,
+    SecFilingClient,
+    filter_statement_payload,
+)
+from tradingng_platform.integrity.policy import PointInTimeRecorder
 from tradingng_platform.memory import render_tradingagents_memory
 from tradingng_platform.runner.callbacks import AuditCallback
 from tradingng_platform.runner.contracts import RunnerInput
@@ -64,6 +73,11 @@ _CURRENT_SNAPSHOT_METHODS = (
     "get_insider_transactions",
     "get_prediction_markets",
 )
+_FINANCIAL_STATEMENT_METHODS = (
+    "get_balance_sheet",
+    "get_cashflow",
+    "get_income_statement",
+)
 _CURRENT_SOCIAL_FETCHERS = (
     "fetch_stocktwits_messages",
     "fetch_reddit_posts",
@@ -90,6 +104,7 @@ class TradingAgentsRunner:
         graph_factory=TradingAgentsGraph,
         event_sink=None,
         emitter: EventEmitter | None = None,
+        availability_resolver=None,
     ):
         self.input = runner_input
         self.graph_factory = graph_factory
@@ -97,6 +112,7 @@ class TradingAgentsRunner:
             self.emitter = emitter
         else:
             self.emitter = EventEmitter(event_sink or _stdout_event_sink)
+        self.availability_resolver = availability_resolver
 
     def run(self) -> RunnerResult:
         directories = self._create_directories()
@@ -111,6 +127,7 @@ class TradingAgentsRunner:
                 directories["memory"] / "trading_memory.md",
                 memory_content,
             )
+        integrity_recorder = PointInTimeRecorder(self.input.analysis_date)
         callback = AuditCallback(
             directories["working"],
             self.input.data_vendors,
@@ -127,6 +144,8 @@ class TradingAgentsRunner:
                     "reasoning_effort": self.input.slow_codex_reasoning_effort,
                 },
             },
+            analysis_date=self.input.analysis_date,
+            integrity_recorder=integrity_recorder,
         )
         stage_tracker = StageTracker()
 
@@ -147,8 +166,13 @@ class TradingAgentsRunner:
 
         config = self._build_config(directories)
         with (
+            _availability_resolver_context(self.input, self.availability_resolver) as resolver,
             _alpha_vantage_run_guard(self.input),
-            _historical_point_in_time_guard(self.input.analysis_date),
+            _historical_point_in_time_guard(
+                self.input.analysis_date,
+                integrity_recorder,
+                resolver,
+            ),
         ):
             graph = self.graph_factory(
                 selected_analysts=self.input.analysts,
@@ -170,14 +194,20 @@ class TradingAgentsRunner:
         decision = parse_decision(final_state["final_trade_decision"])
         final_state_path = self.input.work_dir / "final_state.json"
         decision_path = self.input.work_dir / "decision.json"
+        integrity_path = directories["working"] / "point_in_time_integrity.json"
         _write_json(final_state_path, _json_safe(final_state))
         _write_json(decision_path, decision)
+        _write_json(
+            integrity_path,
+            integrity_recorder.finalize().model_dump(mode="json"),
+        )
 
         artifacts = [
             ("final_state", final_state_path),
             ("decision", decision_path),
             ("reports", report_dir),
             ("memory_context", memory_context_path),
+            ("point_in_time_integrity", integrity_path),
         ]
         for name, path in artifacts:
             self.emitter.emit(
@@ -362,6 +392,28 @@ def _alpha_ohlcv_loader(request, symbol: str, curr_date: str) -> pd.DataFrame:
 
 
 @contextmanager
+def _availability_resolver_context(runner_input: RunnerInput, override=None):
+    if override is not None:
+        yield override
+        return
+    cache_dir = runner_input.sec_cache_dir or runner_input.work_dir / "cache" / "sec"
+    with httpx.Client(follow_redirects=True) as client:
+        sec = SecFilingClient(
+            client=client,
+            user_agent=runner_input.sec_user_agent,
+            cache_dir=cache_dir,
+            timeout_seconds=runner_input.sec_request_timeout_seconds,
+        )
+        alpha = AlphaEarningsAvailabilityResolver(
+            lambda ticker: alpha_vantage_fundamentals._make_api_request(
+                "EARNINGS",
+                {"symbol": ticker},
+            )
+        )
+        yield CompositeAvailabilityResolver(sec, alpha)
+
+
+@contextmanager
 def _alpha_vantage_run_guard(runner_input: RunnerInput):
     configured = {
         vendor.strip()
@@ -436,25 +488,47 @@ def _alpha_vantage_run_guard(runner_input: RunnerInput):
 
 
 @contextmanager
-def _historical_point_in_time_guard(analysis_date: date):
+def _historical_point_in_time_guard(
+    analysis_date: date,
+    recorder: PointInTimeRecorder,
+    availability_resolver,
+):
     if analysis_date >= datetime.now(timezone.utc).date():
         yield
         return
 
     original_routes = {method: dict(VENDOR_METHODS[method]) for method in _CURRENT_SNAPSHOT_METHODS}
+    original_financial_routes = {
+        method: dict(VENDOR_METHODS[method]) for method in _FINANCIAL_STATEMENT_METHODS
+    }
     original_macro_routes = dict(VENDOR_METHODS["get_macro_indicators"])
     original_social = {name: getattr(sentiment_analyst, name) for name in _CURRENT_SOCIAL_FETCHERS}
     original_fred_request = fred._request
     try:
         for method, vendor_routes in original_routes.items():
-            unavailable = _point_in_time_unavailable(method, analysis_date)
+            unavailable = _point_in_time_unavailable(method, analysis_date, recorder)
             VENDOR_METHODS[method] = dict.fromkeys(vendor_routes, unavailable)
+        for method, vendor_routes in original_financial_routes.items():
+            VENDOR_METHODS[method] = {
+                vendor: _point_in_time_financial_route(
+                    route,
+                    method,
+                    analysis_date,
+                    recorder,
+                    availability_resolver,
+                )
+                for vendor, route in vendor_routes.items()
+            }
         fred._request = _point_in_time_fred_request(original_fred_request, analysis_date)
         VENDOR_METHODS["get_macro_indicators"] = {
             vendor: (
-                _point_in_time_fred_route(route, analysis_date)
+                _point_in_time_fred_route(route, analysis_date, recorder)
                 if vendor == "fred"
-                else _point_in_time_unavailable(f"get_macro_indicators via {vendor}", analysis_date)
+                else _point_in_time_unavailable(
+                    f"get_macro_indicators via {vendor}",
+                    analysis_date,
+                    recorder,
+                )
             )
             for vendor, route in original_macro_routes.items()
         }
@@ -462,11 +536,13 @@ def _historical_point_in_time_guard(analysis_date: date):
             setattr(
                 sentiment_analyst,
                 name,
-                _point_in_time_social_unavailable(name, analysis_date),
+                _point_in_time_social_unavailable(name, analysis_date, recorder),
             )
         yield
     finally:
         for method, vendor_routes in original_routes.items():
+            VENDOR_METHODS[method] = vendor_routes
+        for method, vendor_routes in original_financial_routes.items():
             VENDOR_METHODS[method] = vendor_routes
         VENDOR_METHODS["get_macro_indicators"] = original_macro_routes
         fred._request = original_fred_request
@@ -474,8 +550,13 @@ def _historical_point_in_time_guard(analysis_date: date):
             setattr(sentiment_analyst, name, fetcher)
 
 
-def _point_in_time_unavailable(method: str, analysis_date: date):
+def _point_in_time_unavailable(
+    method: str,
+    analysis_date: date,
+    recorder: PointInTimeRecorder,
+):
     def unavailable(*args, **kwargs) -> str:
+        recorder.record(method, IntegrityStatus.SAFE, "current_snapshot_blocked")
         return (
             f"POINT_IN_TIME_DATA_UNAVAILABLE: {method} cannot guarantee data as of "
             f"{analysis_date.isoformat()}. Proceed without it and do not use current "
@@ -485,8 +566,13 @@ def _point_in_time_unavailable(method: str, analysis_date: date):
     return unavailable
 
 
-def _point_in_time_social_unavailable(name: str, analysis_date: date):
+def _point_in_time_social_unavailable(
+    name: str,
+    analysis_date: date,
+    recorder: PointInTimeRecorder,
+):
     def unavailable(*args, **kwargs) -> str:
+        recorder.record(name, IntegrityStatus.SAFE, "current_snapshot_blocked")
         return (
             f"<point-in-time unavailable: {name} cannot guarantee data as of "
             f"{analysis_date.isoformat()}; proceed without it and do not use current data>"
@@ -511,7 +597,11 @@ def _point_in_time_fred_request(request, analysis_date: date):
     return vintage_request
 
 
-def _point_in_time_fred_route(route, analysis_date: date):
+def _point_in_time_fred_route(
+    route,
+    analysis_date: date,
+    recorder: PointInTimeRecorder,
+):
     @wraps(route)
     def vintage_route(
         indicator: str,
@@ -519,6 +609,7 @@ def _point_in_time_fred_route(route, analysis_date: date):
         look_back_days: int | None = None,
     ) -> str:
         report = route(indicator, analysis_date.isoformat(), look_back_days)
+        recorder.record("get_macro_indicators", IntegrityStatus.SAFE, "fred_vintage_applied")
         return (
             "POINT_IN_TIME_VINTAGE: FRED observations are limited to values "
             f"available on {analysis_date.isoformat()}. Later releases and revisions "
@@ -527,6 +618,48 @@ def _point_in_time_fred_route(route, analysis_date: date):
         )
 
     return vintage_route
+
+
+def _point_in_time_financial_route(
+    route,
+    method: str,
+    analysis_date: date,
+    recorder: PointInTimeRecorder,
+    availability_resolver,
+):
+    @wraps(route)
+    def filtered_route(*args, **kwargs):
+        ticker = kwargs.get("ticker") or (args[0] if args else None)
+        if not isinstance(ticker, str) or not ticker.strip():
+            recorder.record(method, IntegrityStatus.SAFE, "invalid_ticker_filtered")
+            return json.dumps(
+                {
+                    "annualReports": [],
+                    "quarterlyReports": [],
+                    "integrityNotice": (
+                        "Historical statement data was unavailable under point-in-time.v1."
+                    ),
+                },
+                sort_keys=True,
+            )
+        payload = route(*args, **kwargs)
+        filtered, findings = filter_statement_payload(
+            payload,
+            ticker=ticker,
+            analysis_date=analysis_date,
+            statement_kind=method,
+            resolver=availability_resolver,
+        )
+        for finding in findings:
+            recorder.record(
+                finding.tool_name,
+                finding.status,
+                finding.reason_code,
+                finding.details,
+            )
+        return filtered
+
+    return filtered_route
 
 
 def parse_decision(markdown: str) -> dict:

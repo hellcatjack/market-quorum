@@ -11,6 +11,12 @@ from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 
+from tradingng_platform.integrity.policy import (
+    PointInTimeRecorder,
+    evidence_temporal_metadata,
+    record_observed_tool,
+)
+
 _SENSITIVE_KEY = re.compile(
     r"api[_-]?key|authorization|cookie|password|secret|token",
     re.IGNORECASE,
@@ -84,6 +90,8 @@ class AuditCallback(BaseCallbackHandler):
         data_vendors: dict[str, str],
         tool_vendors: dict[str, str],
         model_routes: dict[str, dict[str, str]] | None = None,
+        analysis_date: date | None = None,
+        integrity_recorder: PointInTimeRecorder | None = None,
     ):
         self.working_dir = working_dir
         self.working_dir.mkdir(parents=True, exist_ok=True)
@@ -93,6 +101,8 @@ class AuditCallback(BaseCallbackHandler):
         self.data_vendors = data_vendors
         self.tool_vendors = tool_vendors
         self.model_routes = model_routes or {}
+        self.analysis_date = analysis_date
+        self.integrity_recorder = integrity_recorder
         self._tools: dict[Any, dict] = {}
         self._llm: dict[Any, dict] = {}
         self._lock = threading.Lock()
@@ -122,6 +132,11 @@ class AuditCallback(BaseCallbackHandler):
         source = self.tool_vendors.get(tool_name)
         if source is None and category is not None:
             source = self.data_vendors.get(category)
+        effective_at, freshness = evidence_temporal_metadata(
+            tool_name,
+            self.analysis_date,
+            output,
+        )
         record = {
             "tool_name": tool_name,
             "source": source or "default",
@@ -129,9 +144,12 @@ class AuditCallback(BaseCallbackHandler):
             "output": redact(output),
             "output_sha256": _content_hash(output),
             "collected_at": datetime.now(timezone.utc).isoformat(),
+            "effective_at": effective_at,
+            "freshness": freshness,
             "retention_class": "raw_180d",
         }
         self._append(self.evidence_path, record)
+        record_observed_tool(self.integrity_recorder, tool_name, output)
         self._record_tool_health(tool_name, pending, healthy=True)
 
     def on_tool_error(self, error: BaseException, *, run_id: Any = None, **kwargs) -> None:
@@ -145,6 +163,8 @@ class AuditCallback(BaseCallbackHandler):
             "output": {"error_type": error_type},
             "output_sha256": _content_hash({"error_type": error_type}),
             "collected_at": datetime.now(timezone.utc).isoformat(),
+            "effective_at": None,
+            "freshness": "collection_failed",
             "retention_class": "raw_180d",
         }
         self._append(self.evidence_path, record)
