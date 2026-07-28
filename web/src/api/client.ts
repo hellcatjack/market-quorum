@@ -83,6 +83,7 @@ async function apiResponse(
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await apiResponse(path, init, "application/json");
+  if (response.status === 204) return undefined as T;
   const isJson = response.headers.get("Content-Type")?.includes("application/json") ?? false;
   const payload: unknown = isJson ? await response.json() : undefined;
   return payload as T;

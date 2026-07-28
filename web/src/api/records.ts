@@ -1,4 +1,4 @@
-import { apiRequest, apiTextRequest, jsonBody } from "./client";
+import { ApiClientError, apiRequest, apiTextRequest, jsonBody } from "./client";
 import type { components } from "./schema";
 
 export type RunDetail = components["schemas"]["RunDetailView"];
@@ -74,10 +74,20 @@ export const retryRun = (runId: string) =>
     method: "POST",
     body: jsonBody({}),
   });
-export const deleteRun = (runId: string) =>
-  apiRequest<void>(`/api/v1/assessments/${encodeURIComponent(runId)}`, {
-    method: "DELETE",
-  });
+export const deleteRun = async (runId: string) => {
+  try {
+    await apiRequest<void>(`/api/v1/assessments/${encodeURIComponent(runId)}`, {
+      method: "DELETE",
+    });
+  } catch (error) {
+    if (
+      error instanceof ApiClientError
+      && error.status === 404
+      && error.code === "assessment_not_found"
+    ) return;
+    throw error;
+  }
+};
 export const cleanReassessRun = (runId: string) =>
   apiRequest<Run>(`/api/v1/assessments/${encodeURIComponent(runId)}/clean-reassessment`, {
     method: "POST",

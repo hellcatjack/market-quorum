@@ -163,6 +163,7 @@ export function RunDetailPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [liveEvents, setLiveEvents] = useState<RunEvent[]>([]);
   const lastSequence = useRef(0);
+  const deleteRequestStarted = useRef(false);
   const user = useQuery({ queryKey: ["current-user"], queryFn: getCurrentUser, retry: false });
   const run = useQuery({
     queryKey: ["run", runId],
@@ -261,6 +262,8 @@ export function RunDetailPage() {
   const deleteAssessment = useMutation({
     mutationFn: () => deleteRun(runId),
     onSuccess: () => {
+      setDeleteDialogOpen(false);
+      navigate("/");
       queryClient.removeQueries({
         predicate: (query) => query.queryKey.includes(runId),
       });
@@ -268,7 +271,9 @@ export function RunDetailPage() {
       queryClient.removeQueries({ queryKey: ["instrument-overviews"] });
       queryClient.removeQueries({ queryKey: ["instrument", run.data?.ticker] });
       queryClient.removeQueries({ queryKey: ["instrument-history", run.data?.ticker] });
-      navigate("/");
+    },
+    onError: () => {
+      deleteRequestStarted.current = false;
     },
   });
 
@@ -328,6 +333,7 @@ export function RunDetailPage() {
               type="button"
               className="run-action--danger"
               onClick={() => {
+                deleteRequestStarted.current = false;
                 deleteAssessment.reset();
                 setDeleteDialogOpen(true);
               }}
@@ -412,9 +418,16 @@ export function RunDetailPage() {
           pending={deleteAssessment.isPending}
           errorMessage={deleteErrorMessage}
           onCancel={() => {
-            if (!deleteAssessment.isPending) setDeleteDialogOpen(false);
+            if (!deleteAssessment.isPending) {
+              deleteRequestStarted.current = false;
+              setDeleteDialogOpen(false);
+            }
           }}
-          onConfirm={() => deleteAssessment.mutate()}
+          onConfirm={() => {
+            if (deleteRequestStarted.current) return;
+            deleteRequestStarted.current = true;
+            deleteAssessment.mutate();
+          }}
         />
       ) : null}
     </section>

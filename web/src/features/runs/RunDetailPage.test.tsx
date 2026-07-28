@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
@@ -340,9 +340,14 @@ test("admin confirms a terminal assessment deletion and returns to overview", as
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
   await user.click(deleteButton);
-  await user.click(
-    within(screen.getByRole("dialog")).getByRole("button", { name: "确认永久删除" }),
+  const confirmDelete = within(screen.getByRole("dialog")).getByRole(
+    "button",
+    { name: "确认永久删除" },
   );
+  act(() => {
+    confirmDelete.click();
+    confirmDelete.click();
+  });
 
   expect(await screen.findByText("评估总览已返回")).toBeInTheDocument();
   expect(

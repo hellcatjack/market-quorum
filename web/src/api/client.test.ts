@@ -37,6 +37,19 @@ test("parses the shared API error envelope", async () => {
   );
 });
 
+test("treats a 204 JSON response with an empty body as success", async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(null, {
+      status: 204,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+
+  await expect(
+    apiRequest<void>("/api/v1/assessments/run-delete", { method: "DELETE" }),
+  ).resolves.toBeUndefined();
+});
+
 test("reads artifact text with the same authenticated request boundary", async () => {
   const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
     new Response("# 完整报告\n全部正文", {
