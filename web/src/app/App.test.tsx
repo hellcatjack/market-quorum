@@ -95,7 +95,7 @@ test("defines the run detail route", async () => {
     </Router>,
   );
 
-  expect(await screen.findByRole("heading", { name: "SPCX 评估详情" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "SPCX" })).toBeInTheDocument();
 });
 
 test("lets the user switch the complete management shell to English", async () => {

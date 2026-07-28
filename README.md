@@ -216,6 +216,28 @@ Workers no longer contact the provider directly. Restart the Broker first and
 then the scheduler and Workers after changing it. Only subsequently admitted
 runs are affected, and run details retain the configured vendor snapshot.
 
+### Official instrument names
+
+For SEC-covered securities, `Instrument.name` is the current registered name
+verified against SEC EDGAR's ticker index and company submissions API. The
+platform preserves the SEC spelling and capitalization together with the CIK,
+source URL, verification time, and refresh schedule. It does not translate,
+expand, or replace the registered name with an Alpha Vantage, Yahoo, or other
+vendor label.
+
+When SEC cannot uniquely match a ticker and exchange, the UI safely displays the
+ticker alone and the system status page reports the unresolved or conflicting
+identity. Name resolution never blocks an assessment and does not consume Alpha
+Vantage quota. Operators can run the idempotent backfill after deployment:
+
+```bash
+.venv/bin/tradingng-platform-name-backfill
+```
+
+Automated SEC requests require `TRADINGNG_SEC_USER_AGENT`; keep a deployment
+identity in the private environment rather than committing personal contact
+details.
+
 ### Outcome-validation providers
 
 New validation jobs use `validation.v2`. Exact entry, exit, and maturity times

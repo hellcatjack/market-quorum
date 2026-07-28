@@ -523,6 +523,11 @@ class RecordService:
         principal.require("assessments:read")
         ticker = canonicalize_ticker(ticker)
         async with self.sessions() as session:
+            instrument = await session.scalar(
+                select(Instrument)
+                .where(Instrument.canonical_ticker == ticker)
+                .order_by(Instrument.asset_type, Instrument.id)
+            )
             asset_types = list(
                 await session.scalars(
                     select(Instrument.asset_type)
@@ -553,6 +558,8 @@ class RecordService:
             )
             return InstrumentSummaryView(
                 ticker=ticker,
+                name=instrument.name if instrument is not None else None,
+                exchange=instrument.exchange if instrument is not None else None,
                 asset_types=asset_types,
                 assessment_count=len(rows),
                 latest_run_id=latest_run.id,

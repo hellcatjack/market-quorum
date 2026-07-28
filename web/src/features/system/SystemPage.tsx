@@ -50,6 +50,31 @@ function AlphaQuotaPanel({ quota }: { quota: NonNullable<SystemStatus["alpha_van
   );
 }
 
+function InstrumentNamesPanel({
+  names,
+}: {
+  names: NonNullable<SystemStatus["instrument_names"]>;
+}) {
+  const { t } = useI18n();
+  return (
+    <section className="detail-panel detail-panel--wide instrument-names-health">
+      <div className="section-heading">
+        <p className="eyebrow">SEC EDGAR</p>
+        <h2>{t("官方标的名称")}</h2>
+      </div>
+      <dl className="system-facts instrument-names-health__facts">
+        <div><dt>{t("已核验 / 全部")}</dt><dd>{names.official} / {names.total}</dd></div>
+        <div><dt>{t("待解析")}</dt><dd>{t("{count} 个待解析", { count: names.pending })}</dd></div>
+        <div><dt>{t("未解析")}</dt><dd>{t("{count} 个未解析", { count: names.unresolved })}</dd></div>
+        <div><dt>{t("冲突")}</dt><dd>{t("{count} 个冲突", { count: names.conflicts })}</dd></div>
+      </dl>
+      <p className="instrument-names-health__note">
+        {t("名称保持 SEC 官方拼写；未解析标的仅显示代码，不使用第三方名称替代。")}
+      </p>
+    </section>
+  );
+}
+
 function PolicyForm({ policy, editable }: { policy: SchedulerPolicy; editable: boolean }) {
   const { t } = useI18n();
   const queryClient = useQueryClient();
@@ -163,6 +188,7 @@ export function SystemPage() {
       {status.isError || capacity.isError || policy.isError || modelRouting.isError ? <p className="page-warning" role="alert">{t("部分系统诊断暂时不可用。")}</p> : null}
       <div className="system-grid">
         {status.data?.alpha_vantage ? <AlphaQuotaPanel quota={status.data.alpha_vantage} /> : null}
+        {status.data?.instrument_names ? <InstrumentNamesPanel names={status.data.instrument_names} /> : null}
         <section className="detail-panel">
           <div className="section-heading"><p className="eyebrow">Gateway</p><h2>{t("Gateway 运行状态")}</h2></div>
           {status.data ? <><dl className="system-facts"><div><dt>{t("状态")}</dt><dd>{systemStatusLabel(status.data.gateway.status, locale)}</dd></div><div><dt>{t("活动请求")}</dt><dd>{status.data.gateway.active_completions}</dd></div><div><dt>{t("延迟")}</dt><dd>{status.data.gateway.latency_ms} ms</dd></div><div><dt>{t("快照")}</dt><dd title={status.data.gateway.snapshot_id}>{status.data.gateway.snapshot_id}</dd></div></dl><details className="gateway-compatibility"><summary>{t("兼容默认路由（非 TradingAgents 评估路由）")}</summary><dl className="system-facts"><div><dt>{t("Gateway 默认模型")}</dt><dd>{status.data.gateway.model}</dd></div><div><dt>{t("Gateway 默认思考深度")}</dt><dd>{reasoningEffortLabel(status.data.gateway.reasoning_effort, locale)}</dd></div></dl><p>{t("该默认值仅服务旧版兼容调用；TradingAgents 评估使用下方独立的快速分析与关键裁决路由。")}</p></details></> : <p role="status">{t("载入中…")}</p>}

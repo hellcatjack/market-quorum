@@ -47,7 +47,7 @@ const runPage = {
       id: "run-success",
       request_id: "request-2",
       ticker: "NVDA",
-      instrument_name: "英伟达",
+      instrument_name: "NVIDIA CORP",
       exchange: "NASDAQ",
       asset_type: "stock",
       analysis_date: "2026-06-20",
@@ -65,7 +65,7 @@ const overviewPage = {
       instrument: {
         id: "instrument-nvda",
         ticker: "NVDA",
-        name: "英伟达",
+        name: "NVIDIA CORP",
         exchange: "NASDAQ",
         asset_type: "stock",
       },
@@ -73,7 +73,7 @@ const overviewPage = {
         id: "run-failed",
         request_id: "request-failed",
         ticker: "NVDA",
-        instrument_name: "英伟达",
+        instrument_name: "NVIDIA CORP",
         exchange: "NASDAQ",
         asset_type: "stock",
         analysis_date: "2026-07-25",
@@ -85,7 +85,7 @@ const overviewPage = {
         id: "run-success",
         request_id: "request-success",
         ticker: "NVDA",
-        instrument_name: "英伟达",
+        instrument_name: "NVIDIA CORP",
         exchange: "NASDAQ",
         asset_type: "stock",
         analysis_date: "2026-06-20",
@@ -172,7 +172,7 @@ test("defaults to one instrument row and keeps the full task view available", as
   expect(screen.getByTestId("count-succeeded")).toHaveTextContent("53");
   expect(screen.getByTestId("count-failed")).toHaveTextContent("3");
 
-  const instrument = await screen.findByRole("link", { name: "英伟达 NVDA NASDAQ" });
+  const instrument = await screen.findByRole("link", { name: "NVIDIA CORP NVDA NASDAQ" });
   expect(instrument).toHaveAttribute("href", "/instruments/NVDA");
   const ledgerRow = instrument.closest("tr");
   expect(ledgerRow).not.toBeNull();
@@ -181,7 +181,7 @@ test("defaults to one instrument row and keeps the full task view available", as
     expect(lines).not.toBeNull();
     expect(lines?.querySelectorAll(":scope > .ledger-line")).toHaveLength(2);
   }
-  expect(ledgerRow).toHaveTextContent("英伟达");
+  expect(ledgerRow).toHaveTextContent("NVIDIA CORP");
   expect(ledgerRow).toHaveTextContent("NVDA · NASDAQ");
   expect(ledgerRow).toHaveTextContent("股票");
   expect(ledgerRow).toHaveTextContent("成功 15");

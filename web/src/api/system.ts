@@ -46,6 +46,13 @@ export interface SystemStatus {
     rate_limits: number;
     transient_errors: number;
   } | null;
+  instrument_names: {
+    total: number;
+    official: number;
+    pending: number;
+    unresolved: number;
+    conflicts: number;
+  } | null;
 }
 
 export const getSystemStatus = () => apiRequest<SystemStatus>("/api/v1/system/status");

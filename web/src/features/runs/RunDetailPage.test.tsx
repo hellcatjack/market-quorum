@@ -147,6 +147,7 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
       id: "run-123",
       request_id: "request-123",
       ticker: "SPCX",
+      instrument_name: "Space Exploration Holdings, LLC",
       exchange: "NMS",
       asset_type: "stock",
       analysis_date: "2026-07-25",
@@ -198,7 +199,10 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole("heading", { name: "SPCX 评估详情" })).toBeInTheDocument();
+  expect(
+    await screen.findByRole("heading", { name: "Space Exploration Holdings, LLC" }),
+  ).toBeInTheDocument();
+  expect(screen.getByText("SPCX · NMS")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "删除评估" })).not.toBeInTheDocument();
   expect(screen.getByText("快速分析路由")).toBeInTheDocument();
   expect(screen.getByText("gpt-5.6-terra · 中")).toBeInTheDocument();
@@ -306,6 +310,7 @@ test("admin confirms a terminal assessment deletion and returns to overview", as
       id: "run-delete",
       request_id: "request-delete",
       ticker: "NVDA",
+      instrument_name: "NVIDIA CORP",
       exchange: "NASDAQ",
       asset_type: "stock",
       analysis_date: "2026-07-25",
@@ -331,7 +336,8 @@ test("admin confirms a terminal assessment deletion and returns to overview", as
   );
   const user = userEvent.setup();
 
-  expect(await screen.findByRole("heading", { name: "NVDA 评估详情" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "NVIDIA CORP" })).toBeInTheDocument();
+  expect(screen.getByText("NVDA · NASDAQ")).toBeInTheDocument();
   const deleteButton = await screen.findByRole("button", { name: "删除评估" });
   await user.click(deleteButton);
   const dialog = screen.getByRole("dialog", { name: "永久删除 NVDA 的这次评估？" });

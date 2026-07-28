@@ -5,8 +5,9 @@ import contextlib
 import hashlib
 import json
 import logging
+import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -28,6 +29,7 @@ _SUBMISSION_CACHE_TTL = timedelta(days=7)
 _TRANSIENT_RETRY_DELAY = timedelta(minutes=15)
 _PERMANENT_RETRY_DELAY = timedelta(hours=24)
 _MAX_PENDING_SCAN = 500
+_SEC_MIN_REQUEST_INTERVAL_SECONDS = 0.125
 _EXCHANGE_ALIASES = {
     "ASE": "AMEX",
     "AMEX": "AMEX",
@@ -85,6 +87,8 @@ class SecInstrumentNameProvider:
         user_agent: str,
         cache_dir: Path,
         clock: Callable[[], datetime] | None = None,
+        monotonic: Callable[[], float] | None = None,
+        sleeper: Callable[[float], Awaitable[None]] | None = None,
     ):
         if not user_agent.strip():
             raise ValueError("SEC User-Agent cannot be empty")
@@ -92,6 +96,10 @@ class SecInstrumentNameProvider:
         self.user_agent = user_agent.strip()
         self.cache_dir = cache_dir
         self.clock = clock or (lambda: datetime.now(timezone.utc))
+        self.monotonic = monotonic or time.monotonic
+        self.sleeper = sleeper or asyncio.sleep
+        self._request_lock = asyncio.Lock()
+        self._last_request_started: float | None = None
 
     async def resolve(
         self,
@@ -131,13 +139,7 @@ class SecInstrumentNameProvider:
         if cached is not None and now - cached[0] <= ttl:
             return cached[1]
         try:
-            response = await self.client.get(
-                url,
-                headers={
-                    "User-Agent": self.user_agent,
-                    "Accept-Encoding": "gzip, deflate",
-                },
-            )
+            response = await self._get(url)
             response.raise_for_status()
             payload = response.json()
         except (httpx.HTTPError, ValueError):
@@ -150,6 +152,26 @@ class SecInstrumentNameProvider:
             raise NameResolutionError("invalid_payload", transient=True)
         _write_cache(cache_path, now, payload)
         return payload
+
+    async def _get(self, url: str) -> httpx.Response:
+        async with self._request_lock:
+            now = self.monotonic()
+            if self._last_request_started is not None:
+                wait = (
+                    _SEC_MIN_REQUEST_INTERVAL_SECONDS
+                    - (now - self._last_request_started)
+                )
+                if wait > 0:
+                    await self.sleeper(wait)
+                    now = self.monotonic()
+            self._last_request_started = now
+            return await self.client.get(
+                url,
+                headers={
+                    "User-Agent": self.user_agent,
+                    "Accept-Encoding": "gzip, deflate",
+                },
+            )
 
 
 class InstrumentMetadataStore(Protocol):

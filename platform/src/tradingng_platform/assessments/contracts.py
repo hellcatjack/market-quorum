@@ -46,7 +46,10 @@ class RunView(BaseModel):
     id: uuid.UUID
     request_id: uuid.UUID
     ticker: str
-    instrument_name: str | None = None
+    instrument_name: str | None = Field(
+        default=None,
+        description="SEC-verified official instrument name when available.",
+    )
     exchange: str | None = None
     asset_type: str
     analysis_date: date

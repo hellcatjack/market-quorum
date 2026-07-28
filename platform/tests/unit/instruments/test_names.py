@@ -75,6 +75,35 @@ async def test_sec_provider_returns_registered_name_and_cik(
     )
 
 
+async def test_sec_provider_spaces_uncached_upstream_requests(tmp_path):
+    elapsed = [0.0]
+    sleeps: list[float] = []
+
+    async def sleeper(delay: float) -> None:
+        sleeps.append(delay)
+        elapsed[0] += delay
+
+    async with _sec_client(
+        submissions={
+            "0000080424": {
+                "name": "PROCTER & GAMBLE Co",
+                "tickers": ["PG"],
+                "exchanges": ["NYSE"],
+            }
+        }
+    ) as client:
+        provider = SecInstrumentNameProvider(
+            client,
+            user_agent="MarketQuorum test",
+            cache_dir=tmp_path,
+            monotonic=lambda: elapsed[0],
+            sleeper=sleeper,
+        )
+        await provider.resolve("PG", "NYSE")
+
+    assert sleeps == [pytest.approx(0.125)]
+
+
 async def test_sec_provider_distinguishes_missing_and_exchange_conflict(tmp_path):
     async with _sec_client(
         submissions={

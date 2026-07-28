@@ -940,7 +940,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Name */
+            /**
+             * Name
+             * @description SEC-verified official instrument name when available.
+             */
             name: string | null;
             /** Ticker */
             ticker: string;
@@ -1007,12 +1010,19 @@ export interface components {
             assessment_count: number;
             /** Asset Types */
             asset_types: string[];
+            /** Exchange */
+            exchange?: string | null;
             /** Latest Created At */
             latest_created_at: string | null;
             /** Latest Rating */
             latest_rating: string | null;
             /** Latest Run Id */
             latest_run_id: string | null;
+            /**
+             * Name
+             * @description SEC-verified official instrument name when available.
+             */
+            name?: string | null;
             /** Ticker */
             ticker: string;
         };
@@ -1360,7 +1370,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Instrument Name */
+            /**
+             * Instrument Name
+             * @description SEC-verified official instrument name when available.
+             */
             instrument_name?: string | null;
             memory?: components["schemas"]["RunMemoryView"];
             /** Model Routing Snapshot Id */
@@ -1456,7 +1469,10 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /** Instrument Name */
+            /**
+             * Instrument Name
+             * @description SEC-verified official instrument name when available.
+             */
             instrument_name?: string | null;
             /**
              * Request Id

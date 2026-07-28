@@ -503,19 +503,19 @@ h1 {
 }
 
 .ledger-column-identity {
-  width: 17%;
-}
-
-.ledger-column-main {
-  width: 39%;
-}
-
-.ledger-column-signals {
   width: 24%;
 }
 
+.ledger-column-main {
+  width: 34%;
+}
+
+.ledger-column-signals {
+  width: 23%;
+}
+
 .ledger-column-operations {
-  width: 20%;
+  width: 19%;
 }
 
 .ledger-table th,
@@ -569,11 +569,16 @@ h1 {
   min-width: 0;
 }
 
-.ledger-line .instrument-name,
 .ledger-line .instrument-symbol,
 .ledger-asset-type,
 .ledger-latest-status {
   white-space: nowrap;
+}
+
+.ledger-line .instrument-name,
+.run-table .instrument-name {
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .ledger-asset-type,
@@ -1028,6 +1033,15 @@ h1 {
 .run-hero h1,
 .instrument-hero h1 {
   font-size: clamp(2.1rem, 5vw, 4.2rem);
+}
+
+.run-hero__identity,
+.instrument-hero__identity {
+  margin: 7px 0 4px;
+  color: var(--ink-muted);
+  font-size: 0.86rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
 }
 
 .run-actions {
@@ -1487,6 +1501,16 @@ pre {
 }
 
 .alpha-quota__note {
+  margin: 18px 0 0;
+  color: var(--ink-muted);
+  font-size: 0.82rem;
+}
+
+.instrument-names-health__facts {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.instrument-names-health__note {
   margin: 18px 0 0;
   color: var(--ink-muted);
   font-size: 0.82rem;

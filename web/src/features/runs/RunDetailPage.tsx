@@ -321,7 +321,15 @@ export function RunDetailPage() {
       <header className="run-hero">
         <div>
           <p className="eyebrow">{t("评估记录 / {date}", { date: run.data.analysis_date })}</p>
-          <h1>{t("{ticker} 评估详情", { ticker: run.data.ticker })}</h1>
+          <h1>{run.data.instrument_name ?? run.data.ticker}</h1>
+          {run.data.instrument_name || run.data.exchange ? (
+            <p className="run-hero__identity">
+              {[
+                run.data.instrument_name ? run.data.ticker : null,
+                run.data.exchange,
+              ].filter(Boolean).join(" · ")}
+            </p>
+          ) : null}
           <p><span className={`run-status run-status--${run.data.status === "succeeded" ? "success" : "active"}`}>● {runStatusLabel(run.data.status, locale)}</span> · {t("第 {attempt} 次尝试", { attempt: run.data.attempt })}</p>
         </div>
         <div className="run-actions">

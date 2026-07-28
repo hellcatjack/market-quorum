@@ -106,6 +106,11 @@ export function InstrumentHistoryPage() {
     () => orderInstrumentHistory(projectedEvents, order),
     [order, projectedEvents],
   );
+  const displayName = summary.data?.name ?? normalized;
+  const instrumentIdentity = [
+    summary.data?.name ? normalized : null,
+    summary.data?.exchange,
+  ].filter(Boolean).join(" · ");
 
   if (summary.isError || history.isError) {
     return <p className="page-shell page-warning" role="alert">{t("无法读取该标的的历史评估。")}</p>;
@@ -115,7 +120,10 @@ export function InstrumentHistoryPage() {
       <header className="instrument-hero">
         <div>
           <p className="eyebrow">{t("标的档案 / 结论演化")}</p>
-          <h1>{t("{ticker} 历史评估", { ticker: normalized })}</h1>
+          <h1>{displayName}</h1>
+          {instrumentIdentity ? (
+            <p className="instrument-hero__identity">{instrumentIdentity}</p>
+          ) : null}
           <p>{t("默认优先查看最新研究，也可切换为审计顺序，并将每次预测与 1/5/20 日实际表现绑定。")}</p>
         </div>
         <dl>

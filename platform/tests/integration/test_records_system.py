@@ -135,6 +135,11 @@ async def test_records_are_hash_verified_and_collaboration_is_audited(
         await session.flush()
         persisted_run = await session.get(AssessmentRun, run.id)
         persisted_run.config_snapshot_id = snapshot.id
+        instrument = await session.scalar(
+            select(Instrument).where(Instrument.canonical_ticker == "NVDA")
+        )
+        instrument.name = "NVIDIA CORP"
+        instrument.exchange = "NASDAQ"
         artifact = Artifact(
             run_id=run.id,
             kind=stored.kind,
@@ -185,7 +190,10 @@ async def test_records_are_hash_verified_and_collaboration_is_audited(
     assert comment.author == "Records Admin"
     assert len(await service.list_reviews(principal, run.id)) == 1
     assert len(await service.list_comments(principal, run.id)) == 1
-    assert (await service.instrument_summary(principal, "nvda")).assessment_count == 1
+    summary = await service.instrument_summary(principal, "nvda")
+    assert summary.assessment_count == 1
+    assert summary.name == "NVIDIA CORP"
+    assert summary.exchange == "NASDAQ"
     history = await service.instrument_history(principal, "NVDA")
     assert len(history) == 1
     assert history[0].executive_summary == "Wait"

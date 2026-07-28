@@ -195,6 +195,24 @@ TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
 不再直接访问供应商。修改配置后需要先重启 Broker，再重启调度器和 Worker，且只影响
 之后准入的任务。运行详情中的数据源快照会保留实际配置，便于追溯和复现。
 
+### 官方标的名称
+
+对于 SEC 覆盖的证券，`Instrument.name` 表示通过 SEC EDGAR ticker 索引与公司
+submissions API 核验的当前注册名称。平台保留 SEC 原始拼写和大小写，并记录 CIK、
+来源 URL、核验时间与刷新计划；不会翻译、扩写，也不会用 Alpha Vantage、Yahoo 或
+其他商业数据商的名称替代注册名称。
+
+当 SEC 无法用 ticker 与交易所唯一确认身份时，页面安全回退为只显示 ticker，系统
+状态页会展示未解析或身份冲突数量。名称解析不会阻塞评估，也不会消耗 Alpha Vantage
+配额。部署后可执行幂等回填：
+
+```bash
+.venv/bin/tradingng-platform-name-backfill
+```
+
+SEC 自动请求需要配置 `TRADINGNG_SEC_USER_AGENT`；安装身份应保存在私有环境中，不要
+把个人联系方式提交进仓库。
+
 ### 表现验证数据源
 
 新安排的表现验证使用 `validation.v2`：系统按交易所日历固化精确入场、退出和成熟

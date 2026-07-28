@@ -112,6 +112,8 @@ test("shows newest research first, preserves transitions and can switch to audit
       ? history
       : {
           ticker: "NVDA",
+          name: "NVIDIA CORP",
+          exchange: "Nasdaq",
           asset_types: ["stock"],
           assessment_count: 3,
           latest_run_id: "run-new",
@@ -133,7 +135,8 @@ test("shows newest research first, preserves transitions and can switch to audit
     </QueryClientProvider>,
   );
 
-  expect(await screen.findByRole("heading", { name: "NVDA 历史评估" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "NVIDIA CORP" })).toBeInTheDocument();
+  expect(screen.getByText("NVDA · Nasdaq")).toBeInTheDocument();
   const events = await screen.findAllByTestId("history-event");
   expect(events).toHaveLength(2);
   expect(events[0]).toHaveTextContent("2026-07-25");

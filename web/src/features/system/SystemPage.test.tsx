@@ -14,7 +14,7 @@ test("shows safe diagnostics and keeps scheduler policy read-only for viewers", 
     if (path.endsWith("/capacity")) return json({ admitted_or_running: 1, max_running_total: 2, hard_max_running_total: 32, queued: 0, oldest_queued_seconds: null, gateway_active_completions: 1, gateway_model: "gpt-5.6-sol", gateway_reasoning_effort: "xhigh", open_circuits: [], admission_allowed: true, admission_reasons: [] });
     if (path.endsWith("/scheduler-policy")) return json({ max_running_total: 2, hard_max_running_total: 32, gateway_active_limit: 3, cpu_limit_percent: 85, minimum_memory_gib: 8, minimum_disk_gib: 10, minimum_disk_percent: 10, version: 4, updated_at: "2026-07-25T12:00:00Z" });
     if (path.endsWith("/model-routing")) return json({ fast: { model: "gpt-5.6-terra", reasoning_effort: "high" }, slow: { model: "gpt-5.6-sol", reasoning_effort: "high" }, available_models: ["gpt-5.6-terra", "gpt-5.6-sol"], available_reasoning_efforts: ["low", "medium", "high", "xhigh", "max", "ultra"], routing_snapshot_id: "routing-snapshot", version: 1, updated_at: "2026-07-25T12:00:00Z" });
-    return json({ gateway: { status: "ok", active_completions: 1, model: "gpt-5.6-sol", reasoning_effort: "xhigh", snapshot_id: "snapshot-id", latency_ms: 12 }, workers: [{ instance_name: "worker-1", status: "idle", heartbeat_at: "2026-07-25T12:00:00Z", capabilities: { deep: true } }], circuits: [{ name: "vendor:finnhub", status: "closed", failure_count: 0, opened_until: null, last_error_code: null }], alpha_vantage: { status: "normal", configured_requests_per_minute: 75, effective_requests_per_minute: 60, max_in_flight: 3, in_flight: 1, queued: 2, oldest_queued_seconds: 4.5, blocked_until: null, requests: 100, upstream_requests: 80, cache_hits: 15, coalesced_requests: 5, rate_limits: 2, transient_errors: 1 } });
+    return json({ gateway: { status: "ok", active_completions: 1, model: "gpt-5.6-sol", reasoning_effort: "xhigh", snapshot_id: "snapshot-id", latency_ms: 12 }, workers: [{ instance_name: "worker-1", status: "idle", heartbeat_at: "2026-07-25T12:00:00Z", capabilities: { deep: true } }], circuits: [{ name: "vendor:finnhub", status: "closed", failure_count: 0, opened_until: null, last_error_code: null }], alpha_vantage: { status: "normal", configured_requests_per_minute: 75, effective_requests_per_minute: 60, max_in_flight: 3, in_flight: 1, queued: 2, oldest_queued_seconds: 4.5, blocked_until: null, requests: 100, upstream_requests: 80, cache_hits: 15, coalesced_requests: 5, rate_limits: 2, transient_errors: 1 }, instrument_names: { total: 48, official: 45, pending: 1, unresolved: 2, conflicts: 0 } });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(<QueryClientProvider client={client}><SystemPage /></QueryClientProvider>);
@@ -25,6 +25,9 @@ test("shows safe diagnostics and keeps scheduler policy read-only for viewers", 
   expect(screen.getByRole("heading", { name: "Alpha Vantage 全局配额" })).toBeInTheDocument();
   expect(screen.getByText("60 / 75 RPM")).toBeInTheDocument();
   expect(screen.getByText("2 个请求等待")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "官方标的名称" })).toBeInTheDocument();
+  expect(screen.getByText("45 / 48")).toBeInTheDocument();
+  expect(screen.getByText("2 个未解析")).toBeInTheDocument();
   const compatibility = screen.getByText("兼容默认路由（非 TradingAgents 评估路由）").closest("details");
   expect(compatibility).not.toHaveAttribute("open");
   expect(screen.getByLabelText("最大并发评估")).toHaveAttribute("max", "32");

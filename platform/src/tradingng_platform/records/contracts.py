@@ -99,6 +99,11 @@ class CommentView(BaseModel):
 
 class InstrumentSummaryView(BaseModel):
     ticker: str
+    name: str | None = Field(
+        default=None,
+        description="SEC-verified official instrument name when available.",
+    )
+    exchange: str | None = None
     asset_types: list[str]
     assessment_count: int
     latest_run_id: uuid.UUID | None
@@ -109,7 +114,9 @@ class InstrumentSummaryView(BaseModel):
 class InstrumentIdentityView(BaseModel):
     id: uuid.UUID
     ticker: str
-    name: str | None
+    name: str | None = Field(
+        description="SEC-verified official instrument name when available.",
+    )
     exchange: str | None
     asset_type: str
 
