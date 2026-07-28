@@ -1,6 +1,7 @@
 [Unit]
 Description=TradingNG 32-instance assessment worker pool
 After=tradingng-platform-scheduler.service
+PartOf=tradingng-platform-scheduler.service
 Wants=tradingng-platform-worker@1.service tradingng-platform-worker@2.service tradingng-platform-worker@3.service tradingng-platform-worker@4.service tradingng-platform-worker@5.service tradingng-platform-worker@6.service tradingng-platform-worker@7.service tradingng-platform-worker@8.service tradingng-platform-worker@9.service tradingng-platform-worker@10.service tradingng-platform-worker@11.service tradingng-platform-worker@12.service tradingng-platform-worker@13.service tradingng-platform-worker@14.service tradingng-platform-worker@15.service tradingng-platform-worker@16.service tradingng-platform-worker@17.service tradingng-platform-worker@18.service tradingng-platform-worker@19.service tradingng-platform-worker@20.service tradingng-platform-worker@21.service tradingng-platform-worker@22.service tradingng-platform-worker@23.service tradingng-platform-worker@24.service tradingng-platform-worker@25.service tradingng-platform-worker@26.service tradingng-platform-worker@27.service tradingng-platform-worker@28.service tradingng-platform-worker@29.service tradingng-platform-worker@30.service tradingng-platform-worker@31.service tradingng-platform-worker@32.service
 
 [Install]

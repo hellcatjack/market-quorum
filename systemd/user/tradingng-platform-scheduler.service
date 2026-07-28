@@ -4,7 +4,9 @@ After=tradingng-platform-alpha-broker.service
 Requires=tradingng-platform-alpha-broker.service
 After=tradingng-platform-api.service tradingng-codex-gateway.service
 Requires=tradingng-platform-api.service
+PartOf=tradingng-platform-api.service
 Wants=tradingng-codex-gateway.service
+Wants=tradingng-platform-workers.target
 
 [Service]
 Type=simple

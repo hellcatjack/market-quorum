@@ -287,6 +287,14 @@ def test_gateway_service_supports_unbounded_turns_and_graceful_drain():
     assert "TimeoutStopSec=infinity" in service
 
 
+def test_worker_pool_follows_api_and_scheduler_lifecycle():
+    target = (ROOT / "systemd/user/tradingng-platform-workers.target").read_text()
+    assert "PartOf=tradingng-platform-scheduler.service" in target
+    scheduler = (ROOT / "systemd/user/tradingng-platform-scheduler.service").read_text()
+    assert "PartOf=tradingng-platform-api.service" in scheduler
+    assert "Wants=tradingng-platform-workers.target" in scheduler
+
+
 def test_offline_compose_gate_supplies_every_required_bootstrap_variable():
     script = (ROOT / "scripts/verify_platform.sh").read_text()
     assert "TRADINGNG_POSTGRES_PASSWORD" in script
