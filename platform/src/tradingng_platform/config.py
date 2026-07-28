@@ -81,6 +81,28 @@ class Settings(BaseSettings):
     alpha_vantage_retry_attempts: int = Field(default=6, ge=1, le=20)
     alpha_vantage_retry_base_seconds: float = Field(default=5, ge=0.1, le=300)
     alpha_vantage_retry_max_seconds: float = Field(default=60, ge=0.1, le=900)
+    alpha_vantage_broker_host: str = "127.0.0.1"
+    alpha_vantage_broker_port: int = Field(default=8020, ge=1, le=65535)
+    alpha_vantage_broker_url: AnyHttpUrl = "http://127.0.0.1:8020"
+    alpha_vantage_broker_utilization: float = Field(default=0.8, gt=0, le=1)
+    alpha_vantage_broker_max_in_flight: int = Field(default=3, ge=1, le=32)
+    alpha_vantage_broker_admission_queue_limit: int = Field(default=6, ge=1, le=10000)
+    alpha_vantage_broker_request_timeout_seconds: float = Field(
+        default=2100,
+        ge=30,
+        le=7200,
+    )
+    alpha_vantage_broker_minute_cooldown_seconds: float = Field(
+        default=60,
+        ge=1,
+        le=3600,
+    )
+    alpha_vantage_broker_daily_cooldown_seconds: float = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+    )
+    alpha_vantage_auto_retry_attempts: int = Field(default=2, ge=0, le=5)
     research_data_vendor_chain: Annotated[tuple[str, ...], NoDecode] = (
         "alpha_vantage",
         "yfinance",
@@ -173,6 +195,11 @@ class Settings(BaseSettings):
     @property
     def job_dir(self) -> Path:
         return self.data_dir / "jobs"
+
+    @computed_field
+    @property
+    def alpha_vantage_cache_dir(self) -> Path:
+        return self.data_dir / "vendor-cache" / "alpha-vantage"
 
     @computed_field
     @property

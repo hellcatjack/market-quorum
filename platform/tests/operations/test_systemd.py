@@ -12,7 +12,7 @@ def test_gateway_unit_is_isolated_and_platform_units_are_strict():
     assert "audit" not in gateway.lower()
 
     platform_units = sorted(UNITS.glob("tradingng-platform-*.service"))
-    assert len(platform_units) == 6
+    assert len(platform_units) == 7
     combined = "\n".join(path.read_text() for path in platform_units)
     assert "EnvironmentFile=/app/devs/TradingNG/.env.platform" in combined
     assert "127.0.0.1:8010" not in combined
@@ -50,6 +50,7 @@ def test_restore_manages_workers_as_one_pool():
     assert restore.count("tradingng-platform-workers.target") == 2
     assert "tradingng-platform-worker@1.service" not in restore
     assert "tradingng-platform-worker@2.service" not in restore
+    assert restore.count("tradingng-platform-alpha-broker.service") == 2
 
 
 def test_api_uses_public_trust_and_business_services_preflight_mysql():
@@ -66,6 +67,36 @@ def test_api_uses_public_trust_and_business_services_preflight_mysql():
         "tradingng-platform-worker@.service",
     ):
         assert preflight in (UNITS / unit_name).read_text()
+
+
+def test_alpha_broker_is_loopback_only_and_required_by_alpha_consumers():
+    broker = (UNITS / "tradingng-platform-alpha-broker.service").read_text()
+    assert "tradingng_platform.vendors.alpha_vantage_broker_app" in broker
+    assert "EnvironmentFile=/app/devs/TradingNG/.env.platform" in broker
+    assert "NoNewPrivileges=yes" in broker
+    assert "check_platform_database.py" not in broker
+
+    for unit_name in (
+        "tradingng-platform-api.service",
+        "tradingng-platform-scheduler.service",
+        "tradingng-platform-validation.service",
+        "tradingng-platform-worker@.service",
+    ):
+        unit = (UNITS / unit_name).read_text()
+        assert "After=tradingng-platform-alpha-broker.service" in unit
+        assert "Requires=tradingng-platform-alpha-broker.service" in unit
+
+    example = (ROOT / ".env.platform.example").read_text()
+    assert "TRADINGNG_ALPHA_VANTAGE_BROKER_HOST=127.0.0.1" in example
+    assert "TRADINGNG_ALPHA_VANTAGE_BROKER_PORT=8020" in example
+    assert "TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=0.8" in example
+    assert "TRADINGNG_ALPHA_VANTAGE_BROKER_MAX_IN_FLIGHT=3" in example
+    assert "TRADINGNG_ALPHA_VANTAGE_AUTO_RETRY_ATTEMPTS=2" in example
+
+
+def test_verification_requires_the_alpha_broker_to_be_active():
+    verify = (ROOT / "scripts/verify_platform.sh").read_text()
+    assert "is-active --quiet tradingng-platform-alpha-broker.service" in verify
 
 
 def test_postgres_is_described_as_keycloak_only_and_legacy_caddy_is_disabled():

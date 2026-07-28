@@ -431,6 +431,44 @@ class WorkerRepository:
         )
         await self._release_lease(run_id)
 
+    async def schedule_automatic_retry(
+        self,
+        run_id: uuid.UUID,
+        error_code: str,
+        *,
+        max_retries: int,
+    ) -> AssessmentRun | None:
+        if error_code not in {"vendor_rate_limit", "vendor_transient"} or max_retries <= 0:
+            return None
+        run = await self.session.scalar(
+            select(AssessmentRun).where(AssessmentRun.id == run_id).with_for_update()
+        )
+        if run is None or run.status != RunStatus.FAILED.value or run.attempt > max_retries:
+            return None
+        existing = await self.session.scalar(
+            select(AssessmentRun.id).where(AssessmentRun.retry_of_run_id == run_id).limit(1)
+        )
+        if existing is not None:
+            return None
+        context = await AssessmentRepository(self.session).get_run_context(
+            run_id,
+            for_update=True,
+        )
+        if context is None:
+            raise RuntimeError("automatic retry references an incomplete run context")
+        retry = await AssessmentRepository(self.session).create_retry(context)
+        await AssessmentRepository(self.session).append_event(
+            run_id,
+            "assessment.auto_retry_scheduled",
+            {
+                "retry_run_id": str(retry.id),
+                "error_code": error_code,
+                "attempt": retry.attempt,
+                "max_retries": max_retries,
+            },
+        )
+        return retry
+
     async def finalize_cancelled(self, run_id: uuid.UUID) -> None:
         run = await self.session.scalar(
             select(AssessmentRun).where(AssessmentRun.id == run_id).with_for_update()

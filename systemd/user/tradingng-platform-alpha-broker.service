@@ -1,0 +1,20 @@
+[Unit]
+Description=TradingNG Alpha Vantage global quota broker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/app/devs/TradingNG
+EnvironmentFile=/app/devs/TradingNG/.env.platform
+Environment=PYTHONPATH=/app/devs/TradingNG/platform/src
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/app/devs/TradingNG/.venv/bin/python -m tradingng_platform.vendors.alpha_vantage_broker_app
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

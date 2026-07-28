@@ -1,5 +1,7 @@
 [Unit]
 Description=TradingNG management API and MCP server
+After=tradingng-platform-alpha-broker.service
+Requires=tradingng-platform-alpha-broker.service
 After=tradingng-platform-containers.service tradingng-codex-gateway.service
 Requires=tradingng-platform-containers.service
 Wants=tradingng-codex-gateway.service

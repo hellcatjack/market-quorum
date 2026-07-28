@@ -26,6 +26,7 @@ from tradingng_platform.records.service import ArtifactIntegrityError, RecordSer
 from tradingng_platform.scheduler.policy import SystemSnapshot
 from tradingng_platform.system.contracts import ModelRoutingPolicyCommand, SchedulerPolicyCommand
 from tradingng_platform.system.service import SystemService
+from tradingng_platform.vendors.alpha_vantage_client import AlphaBrokerStatus
 
 
 class _Gateway:
@@ -43,6 +44,26 @@ class _Gateway:
 class _Probe:
     def sample(self):
         return SystemSnapshot(20, 32, 100, 50, False)
+
+
+class _AlphaBroker:
+    async def status(self):
+        return AlphaBrokerStatus(
+            status="cooldown",
+            configured_requests_per_minute=75,
+            effective_requests_per_minute=60,
+            max_in_flight=3,
+            in_flight=2,
+            queued=5,
+            oldest_queued_seconds=12.5,
+            blocked_until="2026-07-28T12:00:00+00:00",
+            requests=100,
+            upstream_requests=80,
+            cache_hits=15,
+            coalesced_requests=5,
+            rate_limits=2,
+            transient_errors=1,
+        )
 
 
 def _admin():
@@ -282,6 +303,33 @@ async def test_system_status_only_lists_workers_with_recent_heartbeats(session_f
     status = await SystemService(session_factory, _Gateway(), _Probe()).status(_admin())
 
     assert [worker["instance_name"] for worker in status["workers"]] == ["host:1"]
+
+
+async def test_system_status_exposes_safe_alpha_global_quota_snapshot(session_factory):
+    status = await SystemService(
+        session_factory,
+        _Gateway(),
+        _Probe(),
+        alpha_broker_client=_AlphaBroker(),
+    ).status(_admin())
+
+    assert status["alpha_vantage"] == {
+        "status": "cooldown",
+        "configured_requests_per_minute": 75,
+        "effective_requests_per_minute": 60.0,
+        "max_in_flight": 3,
+        "in_flight": 2,
+        "queued": 5,
+        "oldest_queued_seconds": 12.5,
+        "blocked_until": "2026-07-28T12:00:00+00:00",
+        "requests": 100,
+        "upstream_requests": 80,
+        "cache_hits": 15,
+        "coalesced_requests": 5,
+        "rate_limits": 2,
+        "transient_errors": 1,
+    }
+    assert "key" not in str(status["alpha_vantage"]).lower()
 
 
 async def test_instrument_overview_preserves_decision_and_binds_validations(

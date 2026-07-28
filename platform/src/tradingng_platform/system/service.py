@@ -35,14 +35,29 @@ _WORKER_HEARTBEAT_FRESHNESS = timedelta(seconds=30)
 
 
 class SystemService:
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], gateway, system_probe):
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        gateway,
+        system_probe,
+        *,
+        alpha_broker_client=None,
+        alpha_broker_queue_limit: int = 6,
+    ):
         self.sessions = sessions
         self.gateway = gateway
         self.system_probe = system_probe
+        self.alpha_broker_client = alpha_broker_client
+        self.alpha_broker_queue_limit = alpha_broker_queue_limit
 
     async def status(self, principal: Principal) -> dict:
         principal.require("system:read")
         gateway = await self.gateway.status()
+        alpha_broker = (
+            await self.alpha_broker_client.status()
+            if self.alpha_broker_client is not None
+            else None
+        )
         fresh_after = datetime.now(timezone.utc) - _WORKER_HEARTBEAT_FRESHNESS
         async with self.sessions() as session:
             workers = list(
@@ -85,11 +100,19 @@ class SystemService:
                 }
                 for circuit in circuits
             ],
+            "alpha_vantage": (
+                alpha_broker.model_dump(mode="json") if alpha_broker is not None else None
+            ),
         }
 
     async def capacity(self, principal: Principal) -> CapacityView:
         principal.require("system:read")
         gateway = await self.gateway.status()
+        alpha_broker = (
+            await self.alpha_broker_client.status()
+            if self.alpha_broker_client is not None
+            else None
+        )
         system = self.system_probe.sample()
         now = datetime.now(timezone.utc)
         async with self.sessions() as session, session.begin():
@@ -115,6 +138,10 @@ class SystemService:
                 select(func.min(AssessmentRun.created_at)).where(AssessmentRun.status == "queued")
             )
             circuits = await CircuitBreakerRepository(session).blockers(now)
+        if alpha_broker is not None and not alpha_broker.admission_allowed(
+            queue_limit=self.alpha_broker_queue_limit
+        ):
+            circuits = tuple(sorted({*circuits, "vendor:alpha_vantage:global_quota"}))
         decision = policy.evaluate(CapacitySnapshot(active, gateway, system, circuits))
         return CapacityView(
             admitted_or_running=active,

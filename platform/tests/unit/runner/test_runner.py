@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pandas as pd
 from langchain_core.messages import AIMessage, HumanMessage
 from tradingagents.agents.analysts import sentiment_analyst
-from tradingagents.dataflows import fred
+from tradingagents.dataflows import alpha_vantage_common, alpha_vantage_fundamentals, fred
 from tradingagents.dataflows.alpha_vantage_common import AlphaVantageRateLimitError
 from tradingagents.dataflows.interface import VENDOR_METHODS
 
@@ -18,6 +18,7 @@ from tradingng_platform.runner.contracts import RunnerInput
 from tradingng_platform.runner.tradingagents import (
     TradingAgentsRunner,
     _alpha_ohlcv_loader,
+    _alpha_vantage_run_guard,
     _guard_alpha_request,
 )
 from tradingng_platform.vendors.alpha_vantage import AlphaVantageRetryPolicy
@@ -486,3 +487,41 @@ def test_alpha_ohlcv_loader_builds_raw_point_in_time_frame_without_yahoo():
             {"symbol": "JPM", "outputsize": "full", "datatype": "csv"},
         )
     ]
+
+
+def test_alpha_run_guard_routes_every_module_through_broker(tmp_path, monkeypatch):
+    calls = []
+
+    class FakeBrokerClient:
+        def __init__(self, base_url, *, consumer, timeout):
+            calls.append(("init", base_url, consumer, timeout))
+
+        def query(self, function_name, params, *, run_id, analysis_date):
+            calls.append((function_name, dict(params), run_id, analysis_date))
+            return '{"Symbol":"NVDA"}'
+
+    monkeypatch.setattr(
+        "tradingng_platform.runner.tradingagents.SyncAlphaVantageBrokerClient",
+        FakeBrokerClient,
+    )
+    direct = alpha_vantage_common._make_api_request
+    runner_input = _runner_input(tmp_path).model_copy(
+        update={
+            "data_vendors": {"fundamental_data": "alpha_vantage"},
+            "alpha_vantage_broker_request_timeout_seconds": 2100,
+        }
+    )
+
+    with _alpha_vantage_run_guard(runner_input):
+        assert alpha_vantage_common._make_api_request("OVERVIEW", {"symbol": "NVDA"}) == (
+            '{"Symbol":"NVDA"}'
+        )
+        assert (
+            alpha_vantage_fundamentals._make_api_request("BALANCE_SHEET", {"symbol": "NVDA"})
+            == '{"Symbol":"NVDA"}'
+        )
+
+    assert calls[0] == ("init", "http://127.0.0.1:8020", "research", 2100)
+    assert calls[1][0] == "OVERVIEW"
+    assert calls[2][0] == "BALANCE_SHEET"
+    assert alpha_vantage_common._make_api_request is direct

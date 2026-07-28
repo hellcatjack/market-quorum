@@ -44,6 +44,12 @@ from tradingng_platform.vendors.alpha_vantage import (
     alpha_key_fingerprint,
     classify_alpha_payload,
 )
+from tradingng_platform.vendors.alpha_vantage_client import (
+    AlphaBrokerAuthenticationError,
+    AlphaBrokerRateLimitError,
+    AlphaBrokerTransientError,
+    SyncAlphaVantageBrokerClient,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -367,22 +373,44 @@ def _alpha_vantage_run_guard(runner_input: RunnerInput):
         yield
         return
 
-    coordination_dir = runner_input.alpha_vantage_coordination_dir
-    if coordination_dir is None:
-        coordination_dir = runner_input.work_dir.parent.parent / "vendor-limits"
-    api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
-    key_identity = alpha_key_fingerprint(api_key) if api_key else "unconfigured"
-    gate = CrossProcessRateGate(
-        coordination_dir / f"alpha-vantage-{key_identity}.json",
-        runner_input.alpha_vantage_requests_per_minute,
-    )
-    policy = AlphaVantageRetryPolicy(
-        attempts=runner_input.alpha_vantage_retry_attempts,
-        base_seconds=runner_input.alpha_vantage_retry_base_seconds,
-        max_seconds=runner_input.alpha_vantage_retry_max_seconds,
-    )
     original_request = alpha_vantage_common._make_api_request
-    guarded_request = _guard_alpha_request(original_request, gate, policy)
+    if runner_input.alpha_vantage_broker_url is not None:
+        broker = SyncAlphaVantageBrokerClient(
+            str(runner_input.alpha_vantage_broker_url).rstrip("/"),
+            consumer="research",
+            timeout=runner_input.alpha_vantage_broker_request_timeout_seconds,
+        )
+
+        def guarded_request(function_name: str, params: dict):
+            try:
+                return broker.query(
+                    function_name,
+                    params,
+                    run_id=str(runner_input.run_id),
+                    analysis_date=runner_input.analysis_date.isoformat(),
+                )
+            except AlphaBrokerRateLimitError as error:
+                raise AlphaVantageRateLimitError(str(error)) from error
+            except AlphaBrokerAuthenticationError as error:
+                raise AlphaVantageNotConfiguredError(str(error)) from error
+            except AlphaBrokerTransientError as error:
+                raise AlphaVantageTransientError(str(error)) from error
+    else:
+        coordination_dir = runner_input.alpha_vantage_coordination_dir
+        if coordination_dir is None:
+            coordination_dir = runner_input.work_dir.parent.parent / "vendor-limits"
+        api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+        key_identity = alpha_key_fingerprint(api_key) if api_key else "unconfigured"
+        gate = CrossProcessRateGate(
+            coordination_dir / f"alpha-vantage-{key_identity}.json",
+            runner_input.alpha_vantage_requests_per_minute,
+        )
+        policy = AlphaVantageRetryPolicy(
+            attempts=runner_input.alpha_vantage_retry_attempts,
+            base_seconds=runner_input.alpha_vantage_retry_base_seconds,
+            max_seconds=runner_input.alpha_vantage_retry_max_seconds,
+        )
+        guarded_request = _guard_alpha_request(original_request, gate, policy)
     request_modules = (
         alpha_vantage_common,
         alpha_vantage_fundamentals,

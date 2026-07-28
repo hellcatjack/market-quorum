@@ -20,8 +20,13 @@ from tradingng_platform.validation.prices import PriceSeries
 from tradingng_platform.vendors.alpha_vantage import (
     AlphaVantageRetryPolicy,
     CrossProcessRateGate,
-    alpha_key_fingerprint,
     classify_alpha_payload,
+)
+from tradingng_platform.vendors.alpha_vantage_client import (
+    AlphaBrokerAuthenticationError,
+    AlphaBrokerRateLimitError,
+    AlphaBrokerTransientError,
+    AsyncAlphaVantageBrokerClient,
 )
 
 _ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
@@ -175,16 +180,17 @@ class AlphaVantagePriceProvider:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None,
         *,
         client: httpx.AsyncClient | None = None,
         timeout: float = 15.0,
         requests_per_minute: int = 75,
         rate_gate: CrossProcessRateGate | None = None,
+        broker_client: AsyncAlphaVantageBrokerClient | None = None,
         retry_policy: AlphaVantageRetryPolicy | None = None,
         sleep=asyncio.sleep,
     ):
-        if not api_key:
+        if not api_key and broker_client is None:
             raise ValueError("Alpha Vantage API key is required")
         self._api_key = api_key
         self._client = client
@@ -192,6 +198,7 @@ class AlphaVantagePriceProvider:
         self.requests_per_minute = requests_per_minute
         self._rate_limiter = SlidingWindowRateLimiter(requests_per_minute)
         self._rate_gate = rate_gate
+        self._broker_client = broker_client
         self._retry_policy = retry_policy or AlphaVantageRetryPolicy()
         self._sleep = sleep
 
@@ -200,7 +207,6 @@ class AlphaVantagePriceProvider:
             "function": "TIME_SERIES_DAILY_ADJUSTED",
             "symbol": ticker.upper(),
             "outputsize": "full",
-            "apikey": self._api_key,
         }
         payload = await self._request_payload(params)
         if not isinstance(payload, dict):
@@ -260,15 +266,38 @@ class AlphaVantagePriceProvider:
         )
 
     async def _request_payload(self, params: dict) -> dict:
+        if self._broker_client is not None:
+            function_name = str(params.get("function") or "")
+            broker_params = {key: value for key, value in params.items() if key != "function"}
+            try:
+                body = await self._broker_client.query(function_name, broker_params)
+            except AlphaBrokerRateLimitError as error:
+                raise ProviderRateLimited(str(error)) from error
+            except (AlphaBrokerAuthenticationError, AlphaBrokerTransientError) as error:
+                raise ProviderUnavailable(str(error)) from error
+            try:
+                payload = json.loads(body)
+            except json.JSONDecodeError as error:
+                raise ProviderInvalidData("Alpha Vantage response is not JSON") from error
+            if not isinstance(payload, dict):
+                raise ProviderInvalidData("Alpha Vantage response is not an object")
+            return payload
+
         for attempt in range(1, self._retry_policy.attempts + 1):
             await self._acquire()
             retry_after = None
             try:
                 if self._client is None:
                     async with httpx.AsyncClient(timeout=self._timeout) as client:
-                        response = await client.get(_ALPHA_VANTAGE_URL, params=params)
+                        response = await client.get(
+                            _ALPHA_VANTAGE_URL,
+                            params={**params, "apikey": self._api_key},
+                        )
                 else:
-                    response = await self._client.get(_ALPHA_VANTAGE_URL, params=params)
+                    response = await self._client.get(
+                        _ALPHA_VANTAGE_URL,
+                        params={**params, "apikey": self._api_key},
+                    )
                 if response.status_code == 429:
                     retry_after = _numeric_retry_after(response.headers.get("Retry-After"))
                     classification = "rate_limit"
@@ -357,24 +386,27 @@ class LegacyPriceProviderAdapter:
         )
 
 
-def build_price_provider(settings: Settings) -> PriceProviderRouter:
+def build_price_provider(
+    settings: Settings,
+    *,
+    broker_client: AsyncAlphaVantageBrokerClient | None = None,
+) -> PriceProviderRouter:
     providers: list[ProviderProtocol] = []
     for provider_id in settings.effective_validation_price_providers:
         if provider_id == "alphavantage":
             if settings.alpha_vantage_api_key is None:
                 continue
-            api_key = settings.alpha_vantage_api_key.get_secret_value()
+            resolved_broker = broker_client or AsyncAlphaVantageBrokerClient(
+                str(settings.alpha_vantage_broker_url),
+                consumer="validation",
+                timeout=settings.alpha_vantage_broker_request_timeout_seconds,
+            )
             providers.append(
                 AlphaVantagePriceProvider(
-                    api_key,
+                    None,
                     timeout=settings.validation_provider_timeout_seconds,
                     requests_per_minute=settings.alpha_vantage_requests_per_minute,
-                    rate_gate=CrossProcessRateGate(
-                        settings.data_dir
-                        / "vendor-limits"
-                        / f"alpha-vantage-{alpha_key_fingerprint(api_key)}.json",
-                        settings.alpha_vantage_requests_per_minute,
-                    ),
+                    broker_client=resolved_broker,
                     retry_policy=AlphaVantageRetryPolicy(
                         attempts=settings.alpha_vantage_retry_attempts,
                         base_seconds=settings.alpha_vantage_retry_base_seconds,

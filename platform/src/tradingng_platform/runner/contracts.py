@@ -47,6 +47,15 @@ class RunnerInput(BaseModel):
     work_dir: Path
     data_vendors: dict[str, str]
     tool_vendors: dict[str, str]
+    alpha_vantage_broker_url: AnyHttpUrl | None = Field(
+        default="http://127.0.0.1:8020",
+        validate_default=True,
+    )
+    alpha_vantage_broker_request_timeout_seconds: float = Field(
+        default=2100,
+        ge=30,
+        le=7200,
+    )
     alpha_vantage_coordination_dir: Path | None = None
     alpha_vantage_requests_per_minute: int = Field(default=75, ge=1, le=10000)
     alpha_vantage_retry_attempts: int = Field(default=6, ge=1, le=20)

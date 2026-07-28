@@ -130,6 +130,8 @@ def test_claim_snapshot_builds_isolated_runner_input(tmp_path):
     assert runner_input.alpha_vantage_retry_base_seconds == 3
     assert runner_input.alpha_vantage_retry_max_seconds == 30
     assert runner_input.alpha_vantage_coordination_dir == tmp_path / "vendor-limits"
+    assert str(runner_input.alpha_vantage_broker_url) == "http://127.0.0.1:8020/"
+    assert runner_input.alpha_vantage_broker_request_timeout_seconds == 2100
 
 
 def test_legacy_claim_snapshot_uses_single_gateway_pair_for_both_routes(tmp_path):

@@ -37,6 +37,7 @@ from tradingng_platform.scheduler.probes import SystemProbe
 from tradingng_platform.system.service import SystemService
 from tradingng_platform.validation.repository import ValidationRepository
 from tradingng_platform.validation.service import ValidationService
+from tradingng_platform.vendors.alpha_vantage_client import AsyncAlphaVantageBrokerClient
 from tradingng_platform.webhooks.service import WebhookService
 
 
@@ -91,6 +92,12 @@ def create_app(
             resolved_database.sessions,
             GatewayClient(str(app_settings.gateway_url)),
             SystemProbe(app_settings.data_dir),
+            alpha_broker_client=AsyncAlphaVantageBrokerClient(
+                str(app_settings.alpha_vantage_broker_url),
+                consumer="system",
+                timeout=5,
+            ),
+            alpha_broker_queue_limit=(app_settings.alpha_vantage_broker_admission_queue_limit),
         )
         app.state.webhooks = WebhookService(
             resolved_database.sessions,

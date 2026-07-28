@@ -20,6 +20,7 @@ from tradingng_platform.scheduler.repository import (
     SchedulerRepository,
 )
 from tradingng_platform.scheduler.service import AdmissionService
+from tradingng_platform.vendors.alpha_vantage_client import AsyncAlphaVantageBrokerClient
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +85,11 @@ async def run_scheduler() -> None:
     gateway = GatewayClient(str(settings.gateway_url))
     system_probe = SystemProbe(settings.data_dir)
     metadata = _execution_metadata(settings)
+    alpha_broker = AsyncAlphaVantageBrokerClient(
+        str(settings.alpha_vantage_broker_url),
+        consumer="scheduler",
+        timeout=5,
+    )
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -104,6 +110,10 @@ async def run_scheduler() -> None:
                         system_probe,
                         metadata,
                         model_routing_repository=ModelRoutingPolicyRepository(session),
+                        alpha_broker_client=alpha_broker,
+                        alpha_broker_queue_limit=(
+                            settings.alpha_vantage_broker_admission_queue_limit
+                        ),
                     )
                     decision = await service.admit_one()
                 if decision.allowed:

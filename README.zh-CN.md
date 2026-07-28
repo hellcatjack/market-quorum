@@ -191,10 +191,9 @@ ALPHA_VANTAGE_API_KEY=replace-with-secret
 TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
 ```
 
-`ALPHA_VANTAGE_API_KEY` 由 TradingAgents 研究 Worker 读取；修改配置后需要重启
-调度器和 Worker，且只影响之后准入的任务。运行详情中的数据源快照会保留实际配置，
-便于追溯和复现。跨进程请求闸门会协调本机所有使用同一 Key 的 Worker，并统一处理
-供应商限流后的延时重试。
+`ALPHA_VANTAGE_API_KEY` 由回环地址上的 Alpha Broker 读取，TradingAgents 研究 Worker
+不再直接访问供应商。修改配置后需要先重启 Broker，再重启调度器和 Worker，且只影响
+之后准入的任务。运行详情中的数据源快照会保留实际配置，便于追溯和复现。
 
 ### 表现验证数据源
 
@@ -213,11 +212,18 @@ TRADINGNG_ALPHA_VANTAGE_RETRY_ATTEMPTS=6
 TRADINGNG_ALPHA_VANTAGE_RETRY_BASE_SECONDS=5
 TRADINGNG_ALPHA_VANTAGE_RETRY_MAX_SECONDS=60
 TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
+TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=0.8
+TRADINGNG_ALPHA_VANTAGE_BROKER_MAX_IN_FLIGHT=3
+TRADINGNG_ALPHA_VANTAGE_BROKER_ADMISSION_QUEUE_LIMIT=6
+TRADINGNG_ALPHA_VANTAGE_AUTO_RETRY_ATTEMPTS=2
 ```
 
 Alpha Vantage 适配器读取未复权 OHLC、拆股系数和现金分配，再进入统一的
 `prices.v1` 标准化层。配置验证 Key 后，新旧两代验证入口都独占使用该适配器；研究与
-验证共用按 Key 隔离的请求闸门，限流响应按有上限的指数退避重试，不会切换到 Yahoo。
+验证共用按 Key 隔离的全局 Broker。Broker 统一执行安全速率、在途上限、优先队列、
+同请求合并与缓存；限流时全局暂停并以单请求探测恢复，不会切换到 Yahoo。系统状态页
+展示安全 RPM、在途请求、等待队列、恢复时间及缓存统计。供应商限流或瞬时故障在请求
+重试耗尽后最多自动创建两次关联评估，新任务在 Broker 冷却期间继续安全排队。
 API Key 不写入日志、产物、运行快照或请求指纹。显式重试可通过
 `POST /api/v1/validations/{validation_id}/retry` 或 MCP 工具
 `retry_validation` 发起。
@@ -284,6 +290,7 @@ systemctl --user link "$PWD"/systemd/user/tradingng-platform-*.service
 systemctl --user link "$PWD"/systemd/user/tradingng-platform-workers.target
 systemctl --user daemon-reload
 systemctl --user enable --now tradingng-platform-containers.service
+systemctl --user enable --now tradingng-platform-alpha-broker.service
 systemctl --user enable --now tradingng-platform-api.service
 systemctl --user enable --now tradingng-platform-scheduler.service
 systemctl --user enable --now tradingng-platform-workers.target

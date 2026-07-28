@@ -10,6 +10,7 @@ from tradingng_platform.scheduler import repository
 from tradingng_platform.scheduler.policy import AdmissionDecision, AdmissionPolicy, SystemSnapshot
 from tradingng_platform.scheduler.repository import ExecutionMetadata, build_run_snapshot
 from tradingng_platform.scheduler.service import AdmissionService
+from tradingng_platform.vendors.alpha_vantage_client import AlphaBrokerStatus
 
 
 class _Gateway:
@@ -58,9 +59,36 @@ class _SchedulerRepository:
     def __init__(self):
         self.calls = []
 
-    async def admit_one(self, policy, gateway, system, metadata, model_routing):
-        self.calls.append((policy, gateway, system, metadata, model_routing))
+    async def admit_one(
+        self,
+        policy,
+        gateway,
+        system,
+        metadata,
+        model_routing,
+        *,
+        external_blockers=(),
+    ):
+        self.calls.append((policy, gateway, system, metadata, model_routing, external_blockers))
         return AdmissionDecision(True, ())
+
+
+class _AlphaBroker:
+    def __init__(self, state="normal", queued=0):
+        self.state = state
+        self.queued = queued
+
+    async def status(self):
+        return AlphaBrokerStatus(
+            status=self.state,
+            configured_requests_per_minute=75,
+            effective_requests_per_minute=60,
+            max_in_flight=3,
+            in_flight=0,
+            queued=self.queued,
+            oldest_queued_seconds=None,
+            blocked_until=None,
+        )
 
 
 async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
@@ -101,6 +129,52 @@ async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
     assert [call[0].max_running_total for call in scheduler_repository.calls] == [1, 2]
     assert [call[1].active_completions for call in scheduler_repository.calls] == [0, 1]
     assert all(call[4].fast.model == "gpt-5.6-terra" for call in scheduler_repository.calls)
+
+
+async def test_admission_blocks_new_alpha_runs_during_global_cooldown_or_queue_pressure():
+    metadata = ExecutionMetadata(
+        root_commit="root-sha",
+        tradingagents_commit="submodule-sha",
+        prompt_schema_version="v1",
+        data_vendors={"fundamental_data": "alpha_vantage"},
+        tool_vendors={},
+    )
+    for broker in (_AlphaBroker("cooldown"), _AlphaBroker("normal", queued=6)):
+        scheduler_repository = _SchedulerRepository()
+        service = AdmissionService(
+            scheduler_repository,
+            _PolicyRepository(),
+            _Gateway(),
+            _SystemProbe(),
+            metadata,
+            model_routing_repository=_ModelRoutingRepository(),
+            alpha_broker_client=broker,
+            alpha_broker_queue_limit=6,
+        )
+
+        await service.admit_one()
+
+        assert scheduler_repository.calls[0][5] == ("vendor:alpha_vantage:global_quota",)
+
+
+async def test_admission_does_not_probe_broker_when_alpha_is_not_configured():
+    class ExplodingBroker:
+        async def status(self):
+            raise AssertionError("broker should not be read")
+
+    scheduler_repository = _SchedulerRepository()
+    service = AdmissionService(
+        scheduler_repository,
+        _PolicyRepository(),
+        _Gateway(),
+        _SystemProbe(),
+        ExecutionMetadata("root", "sub", "v1", {"market": "yfinance"}, {}),
+        alpha_broker_client=ExplodingBroker(),
+    )
+
+    await service.admit_one()
+
+    assert scheduler_repository.calls[0][5] == ()
 
 
 def test_configured_vendors_expands_ordered_fallback_chains():

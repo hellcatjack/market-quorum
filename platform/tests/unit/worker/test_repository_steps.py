@@ -6,7 +6,16 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from tradingng_platform.domain.runs import RunStatus
-from tradingng_platform.models import AssessmentRun, Base, RunStep
+from tradingng_platform.models import (
+    AssessmentBatch,
+    AssessmentRequest,
+    AssessmentRun,
+    Base,
+    Instrument,
+    RunEvent,
+    RunStep,
+    User,
+)
 from tradingng_platform.runner.contracts import RunnerEvent
 from tradingng_platform.worker import repository as repository_module
 from tradingng_platform.worker.repository import WorkerRepository
@@ -144,5 +153,113 @@ async def test_cancellation_marks_running_step_cancelled():
 
         assert step.status == "cancelled"
         assert step.finished_at is not None
+    finally:
+        await engine.dispose()
+
+
+async def _failed_context(session, *, attempt=1, error_code="vendor_rate_limit"):
+    user = User(
+        issuer="issuer",
+        subject=f"subject-{uuid.uuid4()}",
+        display_name="Analyst",
+        email=None,
+    )
+    instrument = Instrument(
+        canonical_ticker=f"T{uuid.uuid4().hex[:6].upper()}",
+        asset_type="stock",
+        exchange="NASDAQ",
+        name=None,
+        metadata_json={},
+    )
+    session.add_all([user, instrument])
+    await session.flush()
+    batch = AssessmentBatch(
+        submitted_by=user.id,
+        idempotency_key=f"batch-{uuid.uuid4()}",
+        defaults_json={"analysts": ["market"], "depth": "shallow", "language": "Chinese"},
+    )
+    session.add(batch)
+    await session.flush()
+    request = AssessmentRequest(
+        batch_id=batch.id,
+        instrument_id=instrument.id,
+        analysis_date=datetime.now(timezone.utc).date(),
+        requested_config_json={},
+    )
+    session.add(request)
+    await session.flush()
+    run = AssessmentRun(
+        request_id=request.id,
+        status=RunStatus.FAILED.value,
+        attempt=attempt,
+        version=2,
+        error_code=error_code,
+        error_summary="safe failure",
+        finished_at=datetime.now(timezone.utc),
+    )
+    session.add(run)
+    await session.flush()
+    return run
+
+
+async def test_vendor_failure_schedules_one_linked_automatic_retry():
+    engine, sessions = await _database()
+    try:
+        async with sessions() as session, session.begin():
+            failed = await _failed_context(session)
+            repository = WorkerRepository(session)
+
+            retry = await repository.schedule_automatic_retry(
+                failed.id,
+                "vendor_rate_limit",
+                max_retries=2,
+            )
+            duplicate = await repository.schedule_automatic_retry(
+                failed.id,
+                "vendor_rate_limit",
+                max_retries=2,
+            )
+
+            events = list(
+                await session.scalars(
+                    select(RunEvent).where(RunEvent.run_id == failed.id).order_by(RunEvent.sequence)
+                )
+            )
+
+        assert retry is not None
+        assert retry.status == RunStatus.QUEUED.value
+        assert retry.attempt == 2
+        assert retry.retry_of_run_id == failed.id
+        assert duplicate is None
+        assert [event.event_type for event in events] == ["assessment.auto_retry_scheduled"]
+        assert events[0].payload_json["retry_run_id"] == str(retry.id)
+    finally:
+        await engine.dispose()
+
+
+async def test_automatic_retry_is_bounded_and_rejects_non_vendor_errors():
+    engine, sessions = await _database()
+    try:
+        async with sessions() as session, session.begin():
+            exhausted = await _failed_context(session, attempt=3)
+            invalid = await _failed_context(session, error_code="runner_protocol_error")
+            repository = WorkerRepository(session)
+
+            assert (
+                await repository.schedule_automatic_retry(
+                    exhausted.id,
+                    "vendor_transient",
+                    max_retries=2,
+                )
+                is None
+            )
+            assert (
+                await repository.schedule_automatic_retry(
+                    invalid.id,
+                    "runner_protocol_error",
+                    max_retries=2,
+                )
+                is None
+            )
     finally:
         await engine.dispose()

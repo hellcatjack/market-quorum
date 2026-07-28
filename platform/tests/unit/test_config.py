@@ -26,9 +26,17 @@ def test_settings_are_loopback_and_project_local(monkeypatch, tmp_path: Path):
 
     assert settings.api_host == "127.0.0.1"
     assert settings.api_port == 8010
+    assert str(settings.alpha_vantage_broker_url) == "http://127.0.0.1:8020/"
+    assert settings.alpha_vantage_broker_host == "127.0.0.1"
+    assert settings.alpha_vantage_broker_port == 8020
+    assert settings.alpha_vantage_broker_utilization == 0.8
+    assert settings.alpha_vantage_broker_max_in_flight == 3
+    assert settings.alpha_vantage_broker_admission_queue_limit == 6
+    assert settings.alpha_vantage_auto_retry_attempts == 2
     assert str(settings.gateway_url) == "http://127.0.0.1:8000/"
     assert settings.artifact_dir == tmp_path / "artifacts"
     assert settings.job_dir == tmp_path / "jobs"
+    assert settings.alpha_vantage_cache_dir == tmp_path / "vendor-cache" / "alpha-vantage"
     assert settings.allowed_origins == ("https://one.test", "https://two.test")
     assert settings.webhook_encryption_key.get_secret_value() == webhook_key
     assert settings.webhook_private_host_allowlist == (

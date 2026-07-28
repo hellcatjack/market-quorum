@@ -13,6 +13,7 @@ from tradingng_platform.scheduler.probes import SystemProbe
 from tradingng_platform.system.service import SystemService
 from tradingng_platform.validation.repository import ValidationRepository
 from tradingng_platform.validation.service import ValidationService
+from tradingng_platform.vendors.alpha_vantage_client import AsyncAlphaVantageBrokerClient
 
 
 @dataclass(frozen=True)
@@ -41,6 +42,12 @@ class McpServices:
                 database.sessions,
                 GatewayClient(str(settings.gateway_url)),
                 SystemProbe(settings.data_dir),
+                alpha_broker_client=AsyncAlphaVantageBrokerClient(
+                    str(settings.alpha_vantage_broker_url),
+                    consumer="system",
+                    timeout=5,
+                ),
+                alpha_broker_queue_limit=settings.alpha_vantage_broker_admission_queue_limit,
             ),
             validation=ValidationService(ValidationRepository(database.sessions)),
         )

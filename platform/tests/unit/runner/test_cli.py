@@ -9,4 +9,8 @@ def test_runner_error_classification_uses_stable_non_secret_codes():
     assert classify_runner_error(RateLimitError("provider secret")) == "gateway_overload"
     assert classify_runner_error(APITimeoutError("provider secret")) == "gateway_unavailable"
     assert classify_runner_error(VendorRateLimitError("key=secret")) == "vendor_rate_limit"
+    AlphaTransientError = type("AlphaVantageTransientError", (Exception,), {})
+    BrokerUnavailableError = type("AlphaBrokerTransientError", (Exception,), {})
+    assert classify_runner_error(AlphaTransientError("key=secret")) == "vendor_transient"
+    assert classify_runner_error(BrokerUnavailableError("key=secret")) == "vendor_transient"
     assert classify_runner_error(ValueError("secret")) == "runner_unhandled_error"

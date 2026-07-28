@@ -30,6 +30,22 @@ export interface SystemStatus {
     opened_until: string | null;
     last_error_code: string | null;
   }>;
+  alpha_vantage: {
+    status: "normal" | "cooldown" | "half_open" | "unavailable";
+    configured_requests_per_minute: number;
+    effective_requests_per_minute: number;
+    max_in_flight: number;
+    in_flight: number;
+    queued: number;
+    oldest_queued_seconds: number | null;
+    blocked_until: string | null;
+    requests: number;
+    upstream_requests: number;
+    cache_hits: number;
+    coalesced_requests: number;
+    rate_limits: number;
+    transient_errors: number;
+  } | null;
 }
 
 export const getSystemStatus = () => apiRequest<SystemStatus>("/api/v1/system/status");

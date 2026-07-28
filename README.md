@@ -211,11 +211,10 @@ ALPHA_VANTAGE_API_KEY=replace-with-secret
 TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
 ```
 
-TradingAgents research Workers read `ALPHA_VANTAGE_API_KEY`. Restart the
-scheduler and Workers after changing it; only subsequently admitted runs are
-affected. Run details retain the configured vendor snapshot for audit and
-reproduction. A cross-process request gate coordinates every local Worker using
-the same key, including delayed retries after provider throttling.
+The loopback Alpha Broker reads `ALPHA_VANTAGE_API_KEY`; TradingAgents research
+Workers no longer contact the provider directly. Restart the Broker first and
+then the scheduler and Workers after changing it. Only subsequently admitted
+runs are affected, and run details retain the configured vendor snapshot.
 
 ### Outcome-validation providers
 
@@ -237,15 +236,23 @@ TRADINGNG_ALPHA_VANTAGE_RETRY_ATTEMPTS=6
 TRADINGNG_ALPHA_VANTAGE_RETRY_BASE_SECONDS=5
 TRADINGNG_ALPHA_VANTAGE_RETRY_MAX_SECONDS=60
 TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
+TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=0.8
+TRADINGNG_ALPHA_VANTAGE_BROKER_MAX_IN_FLIGHT=3
+TRADINGNG_ALPHA_VANTAGE_BROKER_ADMISSION_QUEUE_LIMIT=6
+TRADINGNG_ALPHA_VANTAGE_AUTO_RETRY_ATTEMPTS=2
 ```
 
 The Alpha Vantage adapter reads as-traded OHLC, split coefficients, and cash
 distributions before entering the common `prices.v1` normalization boundary.
 With a validation key present, both validation generations use this adapter
-exclusively. Research and validation coordinate through the same per-key request
-gate; rate-limit responses are retried with bounded exponential delay and never
-switch to Yahoo. The API key is never stored in logs, artifacts, snapshots, or
-request fingerprints. Explicit validation retries are available through
+exclusively. Research and validation share the same per-key global Broker. It
+enforces a safe rate and in-flight cap, priority queue, identical-request
+coalescing, and cache. A rate limit pauses the key globally and recovery uses one
+probe request; Yahoo is never used as fallback. The System page shows safe RPM,
+in-flight requests, queue age, recovery time, and cache counters. After bounded
+request retries, rate and transient failures create at most two linked automatic
+assessment attempts. The API key is never stored in logs, artifacts, snapshots,
+or request fingerprints. Explicit validation retries are available through
 `POST /api/v1/validations/{validation_id}/retry` and the MCP
 `retry_validation` tool.
 
@@ -322,6 +329,7 @@ systemctl --user link "$PWD"/systemd/user/tradingng-platform-*.service
 systemctl --user link "$PWD"/systemd/user/tradingng-platform-workers.target
 systemctl --user daemon-reload
 systemctl --user enable --now tradingng-platform-containers.service
+systemctl --user enable --now tradingng-platform-alpha-broker.service
 systemctl --user enable --now tradingng-platform-api.service
 systemctl --user enable --now tradingng-platform-scheduler.service
 systemctl --user enable --now tradingng-platform-workers.target

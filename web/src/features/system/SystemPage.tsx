@@ -8,6 +8,7 @@ import {
   getSystemStatus,
   type ModelRoutingPolicy,
   type SchedulerPolicy,
+  type SystemStatus,
   updateModelRoutingPolicy,
   updateSchedulerPolicy,
 } from "../../api/system";
@@ -18,6 +19,36 @@ import { CapacityBanner } from "./CapacityBanner";
 
 type ModelName = ModelRoutingPolicy["fast"]["model"];
 type ReasoningEffort = ModelRoutingPolicy["fast"]["reasoning_effort"];
+
+function AlphaQuotaPanel({ quota }: { quota: NonNullable<SystemStatus["alpha_vantage"]> }) {
+  const { t } = useI18n();
+  const stateLabels = {
+    normal: t("正常调度"),
+    cooldown: t("全局冷却中"),
+    half_open: t("单请求探测中"),
+    unavailable: t("协调器不可用"),
+  };
+  return (
+    <section className={`detail-panel detail-panel--wide alpha-quota alpha-quota--${quota.status}`}>
+      <div className="section-heading">
+        <p className="eyebrow">Data vendor</p>
+        <h2>{t("Alpha Vantage 全局配额")}</h2>
+        <span className="alpha-quota__state">{stateLabels[quota.status]}</span>
+      </div>
+      <dl className="system-facts alpha-quota__facts">
+        <div><dt>{t("安全速率")}</dt><dd>{quota.effective_requests_per_minute} / {quota.configured_requests_per_minute} RPM</dd></div>
+        <div><dt>{t("在途请求")}</dt><dd>{quota.in_flight} / {quota.max_in_flight}</dd></div>
+        <div><dt>{t("等待队列")}</dt><dd>{t("{count} 个请求等待", { count: quota.queued })}</dd></div>
+        <div><dt>{t("最老等待")}</dt><dd>{quota.oldest_queued_seconds === null ? "—" : t("{seconds} 秒", { seconds: Math.round(quota.oldest_queued_seconds) })}</dd></div>
+        <div><dt>{t("上游请求")}</dt><dd>{quota.upstream_requests} / {quota.requests}</dd></div>
+        <div><dt>{t("缓存 / 合并")}</dt><dd>{quota.cache_hits} / {quota.coalesced_requests}</dd></div>
+        <div><dt>{t("限流 / 瞬时错误")}</dt><dd>{quota.rate_limits} / {quota.transient_errors}</dd></div>
+        {quota.blocked_until ? <div><dt>{t("恢复时间")}</dt><dd><LocalTime value={quota.blocked_until} /></dd></div> : null}
+      </dl>
+      <p className="alpha-quota__note">{t("研究与表现验证共享该全局预算；限流时任务等待恢复，不会回退 Yahoo。")}</p>
+    </section>
+  );
+}
 
 function PolicyForm({ policy, editable }: { policy: SchedulerPolicy; editable: boolean }) {
   const { t } = useI18n();
@@ -131,6 +162,7 @@ export function SystemPage() {
       {capacity.data ? <CapacityBanner capacity={capacity.data} /> : null}
       {status.isError || capacity.isError || policy.isError || modelRouting.isError ? <p className="page-warning" role="alert">{t("部分系统诊断暂时不可用。")}</p> : null}
       <div className="system-grid">
+        {status.data?.alpha_vantage ? <AlphaQuotaPanel quota={status.data.alpha_vantage} /> : null}
         <section className="detail-panel">
           <div className="section-heading"><p className="eyebrow">Gateway</p><h2>{t("Gateway 运行状态")}</h2></div>
           {status.data ? <><dl className="system-facts"><div><dt>{t("状态")}</dt><dd>{systemStatusLabel(status.data.gateway.status, locale)}</dd></div><div><dt>{t("活动请求")}</dt><dd>{status.data.gateway.active_completions}</dd></div><div><dt>{t("延迟")}</dt><dd>{status.data.gateway.latency_ms} ms</dd></div><div><dt>{t("快照")}</dt><dd title={status.data.gateway.snapshot_id}>{status.data.gateway.snapshot_id}</dd></div></dl><details className="gateway-compatibility"><summary>{t("兼容默认路由（非 TradingAgents 评估路由）")}</summary><dl className="system-facts"><div><dt>{t("Gateway 默认模型")}</dt><dd>{status.data.gateway.model}</dd></div><div><dt>{t("Gateway 默认思考深度")}</dt><dd>{reasoningEffortLabel(status.data.gateway.reasoning_effort, locale)}</dd></div></dl><p>{t("该默认值仅服务旧版兼容调用；TradingAgents 评估使用下方独立的快速分析与关键裁决路由。")}</p></details></> : <p role="status">{t("载入中…")}</p>}

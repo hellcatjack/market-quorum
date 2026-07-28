@@ -16,6 +16,10 @@ def classify_runner_error(error: Exception) -> str:
     error_type = type(error).__name__.lower()
     if ("vendor" in error_type or "alpha" in error_type) and "ratelimit" in error_type:
         return "vendor_rate_limit"
+    if ("vendor" in error_type or "alpha" in error_type) and any(
+        marker in error_type for marker in ("transient", "unavailable", "connection")
+    ):
+        return "vendor_transient"
     if any(marker in error_type for marker in ("ratelimit", "toomanyrequests", "overload")):
         return "gateway_overload"
     if any(

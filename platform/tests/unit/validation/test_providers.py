@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 
@@ -169,6 +170,43 @@ async def test_alpha_vantage_retries_http_429_with_retry_after():
     assert sleeps == [7]
 
 
+async def test_alpha_vantage_validation_uses_broker_without_direct_http():
+    payload = {
+        "Time Series (Daily)": {
+            "2026-01-05": {
+                "1. open": "99",
+                "2. high": "101",
+                "3. low": "98",
+                "4. close": "100",
+                "5. adjusted close": "100",
+                "7. dividend amount": "0",
+                "8. split coefficient": "1",
+            }
+        }
+    }
+
+    class FakeBroker:
+        def __init__(self):
+            self.calls = []
+
+        async def query(self, function_name, params):
+            self.calls.append((function_name, dict(params)))
+            return json.dumps(payload)
+
+    broker = FakeBroker()
+    provider = AlphaVantagePriceProvider(api_key=None, broker_client=broker)
+
+    series = await provider.history("IBM", date(2026, 1, 5), date(2026, 1, 5))
+
+    assert series.close == [Decimal("100")]
+    assert broker.calls == [
+        (
+            "TIME_SERIES_DAILY_ADJUSTED",
+            {"symbol": "IBM", "outputsize": "full"},
+        )
+    ]
+
+
 async def test_yfinance_v2_maps_actions_and_declares_split_normalized(monkeypatch):
     columns = pd.MultiIndex.from_product(
         [
@@ -234,6 +272,23 @@ def test_provider_router_applies_configured_alpha_vantage_rate_limit():
 
     assert router.provider_ids == ("alphavantage",)
     assert router.providers[0].requests_per_minute == 17
+
+
+def test_provider_router_builds_broker_backed_alpha_provider():
+    class FakeBroker:
+        async def query(self, function_name, params):
+            raise AssertionError("not called while building")
+
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+        alpha_vantage_api_key="premium-secret-key",
+    )
+
+    router = build_price_provider(settings, broker_client=FakeBroker())
+
+    assert router.provider_ids == ("alphavantage",)
+    assert router.providers[0]._api_key is None
 
 
 async def test_legacy_adapter_uses_effective_alpha_provider():

@@ -1,5 +1,7 @@
 [Unit]
 Description=TradingNG outcome validation worker
+After=tradingng-platform-alpha-broker.service
+Requires=tradingng-platform-alpha-broker.service
 After=tradingng-platform-api.service
 Requires=tradingng-platform-api.service
 

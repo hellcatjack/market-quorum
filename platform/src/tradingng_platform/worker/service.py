@@ -91,6 +91,8 @@ def build_runner_input(
     *,
     job_dir: Path,
     gateway_url: str,
+    alpha_vantage_broker_url: str = "http://127.0.0.1:8020",
+    alpha_vantage_broker_request_timeout_seconds: float = 2100,
 ) -> RunnerInput:
     request = claim.snapshot["request"]
     resolved = claim.snapshot["resolved"]
@@ -128,6 +130,8 @@ def build_runner_input(
         work_dir=job_dir / str(claim.run_id),
         data_vendors=claim.snapshot["data_vendors"],
         tool_vendors=claim.snapshot["tool_vendors"],
+        alpha_vantage_broker_url=alpha_vantage_broker_url,
+        alpha_vantage_broker_request_timeout_seconds=(alpha_vantage_broker_request_timeout_seconds),
         alpha_vantage_coordination_dir=job_dir.parent / "vendor-limits",
         alpha_vantage_requests_per_minute=alpha_policy.get("requests_per_minute", 75),
         alpha_vantage_retry_attempts=alpha_policy.get("retry_attempts", 6),
@@ -145,6 +149,9 @@ class WorkerService:
         job_dir: Path,
         gateway_url: str,
         artifact_store: LocalArtifactStore,
+        alpha_vantage_broker_url: str = "http://127.0.0.1:8020",
+        alpha_vantage_broker_request_timeout_seconds: float = 2100,
+        alpha_vantage_auto_retry_attempts: int = 2,
         python_bin: str = sys.executable,
         process_controller: ProcessController | None = None,
         cancellation_controller: CancellationController | None = None,
@@ -154,6 +161,11 @@ class WorkerService:
         self.job_dir = job_dir
         self.gateway_url = gateway_url
         self.artifact_store = artifact_store
+        self.alpha_vantage_broker_url = alpha_vantage_broker_url
+        self.alpha_vantage_broker_request_timeout_seconds = (
+            alpha_vantage_broker_request_timeout_seconds
+        )
+        self.alpha_vantage_auto_retry_attempts = alpha_vantage_auto_retry_attempts
         self.python_bin = python_bin
         self.process_controller = process_controller or ProcessController()
         self.cancellation_controller = cancellation_controller or CancellationController()
@@ -169,6 +181,10 @@ class WorkerService:
             claim,
             job_dir=self.job_dir,
             gateway_url=self.gateway_url,
+            alpha_vantage_broker_url=self.alpha_vantage_broker_url,
+            alpha_vantage_broker_request_timeout_seconds=(
+                self.alpha_vantage_broker_request_timeout_seconds
+            ),
         )
         work_dir = runner_input.work_dir
         work_dir.mkdir(parents=True, exist_ok=True)
@@ -272,6 +288,11 @@ class WorkerService:
                     claim.run_id,
                     failure_code,
                     failure_summary or failure_code,
+                )
+                await repository.schedule_automatic_retry(
+                    claim.run_id,
+                    failure_code,
+                    max_retries=self.alpha_vantage_auto_retry_attempts,
                 )
                 if failure_code in {"gateway_overload", "gateway_unavailable"}:
                     await CircuitBreakerRepository(session).record_gateway_sample(

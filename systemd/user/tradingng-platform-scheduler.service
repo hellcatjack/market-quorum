@@ -1,5 +1,7 @@
 [Unit]
 Description=TradingNG capacity-aware admission scheduler
+After=tradingng-platform-alpha-broker.service
+Requires=tradingng-platform-alpha-broker.service
 After=tradingng-platform-api.service tradingng-codex-gateway.service
 Requires=tradingng-platform-api.service
 Wants=tradingng-codex-gateway.service

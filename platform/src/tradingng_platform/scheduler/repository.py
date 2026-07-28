@@ -203,6 +203,8 @@ class SchedulerRepository:
         system: SystemSnapshot,
         metadata: ExecutionMetadata,
         model_routing: ModelRoutingPolicy | None = None,
+        *,
+        external_blockers: tuple[str, ...] = (),
     ) -> AdmissionDecision:
         admission_lock = await acquire_transaction_lock(
             self.session,
@@ -278,7 +280,8 @@ class SchedulerRepository:
         )
         circuits = CircuitBreakerRepository(self.session)
         configured_vendors = _configured_vendors(metadata)
-        open_circuits = await circuits.blockers(now, vendors=configured_vendors)
+        persisted_circuits = await circuits.blockers(now, vendors=configured_vendors)
+        open_circuits = tuple(sorted({*persisted_circuits, *external_blockers}))
         capacity = CapacitySnapshot(active_runs, gateway, system, open_circuits)
         decision = policy.evaluate(capacity)
         if not decision.allowed:
