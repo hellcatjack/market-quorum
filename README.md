@@ -286,6 +286,57 @@ source runs. Existing jobs and legacy snapshots without memory metadata remain
 independent. This integration lives entirely in the platform layer and does not
 modify the TradingAgents submodule.
 
+## Point-in-time report integrity
+
+Historical assessments are checked against the information that was available
+on their analysis date. The external platform layer date-bounds prices and news,
+uses FRED vintages, blocks unsupported current-only snapshots, and filters
+financial statements by their verified publication date. SEC submissions are
+the primary publication source; Alpha Vantage `EARNINGS` dates are a
+metadata-only fallback. This policy is fail-closed and does not change any file
+under `TradingAgents/`.
+
+Every succeeded run has one of four UI/API states:
+
+- `safe`: the current policy found no known look-ahead exposure.
+- `at_risk`: sealed evidence confirms that later information reached the run.
+- `unknown`: evidence exists but cannot prove the data was available in time.
+- `unassessed`: no current-policy audit has been persisted yet.
+
+Only `safe` runs enter history-assisted memory and trusted accuracy aggregates.
+The ledger keeps every original report and validation visible, but shows the
+number of excluded at-risk and unknown/unassessed samples separately. An Admin
+with `assessments:admin` and `assessments:submit` may create an independent
+clean reassessment; it creates a new run linked to the original and never
+overwrites the old Decision, Validation, evidence, or artifact.
+
+Configure an installation identity for SEC requests without committing a
+private address:
+
+```dotenv
+TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)
+```
+
+After the additive migration, audit sealed historical runs in bounded,
+restart-safe batches:
+
+```bash
+.venv/bin/alembic -c platform/alembic.ini upgrade head
+.venv/bin/tradingng-platform-integrity-audit --limit 25
+# Repeat until the command reports audited=0.
+```
+
+Use `--run-id UUID` for one run. Each completed run commits independently, so an
+interrupted batch can be rerun safely. Operators should monitor the Alpha broker
+queue and SEC health between batches. REST exposes the run verdict, summary and
+clean action; MCP exposes the matching integrity resource and clean-reassessment
+tool.
+
+Rollback must stop new consumers first and may deploy the previous API/Worker
+build while leaving the additive tables intact. Once integrity rows exist, do
+not run the Alembic downgrade: preserving audit artifacts and verdicts is safer
+than destructively removing production evidence.
+
 ## REST, MCP, events, and webhooks
 
 REST and Web use the same application services and immutable records. The MCP

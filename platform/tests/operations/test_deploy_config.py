@@ -3,6 +3,11 @@ from pathlib import Path
 
 import yaml
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 test environments
+    import tomli as tomllib
+
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -312,3 +317,19 @@ def test_public_environment_example_uses_one_canonical_origin():
     assert "TRADINGNG_ALLOWED_ORIGINS=https://ushome.amycat.com" in example
     assert "tradingng.internal" not in example
     assert ":8443" not in example
+
+
+def test_point_in_time_audit_operation_is_documented_without_private_identity():
+    example = (ROOT / ".env.platform.example").read_text()
+    sec_lines = [
+        line for line in example.splitlines() if line.startswith("TRADINGNG_SEC_USER_AGENT=")
+    ]
+    assert sec_lines == [
+        "TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)"
+    ]
+    assert "@" not in sec_lines[0]
+
+    pyproject = tomllib.loads((ROOT / "platform/pyproject.toml").read_text())
+    assert pyproject["project"]["scripts"]["tradingng-platform-integrity-audit"] == (
+        "tradingng_platform.integrity.main:main"
+    )

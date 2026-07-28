@@ -52,7 +52,7 @@ async def test_readiness_reports_only_the_database_dialect(monkeypatch):
             return None
 
         async def scalar(self, statement):
-            return "20260727_0009"
+            return "20260727_0010"
 
     class SessionContext:
         async def __aenter__(self):

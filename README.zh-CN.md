@@ -250,6 +250,49 @@ Codex 请求。
 展示历史来源，并可跳转到原始评估记录；已有任务和不含记忆字段的旧快照继续按独立
 模式运行。该能力完全位于平台外层，不修改 TradingAgents 子模块。
 
+## 报告的点时数据完整性
+
+历史评估会按照“分析日当时已经可以获得的信息”进行核验。外部平台层会限制行情和
+新闻的日期范围、使用 FRED 历史版本、阻断无法安全回溯的当前快照，并按已核验的
+公开日期过滤财务报表。财务公开时间优先取 SEC submissions，Alpha Vantage
+`EARNINGS` 只作为日期元数据后备。策略采用失败关闭原则，且不会修改
+`TradingAgents/` 下的任何文件。
+
+每个成功运行在界面和 API 中具有以下一种状态：
+
+- `safe`：当前策略没有发现已知的未来数据暴露。
+- `at_risk`：封存证据确认有分析日之后的信息进入了运行。
+- `unknown`：证据存在，但不足以证明数据当时已经可用。
+- `unassessed`：尚未持久化当前策略的审计结果。
+
+只有 `safe` 运行可以进入历史辅助记忆和可信准确率统计。台账仍会保留并展示所有
+原始报告与表现验证，但会分别标明被排除的风险和未知/未审计样本数量。兼具
+`Admin` 角色、`assessments:admin` 与 `assessments:submit` 权限的用户可以创建
+独立的“干净重评估”；系统会新建运行并关联原记录，绝不会覆盖旧 Decision、
+Validation、证据或产物。
+
+SEC 自动请求需要配置安装身份，但示例和提交中不得写入私人邮箱：
+
+```dotenv
+TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)
+```
+
+完成加法迁移后，以有界、可中断续跑的批次审计封存历史运行：
+
+```bash
+.venv/bin/alembic -c platform/alembic.ini upgrade head
+.venv/bin/tradingng-platform-integrity-audit --limit 25
+# 重复执行，直到命令返回 audited=0。
+```
+
+使用 `--run-id UUID` 可以只审计一个运行。每个已完成运行独立提交，因此批次中断后
+可以安全重跑；每批之间应检查 Alpha Broker 队列和 SEC 响应状态。REST 提供单次
+完整性、汇总与干净重评估接口，MCP 提供对应资源和工具。
+
+回滚时应先停止新的消费入口，再按需部署旧版 API/Worker，但保留加法新增的表。
+生产环境一旦写入完整性记录，不得执行 Alembic downgrade；保留审计产物和裁决比
+破坏性删除生产证据更安全。
+
 ## REST、MCP、事件与 Webhook
 
 REST 与 Web 共用同一套应用服务和不可变记录。MCP 在 `/mcp` 提供无状态
