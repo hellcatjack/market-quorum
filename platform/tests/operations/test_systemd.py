@@ -89,7 +89,7 @@ def test_alpha_broker_is_loopback_only_and_required_by_alpha_consumers():
     example = (ROOT / ".env.platform.example").read_text()
     assert "TRADINGNG_ALPHA_VANTAGE_BROKER_HOST=127.0.0.1" in example
     assert "TRADINGNG_ALPHA_VANTAGE_BROKER_PORT=8020" in example
-    assert "TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=0.8" in example
+    assert "TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=1.0" in example
     assert "TRADINGNG_ALPHA_VANTAGE_BROKER_MAX_IN_FLIGHT=3" in example
     assert "TRADINGNG_ALPHA_VANTAGE_AUTO_RETRY_ATTEMPTS=2" in example
 

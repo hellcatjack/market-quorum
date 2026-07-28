@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     alpha_vantage_broker_host: str = "127.0.0.1"
     alpha_vantage_broker_port: int = Field(default=8020, ge=1, le=65535)
     alpha_vantage_broker_url: AnyHttpUrl = "http://127.0.0.1:8020"
-    alpha_vantage_broker_utilization: float = Field(default=0.8, gt=0, le=1)
+    alpha_vantage_broker_utilization: float = Field(default=1.0, gt=0, le=1)
     alpha_vantage_broker_max_in_flight: int = Field(default=3, ge=1, le=32)
     alpha_vantage_broker_admission_queue_limit: int = Field(default=6, ge=1, le=10000)
     alpha_vantage_broker_request_timeout_seconds: float = Field(
