@@ -211,18 +211,19 @@ class SqlInstrumentMetadataStore:
         for instrument in instruments:
             metadata = _metadata(instrument.metadata_json)
             resolution = metadata.get("name_resolution")
-            failure = metadata.get("name_resolution_last_failure")
-            retry_at = _timestamp(failure, "next_retry_at") or _timestamp(
-                resolution,
-                "next_retry_at",
-            )
-            if retry_at is not None and retry_at > now:
-                continue
             provider = resolution.get("provider") if isinstance(resolution, dict) else None
-            if provider == "sec_edgar" and resolution.get("status") == "resolved":
-                refresh_at = _timestamp(resolution, "next_refresh_at")
-                if refresh_at is not None and refresh_at > now:
+            if provider == "sec_edgar":
+                failure = metadata.get("name_resolution_last_failure")
+                retry_at = _timestamp(failure, "next_retry_at") or _timestamp(
+                    resolution,
+                    "next_retry_at",
+                )
+                if retry_at is not None and retry_at > now:
                     continue
+                if resolution.get("status") == "resolved":
+                    refresh_at = _timestamp(resolution, "next_refresh_at")
+                    if refresh_at is not None and refresh_at > now:
+                        continue
             return PendingInstrument(
                 id=instrument.id,
                 ticker=instrument.canonical_ticker,

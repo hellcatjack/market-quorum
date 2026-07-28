@@ -132,6 +132,37 @@ async def test_enrichment_replaces_eastmoney_name_and_archives_source(session_fa
     ]
 
 
+async def test_enrichment_ignores_legacy_provider_retry_window(session_factory):
+    old_resolution = {
+        "status": "unresolved",
+        "provider": "eastmoney",
+        "reason": "not_found",
+        "attempted_at": "2026-07-27T12:00:00+00:00",
+        "next_retry_at": "2026-07-29T12:00:00+00:00",
+    }
+    instrument_id = await _seed(
+        session_factory,
+        name=None,
+        resolution=old_resolution,
+    )
+    provider = _Provider(result=_pg_result())
+    service = InstrumentNameEnrichmentService(
+        SqlInstrumentMetadataStore(session_factory),
+        provider,
+        clock=lambda: NOW,
+    )
+
+    assert await service.run_once() is True
+
+    instrument, _ = await _load(session_factory, instrument_id)
+    assert provider.calls == [("PG", "NYQ")]
+    assert instrument.name == "PROCTER & GAMBLE Co"
+    assert instrument.metadata_json["name_resolution"]["provider"] == "sec_edgar"
+    assert instrument.metadata_json["name_resolution_history"] == [
+        {"name": None, **old_resolution}
+    ]
+
+
 async def test_refresh_failure_preserves_last_verified_official_name(session_factory):
     current_resolution = {
         "status": "resolved",
