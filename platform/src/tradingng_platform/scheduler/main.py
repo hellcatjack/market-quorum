@@ -95,7 +95,12 @@ async def run_scheduler() -> None:
     for signum in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(signum, stopping.set)
     name_enrichment = asyncio.create_task(
-        run_instrument_name_enrichment(database.sessions, stopping),
+        run_instrument_name_enrichment(
+            database.sessions,
+            stopping,
+            user_agent=settings.sec_user_agent,
+            cache_dir=settings.sec_cache_dir / "instrument-names",
+        ),
         name="instrument-name-enrichment",
     )
 

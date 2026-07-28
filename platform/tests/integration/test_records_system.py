@@ -308,6 +308,62 @@ async def test_system_status_only_lists_workers_with_recent_heartbeats(session_f
     assert [worker["instance_name"] for worker in status["workers"]] == ["host:1"]
 
 
+async def test_system_status_counts_official_name_resolution_health(session_factory):
+    async with session_factory() as session, session.begin():
+        session.add_all(
+            [
+                Instrument(
+                    canonical_ticker="PG",
+                    asset_type="stock",
+                    name="PROCTER & GAMBLE Co",
+                    metadata_json={
+                        "name_resolution": {
+                            "status": "resolved",
+                            "provider": "sec_edgar",
+                        }
+                    },
+                ),
+                Instrument(
+                    canonical_ticker="PENDING",
+                    asset_type="stock",
+                    metadata_json={},
+                ),
+                Instrument(
+                    canonical_ticker="MISSING",
+                    asset_type="stock",
+                    metadata_json={
+                        "name_resolution": {
+                            "status": "unresolved",
+                            "provider": "sec_edgar",
+                            "reason": "ticker_not_listed",
+                        }
+                    },
+                ),
+                Instrument(
+                    canonical_ticker="CONFLICT",
+                    asset_type="stock",
+                    metadata_json={
+                        "name_resolution": {
+                            "status": "unresolved",
+                            "provider": "sec_edgar",
+                            "reason": "exchange_mismatch",
+                        }
+                    },
+                ),
+            ]
+        )
+
+    status = await SystemService(session_factory, _Gateway(), _Probe()).status(_admin())
+
+    assert status["instrument_names"] == {
+        "total": 4,
+        "official": 1,
+        "pending": 1,
+        "unresolved": 1,
+        "conflicts": 1,
+    }
+
+
 async def test_system_status_exposes_safe_alpha_global_quota_snapshot(session_factory):
     status = await SystemService(
         session_factory,

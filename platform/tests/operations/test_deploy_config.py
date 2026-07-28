@@ -333,3 +333,16 @@ def test_point_in_time_audit_operation_is_documented_without_private_identity():
     assert pyproject["project"]["scripts"]["tradingng-platform-integrity-audit"] == (
         "tradingng_platform.integrity.main:main"
     )
+
+
+def test_official_name_backfill_and_scheduler_use_sec_configuration():
+    pyproject = tomllib.loads((ROOT / "platform/pyproject.toml").read_text())
+    assert pyproject["project"]["scripts"]["tradingng-platform-name-backfill"] == (
+        "tradingng_platform.instruments.backfill:main"
+    )
+
+    scheduler = (
+        ROOT / "platform/src/tradingng_platform/scheduler/main.py"
+    ).read_text()
+    assert "user_agent=settings.sec_user_agent" in scheduler
+    assert 'cache_dir=settings.sec_cache_dir / "instrument-names"' in scheduler

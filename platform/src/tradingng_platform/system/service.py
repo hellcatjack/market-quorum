@@ -13,6 +13,7 @@ from tradingng_platform.model_routing import (
 from tradingng_platform.models import (
     AssessmentRun,
     CircuitBreaker,
+    Instrument,
     ModelRoutingPolicyRecord,
     SchedulerPolicyRecord,
     Worker,
@@ -70,6 +71,36 @@ class SystemService:
             circuits = list(
                 await session.scalars(select(CircuitBreaker).order_by(CircuitBreaker.name))
             )
+            instruments = list(
+                await session.scalars(select(Instrument).order_by(Instrument.id))
+            )
+        name_health = {
+            "total": len(instruments),
+            "official": 0,
+            "pending": 0,
+            "unresolved": 0,
+            "conflicts": 0,
+        }
+        for instrument in instruments:
+            metadata = (
+                instrument.metadata_json
+                if isinstance(instrument.metadata_json, dict)
+                else {}
+            )
+            resolution = metadata.get("name_resolution")
+            resolution = resolution if isinstance(resolution, dict) else {}
+            reason = resolution.get("reason")
+            if (
+                resolution.get("provider") == "sec_edgar"
+                and resolution.get("status") == "resolved"
+            ):
+                name_health["official"] += 1
+            elif reason in {"ambiguous_cik", "exchange_mismatch"}:
+                name_health["conflicts"] += 1
+            elif resolution.get("status") == "unresolved":
+                name_health["unresolved"] += 1
+            else:
+                name_health["pending"] += 1
         return {
             "gateway": {
                 "status": gateway.status,
@@ -103,6 +134,7 @@ class SystemService:
             "alpha_vantage": (
                 alpha_broker.model_dump(mode="json") if alpha_broker is not None else None
             ),
+            "instrument_names": name_health,
         }
 
     async def capacity(self, principal: Principal) -> CapacityView:
