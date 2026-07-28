@@ -132,6 +132,14 @@ export function InstrumentLedgerTable({
                       <div className="ledger-reliability">
                         <strong>{preferredHorizon}D</strong>
                         <span>{reliabilityLabel(stats, locale)}</span>
+                        {stats && (stats.excluded_at_risk > 0 || stats.excluded_unknown > 0) ? (
+                          <small className="ledger-reliability__exclusions">
+                            {t("排除 {risk} 条风险 / {unknown} 条未知", {
+                              risk: stats.excluded_at_risk,
+                              unknown: stats.excluded_unknown,
+                            })}
+                          </small>
+                        ) : null}
                       </div>
                     ) : <span aria-hidden="true">—</span>}
                     <span className="ledger-rating-transition">

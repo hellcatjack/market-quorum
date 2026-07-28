@@ -70,6 +70,8 @@ function overview(
         direction_observed: 2,
         direction_correct: 2,
         accuracy: "1",
+        excluded_at_risk: 0,
+        excluded_unknown: 0,
       },
     ],
     run_counts: { total: 3, queued: 0, active: 0, succeeded: 2, anomalous: 1 },
@@ -130,6 +132,8 @@ test("labels small reliability samples and stable samples separately", () => {
       direction_observed: 2,
       direction_correct: 2,
       accuracy: "1",
+      excluded_at_risk: 0,
+      excluded_unknown: 0,
     }),
   ).toBe("2 次 · 样本不足");
   expect(
@@ -139,6 +143,8 @@ test("labels small reliability samples and stable samples separately", () => {
       direction_observed: 4,
       direction_correct: 3,
       accuracy: "0.75",
+      excluded_at_risk: 0,
+      excluded_unknown: 0,
     }),
   ).toBe("3/4 · 75.0%");
   expect(reliabilityLabel(undefined)).toBe("尚无成熟样本");

@@ -47,6 +47,20 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
     if (path.endsWith("/decision")) {
       return json({ run_id: "run-123", rating: "Hold", executive_summary: "等待更好估值", investment_thesis: "增长与估值平衡", price_target: "31.50", time_horizon: "5 days", structured: {} });
     }
+    if (path.endsWith("/integrity")) {
+      return json({
+        run_id: "run-123",
+        policy_version: "point-in-time.v1",
+        status: "safe",
+        audit_mode: "live",
+        temporal_scope: "contemporaneous",
+        analysis_date: "2026-07-25",
+        checked_at: "2026-07-25T12:03:00Z",
+        reason_codes: ["live_current_snapshot"],
+        findings: [],
+        input_fingerprint: "a".repeat(64),
+      });
+    }
     if (path.endsWith("/evidence")) {
       return json([{ id: "evidence-1", source: "yfinance", tool_name: "get_stock_data", arguments: { ticker: "SPCX" }, collected_at: "2026-07-25T12:02:00Z", effective_at: "2026-07-25T00:00:00Z", freshness: "fresh", content_hash: "abc123" }]);
     }
@@ -200,6 +214,7 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
     "/runs/00000000-0000-0000-0000-000000000777",
   );
   expect(screen.getByText("等待更好估值")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "点时数据已核验" })).toBeInTheDocument();
   expect(screen.getByText("证据充分")).toBeInTheDocument();
   const decisionHeading = screen.getByRole("heading", { name: "投资结论" });
   const timelineHeading = screen.getByRole("heading", { name: "研究时间线" });

@@ -2,6 +2,7 @@ import { apiRequest, apiTextRequest, jsonBody } from "./client";
 import type { components } from "./schema";
 
 export type RunDetail = components["schemas"]["RunDetailView"];
+export type Run = components["schemas"]["RunView"];
 export type RunStep = components["schemas"]["RunStepView"];
 export type Decision = components["schemas"]["DecisionView"];
 export type Evidence = components["schemas"]["EvidenceView"];
@@ -15,6 +16,8 @@ export type InstrumentHistoryItem = components["schemas"]["InstrumentHistoryItem
 export type InstrumentOverview = components["schemas"]["InstrumentOverviewItem"];
 export type InstrumentOverviewPage = components["schemas"]["InstrumentOverviewPage"];
 export type Validation = components["schemas"]["ValidationView"];
+export type Integrity = components["schemas"]["IntegrityView"];
+export type IntegritySummary = components["schemas"]["IntegritySummaryView"];
 
 export interface InstrumentOverviewFilters {
   query?: string;
@@ -37,6 +40,10 @@ export interface CurrentUser {
 export const getCurrentUser = () => apiRequest<CurrentUser>("/api/v1/me");
 export const getRun = (runId: string) =>
   apiRequest<RunDetail>(`/api/v1/assessments/${encodeURIComponent(runId)}`);
+export const getIntegrity = (runId: string) =>
+  apiRequest<Integrity>(`/api/v1/assessments/${encodeURIComponent(runId)}/integrity`);
+export const getIntegritySummary = () =>
+  apiRequest<IntegritySummary>("/api/v1/integrity/summary");
 export const getSteps = (runId: string) =>
   apiRequest<RunStep[]>(`/api/v1/assessments/${encodeURIComponent(runId)}/steps`);
 export const getDecision = (runId: string) =>
@@ -64,6 +71,11 @@ export const cancelRun = (runId: string) =>
   });
 export const retryRun = (runId: string) =>
   apiRequest<RunDetail>(`/api/v1/assessments/${encodeURIComponent(runId)}/retry`, {
+    method: "POST",
+    body: jsonBody({}),
+  });
+export const cleanReassessRun = (runId: string) =>
+  apiRequest<Run>(`/api/v1/assessments/${encodeURIComponent(runId)}/clean-reassessment`, {
     method: "POST",
     body: jsonBody({}),
   });

@@ -5,11 +5,13 @@ import { Link, useLocation, useParams } from "wouter";
 import { subscribeToRun, type RunEvent } from "../../api/events";
 import {
   cancelRun,
+  cleanReassessRun,
   getArtifacts,
   getComments,
   getCurrentUser,
   getDecision,
   getEvidence,
+  getIntegrity,
   getLlmInteractions,
   getReviews,
   getRun,
@@ -21,6 +23,7 @@ import { ApiClientError } from "../../api/client";
 import { useI18n } from "../../i18n/I18nProvider";
 import { reasoningEffortLabel, runStatusLabel } from "../../i18n/domainLabels";
 import { DecisionPanel } from "./DecisionPanel";
+import { IntegrityPanel } from "./IntegrityPanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { RunTimeline } from "./RunTimeline";
 import { ValidationReplayPanel } from "./ValidationReplayPanel";
@@ -100,6 +103,12 @@ export function RunDetailPage() {
     enabled: Boolean(runId),
     retry: false,
   });
+  const integrity = useQuery({
+    queryKey: ["run-integrity", runId],
+    queryFn: () => getIntegrity(runId),
+    enabled: Boolean(runId),
+    retry: false,
+  });
   const evidence = useQuery({
     queryKey: ["run-evidence", runId], queryFn: () => getEvidence(runId), enabled: Boolean(runId), retry: false,
   });
@@ -144,6 +153,7 @@ export function RunDetailPage() {
           void queryClient.invalidateQueries({ queryKey: ["run-evidence", runId] });
           void queryClient.invalidateQueries({ queryKey: ["run-artifacts", runId] });
           void queryClient.invalidateQueries({ queryKey: ["run-llm-interactions", runId] });
+          void queryClient.invalidateQueries({ queryKey: ["run-integrity", runId] });
         }
         if (event.event_type.startsWith("validation.")) {
           void queryClient.invalidateQueries({ queryKey: ["run-validations", runId] });
@@ -163,12 +173,24 @@ export function RunDetailPage() {
     mutationFn: () => retryRun(runId),
     onSuccess: (next) => navigate(`/runs/${next.id}`),
   });
+  const cleanReassessment = useMutation({
+    mutationFn: () => cleanReassessRun(runId),
+    onSuccess: (next) => navigate(`/runs/${next.id}`),
+  });
 
   if (run.isLoading) return <p className="page-shell page-loading" role="status">{t("正在载入评估记录…")}</p>;
   if (run.isError || !run.data) return <p className="page-shell page-warning" role="alert">{t("无法读取该评估记录。")}</p>;
   const canCancel = Boolean(user.data?.scopes.includes("assessments:cancel")) && CANCELLABLE.has(run.data.status);
   const canRetry = Boolean(user.data?.scopes.includes("assessments:submit")) && RETRYABLE.has(run.data.status);
   const canReadArtifacts = Boolean(user.data?.scopes.includes("artifacts:read"));
+  const canCleanReassess = Boolean(
+    user.data?.roles.includes("Admin")
+      && user.data.scopes.includes("assessments:admin")
+      && user.data.scopes.includes("assessments:submit")
+      && run.data.status === "succeeded"
+      && integrity.data
+      && ["at_risk", "unknown"].includes(integrity.data.status),
+  );
   const completeReport = canReadArtifacts
     ? artifacts.data?.find((artifact) => artifact.kind === "report_18_complete_report") ?? null
     : null;
@@ -230,6 +252,17 @@ export function RunDetailPage() {
       </section>
       {llmInteractions.isError ? <p className="page-warning" role="alert">{t("模型调用轨迹暂时不可用。")}</p> : null}
       <div className="detail-grid">
+        <IntegrityPanel
+          integrity={integrity.data ?? null}
+          canCleanReassess={canCleanReassess}
+          cleanPending={cleanReassessment.isPending}
+          onCleanReassess={() => cleanReassessment.mutate()}
+        />
+        {cleanReassessment.isError ? (
+          <p className="page-warning detail-panel--wide" role="alert">
+            {t("无法创建干净重评估，请稍后重试。")}
+          </p>
+        ) : null}
         <DecisionPanel decision={decision.data ?? null} completeReport={completeReport} />
         <RunTimeline
           steps={steps.data ?? []}

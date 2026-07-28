@@ -124,6 +124,8 @@ const overviewPage = {
           direction_observed: 2,
           direction_correct: 2,
           accuracy: "1",
+          excluded_at_risk: 2,
+          excluded_unknown: 1,
         },
       ],
       run_counts: { total: 20, queued: 0, active: 0, succeeded: 15, anomalous: 2 },
@@ -185,6 +187,7 @@ test("defaults to one instrument row and keeps the full task view available", as
   expect(screen.getByText("方向正确")).toHaveClass("prediction-token--positive");
   expect(screen.queryByText("估值风险较高。")).not.toBeInTheDocument();
   expect(screen.getByText("2 次 · 样本不足")).toBeInTheDocument();
+  expect(screen.getByText("排除 2 条风险 / 1 条未知")).toBeInTheDocument();
   expect(screen.getByText("Hold → Underweight")).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "最新任务失败" })).toHaveAttribute(
     "href",

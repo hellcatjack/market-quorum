@@ -193,6 +193,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assessments/{run_id}/clean-reassessment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Clean Reassess Assessment */
+        post: operations["clean_reassess_assessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assessments/{run_id}/comments": {
         parameters: {
             query?: never;
@@ -254,6 +271,23 @@ export interface paths {
         };
         /** List Evidence */
         get: operations["list_assessment_evidence"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assessments/{run_id}/integrity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Assessment Integrity */
+        get: operations["get_assessment_integrity"];
         put?: never;
         post?: never;
         delete?: never;
@@ -391,6 +425,23 @@ export interface paths {
         };
         /** Instrument History */
         get: operations["get_instrument_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrity/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Integrity Summary */
+        get: operations["get_integrity_summary"];
         put?: never;
         post?: never;
         delete?: never;
@@ -974,6 +1025,16 @@ export interface components {
             direction_correct: number;
             /** Direction Observed */
             direction_observed: number;
+            /**
+             * Excluded At Risk
+             * @default 0
+             */
+            excluded_at_risk: number;
+            /**
+             * Excluded Unknown
+             * @default 0
+             */
+            excluded_unknown: number;
             /** Horizon */
             horizon: number;
         };
@@ -1012,6 +1073,91 @@ export interface components {
             total_alpha: string | null;
             /** Total Return */
             total_return: string | null;
+        };
+        /** IntegrityFindingView */
+        IntegrityFindingView: {
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Reason Code */
+            reason_code: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "safe" | "at_risk" | "unknown";
+            /** Tool Name */
+            tool_name: string;
+        };
+        /** IntegritySummaryView */
+        IntegritySummaryView: {
+            /** At Risk */
+            at_risk: number;
+            /** Eligible Count */
+            eligible_count: number;
+            /** Excluded At Risk Count */
+            excluded_at_risk_count: number;
+            /** Excluded Unknown Count */
+            excluded_unknown_count: number;
+            /**
+             * Policy Version
+             * @default point-in-time.v1
+             */
+            policy_version: string;
+            /** Safe */
+            safe: number;
+            /** Total */
+            total: number;
+            /** Unassessed */
+            unassessed: number;
+            /** Unknown */
+            unknown: number;
+        };
+        /** IntegrityView */
+        IntegrityView: {
+            /**
+             * Analysis Date
+             * Format: date
+             */
+            analysis_date: string;
+            /** Audit Mode */
+            audit_mode?: ("live" | "retrospective") | null;
+            /** Checked At */
+            checked_at?: string | null;
+            /** Clean Reassessment Of Run Id */
+            clean_reassessment_of_run_id?: string | null;
+            /** Clean Reassessment Run Id */
+            clean_reassessment_run_id?: string | null;
+            /**
+             * Findings
+             * @default []
+             */
+            findings: components["schemas"]["IntegrityFindingView"][];
+            /** Input Fingerprint */
+            input_fingerprint?: string | null;
+            /**
+             * Policy Version
+             * @default point-in-time.v1
+             */
+            policy_version: string;
+            /**
+             * Reason Codes
+             * @default []
+             */
+            reason_codes: string[];
+            /**
+             * Run Id
+             * Format: uuid
+             */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "safe" | "at_risk" | "unknown" | "unassessed";
+            /** Temporal Scope */
+            temporal_scope?: ("contemporaneous" | "historical_reconstruction") | null;
         };
         /** LlmInteractionPage */
         LlmInteractionPage: {
@@ -1932,6 +2078,37 @@ export interface operations {
             };
         };
     };
+    clean_reassess_assessment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_assessment_comments: {
         parameters: {
             query?: never;
@@ -2084,6 +2261,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["EvidenceView"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assessment_integrity: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrityView"];
                 };
             };
             /** @description Validation Error */
@@ -2385,6 +2593,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_integrity_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegritySummaryView"];
                 };
             };
         };
