@@ -1,5 +1,5 @@
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 
 import httpx
 from cryptography.fernet import Fernet
@@ -13,7 +13,10 @@ from tradingng_platform.auth.principal import Principal
 from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.gateway.client import GatewaySnapshot
-from tradingng_platform.models import Artifact, AuditEvent
+from tradingng_platform.integrity.contracts import IntegrityStatus
+from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.repository import IntegrityRepository
+from tradingng_platform.models import Artifact, AssessmentRun, AuditEvent
 from tradingng_platform.scheduler.policy import SystemSnapshot
 
 
@@ -188,6 +191,47 @@ async def test_complete_rest_management_workflow(
                 session.add(artifact)
                 await session.flush()
                 artifact_id = artifact.id
+                retry_run = await session.get(AssessmentRun, uuid.UUID(retry_id))
+                retry_run.status = "succeeded"
+                recorder = PointInTimeRecorder(
+                    date(2026, 7, 25),
+                    now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+                )
+                recorder.record(
+                    "get_fundamentals",
+                    IntegrityStatus.AT_RISK,
+                    "current_snapshot_exposed",
+                )
+                await IntegrityRepository(session).persist_document(
+                    retry_run.id,
+                    recorder.finalize(),
+                    artifact_id=None,
+                    audit_mode="retrospective",
+                )
+
+            integrity = await client.get(
+                f"/api/v1/assessments/{retry_id}/integrity",
+                headers=_headers("analyst"),
+            )
+            integrity_summary = await client.get(
+                "/api/v1/integrity/summary",
+                headers=_headers("admin"),
+            )
+            analyst_clean = await client.post(
+                f"/api/v1/assessments/{retry_id}/clean-reassessment",
+                headers=_headers("analyst"),
+                json={},
+            )
+            clean = await client.post(
+                f"/api/v1/assessments/{retry_id}/clean-reassessment",
+                headers=_headers("admin"),
+                json={},
+            )
+            repeated_clean = await client.post(
+                f"/api/v1/assessments/{retry_id}/clean-reassessment",
+                headers=_headers("admin"),
+                json={},
+            )
 
             downloaded = await client.get(
                 f"/api/v1/artifacts/{artifact_id}",
@@ -232,6 +276,13 @@ async def test_complete_rest_management_workflow(
         assert retried.headers["Location"].endswith(retry_id)
         assert compared.status_code == 200
         assert compared.json()["changed_sections"]["status"] == [run_id, retry_id]
+        assert integrity.status_code == 200
+        assert integrity.json()["status"] == "at_risk"
+        assert integrity_summary.json()["at_risk"] == 1
+        assert analyst_clean.status_code == 403
+        assert clean.status_code == 202
+        assert clean.headers["Location"].endswith(clean.json()["id"])
+        assert repeated_clean.json()["id"] == clean.json()["id"]
         assert downloaded.status_code == 200
         assert downloaded.text == "hash verified report"
         assert downloaded.headers["ETag"] == f'"sha256:{stored.sha256}"'
@@ -251,6 +302,7 @@ async def test_complete_rest_management_workflow(
             "assessment.retry",
             "assessment.comment",
             "assessment.review",
+            "assessment.clean_reassessment",
         } <= actions
     finally:
         await database.close()

@@ -100,3 +100,14 @@ class IntegrityRepository:
                 RunIntegrityAssessment.input_fingerprint == document.input_fingerprint,
             )
         )
+
+    async def latest_for_run(
+        self,
+        run_id: uuid.UUID,
+    ) -> RunIntegrityAssessment | None:
+        latest = self.latest_supported_subquery()
+        return await self.session.scalar(
+            select(RunIntegrityAssessment)
+            .join(latest, latest.c.integrity_id == RunIntegrityAssessment.id)
+            .where(latest.c.run_id == run_id)
+        )

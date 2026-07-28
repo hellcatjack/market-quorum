@@ -27,6 +27,11 @@ from tradingng_platform.instruments.classification import (
     InstrumentClassificationUnavailable,
     InstrumentTypeUnsupported,
 )
+from tradingng_platform.integrity.contracts import IntegritySummaryView, IntegrityView
+from tradingng_platform.integrity.service import (
+    CleanReassessmentNotAllowed,
+    IntegrityNotFound,
+)
 
 RUN_ID = uuid.UUID("00000000-0000-0000-0000-000000000101")
 RETRY_ID = uuid.UUID("00000000-0000-0000-0000-000000000102")
@@ -129,6 +134,42 @@ class _FailingAssessments(_Assessments):
 
     async def submit(self, principal, command, request_id):
         raise self.error
+
+
+class _Integrity:
+    def __init__(self, error=None):
+        self.error = error
+
+    async def get(self, principal, run_id):
+        if self.error is not None:
+            raise self.error
+        return IntegrityView(
+            run_id=run_id,
+            status="at_risk",
+            audit_mode="retrospective",
+            temporal_scope="historical_reconstruction",
+            analysis_date=date(2026, 7, 25),
+            checked_at=datetime(2026, 7, 27, tzinfo=timezone.utc),
+            reason_codes=("future_publication_exposed",),
+            input_fingerprint="a" * 64,
+        )
+
+    async def summary(self, principal):
+        return IntegritySummaryView(
+            total=3,
+            safe=1,
+            at_risk=1,
+            unknown=0,
+            unassessed=1,
+            eligible_count=1,
+            excluded_at_risk_count=1,
+            excluded_unknown_count=0,
+        )
+
+    async def clean_reassess(self, principal, run_id, request_id):
+        if self.error is not None:
+            raise self.error
+        return _run(RETRY_ID)
 
 
 def _client(monkeypatch, principal=None):
@@ -277,3 +318,53 @@ def test_events_support_json_and_terminal_sse_replay(monkeypatch):
     assert "id: 1\ndata:" in stream.text
     assert "event: assessment.succeeded" not in stream.text
     assert '"sequence":1' in stream.text
+
+
+def test_integrity_detail_summary_and_clean_reassessment_contract(monkeypatch):
+    principal = Principal(
+        "issuer",
+        "admin",
+        "user",
+        frozenset({"assessments:read", "assessments:admin", "assessments:submit"}),
+        roles=frozenset({"Admin"}),
+    )
+    app = _client(monkeypatch, principal)
+    with TestClient(app) as client:
+        app.state.integrity = _Integrity()
+        detail = client.get(f"/api/v1/assessments/{RUN_ID}/integrity")
+        summary = client.get("/api/v1/integrity/summary")
+        clean = client.post(
+            f"/api/v1/assessments/{RUN_ID}/clean-reassessment",
+            json={},
+        )
+
+    assert detail.status_code == 200
+    assert detail.json()["status"] == "at_risk"
+    assert summary.json()["unassessed"] == 1
+    assert clean.status_code == 202
+    assert clean.headers["Location"].endswith(str(RETRY_ID))
+    assert clean.json()["id"] == str(RETRY_ID)
+
+
+def test_integrity_routes_translate_missing_and_conflict(monkeypatch):
+    principal = Principal(
+        "issuer",
+        "admin",
+        "user",
+        frozenset({"assessments:read", "assessments:admin", "assessments:submit"}),
+        roles=frozenset({"Admin"}),
+    )
+    app = _client(monkeypatch, principal)
+    with TestClient(app) as client:
+        app.state.integrity = _Integrity(IntegrityNotFound(RUN_ID))
+        missing = client.get(f"/api/v1/assessments/{RUN_ID}/integrity")
+        app.state.integrity = _Integrity(CleanReassessmentNotAllowed("source_run_is_safe"))
+        conflict = client.post(
+            f"/api/v1/assessments/{RUN_ID}/clean-reassessment",
+            json={},
+        )
+
+    assert missing.status_code == 404
+    assert missing.json()["error"]["code"] == "assessment_not_found"
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["code"] == "clean_reassessment_not_allowed"

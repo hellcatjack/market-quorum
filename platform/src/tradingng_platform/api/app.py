@@ -28,6 +28,7 @@ from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.gateway.client import GatewayClient
 from tradingng_platform.instruments.classification import YahooInstrumentClassifier
+from tradingng_platform.integrity.service import IntegrityService
 from tradingng_platform.mcp.auth import McpSecurityMiddleware
 from tradingng_platform.mcp.server import create_mcp_server, protected_resource_metadata
 from tradingng_platform.mcp.services import McpServices
@@ -83,6 +84,7 @@ def create_app(
             resolved_database.sessions,
             resolved_classifier,
         )
+        app.state.integrity = IntegrityService(resolved_database.sessions)
         app.state.records = RecordService(
             resolved_database.sessions,
             LocalArtifactStore(app_settings.artifact_dir),

@@ -534,6 +534,75 @@ class AssessmentRepository:
         )
         return run
 
+    async def find_clean_reassessment(
+        self,
+        source_run_id: uuid.UUID,
+    ) -> RunView | None:
+        row = (
+            await self.session.execute(
+                select(AssessmentRun, AssessmentRequest, Instrument)
+                .join(AssessmentRequest, AssessmentRun.request_id == AssessmentRequest.id)
+                .join(Instrument, AssessmentRequest.instrument_id == Instrument.id)
+                .where(AssessmentRun.clean_reassessment_of_run_id == source_run_id)
+                .order_by(AssessmentRun.created_at, AssessmentRun.id)
+                .limit(1)
+            )
+        ).one_or_none()
+        return self._run_view(*row) if row is not None else None
+
+    async def create_clean_reassessment(
+        self,
+        context: RunContext,
+        policy_version: str,
+    ) -> RunView:
+        defaults = dict(context.batch.defaults_json or {})
+        defaults.pop("_submission_sha256", None)
+        defaults.update(
+            {
+                "memory_mode": "independent",
+                "clean_reassessment_of_run_id": str(context.run.id),
+                "integrity_policy_version": policy_version,
+            }
+        )
+        batch = AssessmentBatch(
+            submitted_by=context.owner.id,
+            idempotency_key=f"clean-{context.run.id}-{policy_version}",
+            defaults_json=defaults,
+        )
+        self.session.add(batch)
+        await self.session.flush()
+
+        request_config = dict(context.request.requested_config_json or {})
+        request_config["memory_mode"] = "independent"
+        request = AssessmentRequest(
+            batch_id=batch.id,
+            instrument_id=context.request.instrument_id,
+            analysis_date=context.request.analysis_date,
+            requested_config_json=request_config,
+        )
+        self.session.add(request)
+        await self.session.flush()
+        run = AssessmentRun(
+            request_id=request.id,
+            attempt=1,
+            status=RunStatus.QUEUED.value,
+            config_snapshot_id=None,
+            retry_of_run_id=None,
+            clean_reassessment_of_run_id=context.run.id,
+            version=1,
+        )
+        self.session.add(run)
+        await self.session.flush()
+        await self.append_event(
+            run.id,
+            "assessment.queued",
+            {
+                "clean_reassessment_of_run_id": str(context.run.id),
+                "integrity_policy_version": policy_version,
+            },
+        )
+        return self._run_view(run, request, context.instrument)
+
     async def comparison_metadata(
         self,
         run_ids: list[uuid.UUID],
