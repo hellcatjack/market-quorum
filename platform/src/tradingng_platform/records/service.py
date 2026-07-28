@@ -11,6 +11,7 @@ from tradingng_platform.assessments.contracts import decode_run_cursor, encode_r
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.instruments import canonicalize_ticker
+from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.models import (
     Artifact,
     AssessmentRequest,
@@ -73,11 +74,23 @@ def _preferred_validation(
 
 def _validation_stats(
     validations: list[InstrumentValidationView],
+    integrity_by_run: dict[uuid.UUID, str] | None = None,
 ) -> list[InstrumentValidationStats]:
     completed_by_horizon: dict[int, list[InstrumentValidationView]] = defaultdict(list)
+    excluded_at_risk: dict[int, int] = defaultdict(int)
+    excluded_unknown: dict[int, int] = defaultdict(int)
     for item in validations:
-        if item.status == "completed":
+        if item.status != "completed":
+            continue
+        integrity_status = (
+            "safe" if integrity_by_run is None else integrity_by_run.get(item.run_id)
+        )
+        if integrity_status == "safe":
             completed_by_horizon[item.horizon].append(item)
+        elif integrity_status == "at_risk":
+            excluded_at_risk[item.horizon] += 1
+        else:
+            excluded_unknown[item.horizon] += 1
 
     result = []
     for horizon in (1, 5, 20):
@@ -91,6 +104,8 @@ def _validation_stats(
                 direction_observed=len(observed),
                 direction_correct=correct,
                 accuracy=(Decimal(correct) / Decimal(len(observed)) if observed else None),
+                excluded_at_risk=excluded_at_risk[horizon],
+                excluded_unknown=excluded_unknown[horizon],
             )
         )
     return result
@@ -158,6 +173,7 @@ def _run_counts(rows: list[tuple]) -> InstrumentRunCounts:
 def _build_overview_items(
     rows: list[tuple],
     validations_by_run: dict[uuid.UUID, list[InstrumentValidationView]],
+    integrity_by_run: dict[uuid.UUID, str] | None = None,
 ) -> list[InstrumentOverviewItem]:
     grouped: dict[uuid.UUID, list[tuple]] = defaultdict(list)
     for row in rows:
@@ -212,7 +228,7 @@ def _build_overview_items(
                     successful_rows[1][3].rating if len(successful_rows) > 1 else None
                 ),
                 preferred_validation=_preferred_validation(latest_successful_validations),
-                validation_stats=_validation_stats(all_validations),
+                validation_stats=_validation_stats(all_validations, integrity_by_run),
                 run_counts=_run_counts(instrument_rows),
             )
         )
@@ -574,6 +590,7 @@ class RecordService:
             rows = list((await session.execute(statement)).all())
 
             validations_by_run: dict[uuid.UUID, list[InstrumentValidationView]] = defaultdict(list)
+            integrity_by_run: dict[uuid.UUID, str] = {}
             if validations_visible and rows:
                 run_ids = [row[0].id for row in rows]
                 validations = list(
@@ -587,8 +604,18 @@ class RecordService:
                     validations_by_run[validation.run_id].append(
                         _instrument_validation_view(validation)
                     )
+                latest_integrity = IntegrityRepository.latest_supported_subquery()
+                integrity_by_run = dict(
+                    (
+                        await session.execute(
+                            select(latest_integrity.c.run_id, latest_integrity.c.status).where(
+                                latest_integrity.c.run_id.in_(run_ids)
+                            )
+                        )
+                    ).all()
+                )
 
-            items = _build_overview_items(rows, validations_by_run)
+            items = _build_overview_items(rows, validations_by_run, integrity_by_run)
             query = filters.query.strip().casefold() if filters.query else None
             if query:
                 items = [

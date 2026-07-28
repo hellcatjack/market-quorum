@@ -16,10 +16,11 @@ def _validation(
     horizon: int,
     status: str,
     direction_correct: bool | None = None,
+    run_id: uuid.UUID | None = None,
 ) -> InstrumentValidationView:
     return InstrumentValidationView(
         id=uuid.uuid4(),
-        run_id=uuid.uuid4(),
+        run_id=run_id or uuid.uuid4(),
         horizon=horizon,
         status=status,
         scheduled_for=datetime(2026, 7, 26, tzinfo=timezone.utc),
@@ -68,6 +69,55 @@ def test_validation_stats_exclude_non_completed_and_missing_direction():
     assert by_horizon[5].direction_observed == 0
     assert by_horizon[5].accuracy is None
     assert by_horizon[1].completed == 0
+
+
+def test_validation_stats_exclude_unsafe_integrity_and_report_reasons():
+    safe_id = uuid.uuid4()
+    risky_id = uuid.uuid4()
+    unknown_id = uuid.uuid4()
+    unassessed_id = uuid.uuid4()
+
+    stats = _validation_stats(
+        [
+            _validation(
+                horizon=20,
+                status="completed",
+                direction_correct=True,
+                run_id=safe_id,
+            ),
+            _validation(
+                horizon=20,
+                status="completed",
+                direction_correct=False,
+                run_id=risky_id,
+            ),
+            _validation(
+                horizon=20,
+                status="completed",
+                direction_correct=False,
+                run_id=unknown_id,
+            ),
+            _validation(
+                horizon=20,
+                status="completed",
+                direction_correct=False,
+                run_id=unassessed_id,
+            ),
+        ],
+        integrity_by_run={
+            safe_id: "safe",
+            risky_id: "at_risk",
+            unknown_id: "unknown",
+        },
+    )
+
+    twenty = next(item for item in stats if item.horizon == 20)
+    assert twenty.completed == 1
+    assert twenty.direction_observed == 1
+    assert twenty.direction_correct == 1
+    assert twenty.accuracy == Decimal("1")
+    assert twenty.excluded_at_risk == 1
+    assert twenty.excluded_unknown == 2
 
 
 def test_overview_items_keep_latest_successful_decision_when_latest_run_failed():

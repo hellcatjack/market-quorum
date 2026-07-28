@@ -2,16 +2,55 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tradingng_platform.integrity.contracts import IntegrityDocument
+from tradingng_platform.integrity.contracts import CURRENT_POLICY_VERSION, IntegrityDocument
 from tradingng_platform.models import RunIntegrityAssessment
 
 
 class IntegrityRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    @staticmethod
+    def latest_supported_subquery():
+        ranked = (
+            select(
+                RunIntegrityAssessment.id.label("integrity_id"),
+                RunIntegrityAssessment.run_id,
+                RunIntegrityAssessment.status,
+                RunIntegrityAssessment.audit_mode,
+                RunIntegrityAssessment.temporal_scope,
+                RunIntegrityAssessment.checked_at,
+                RunIntegrityAssessment.input_fingerprint,
+                func.row_number()
+                .over(
+                    partition_by=RunIntegrityAssessment.run_id,
+                    order_by=(
+                        RunIntegrityAssessment.checked_at.desc(),
+                        RunIntegrityAssessment.created_at.desc(),
+                        RunIntegrityAssessment.id.desc(),
+                    ),
+                )
+                .label("integrity_rank"),
+            )
+            .where(RunIntegrityAssessment.policy_version == CURRENT_POLICY_VERSION)
+            .subquery("ranked_run_integrity")
+        )
+        return (
+            select(
+                ranked.c.integrity_id,
+                ranked.c.run_id,
+                ranked.c.status,
+                ranked.c.audit_mode,
+                ranked.c.temporal_scope,
+                ranked.c.checked_at,
+                ranked.c.input_fingerprint,
+            )
+            .where(ranked.c.integrity_rank == 1)
+            .subquery("latest_run_integrity")
+        )
 
     async def persist_document(
         self,

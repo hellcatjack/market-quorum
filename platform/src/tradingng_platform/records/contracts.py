@@ -135,6 +135,8 @@ class InstrumentValidationStats(BaseModel):
     direction_observed: int
     direction_correct: int
     accuracy: Decimal | None
+    excluded_at_risk: int = 0
+    excluded_unknown: int = 0
 
 
 class InstrumentRunCounts(BaseModel):

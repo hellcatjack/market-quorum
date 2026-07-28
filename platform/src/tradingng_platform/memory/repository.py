@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.domain.runs import RunStatus
+from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.memory.context import (
     MemoryCandidate,
     MemorySnapshot,
@@ -35,6 +36,7 @@ class HistoricalMemoryRepository:
         if mode is MemoryMode.INDEPENDENT:
             return build_memory_snapshot(mode, ticker, analysis_date, (), limit=limit)
 
+        latest_integrity = IntegrityRepository.latest_supported_subquery()
         rows = (
             await self.session.execute(
                 select(
@@ -48,6 +50,7 @@ class HistoricalMemoryRepository:
                 .join(Instrument, AssessmentRequest.instrument_id == Instrument.id)
                 .join(Decision, Decision.run_id == AssessmentRun.id)
                 .join(Validation, Validation.run_id == AssessmentRun.id)
+                .join(latest_integrity, latest_integrity.c.run_id == AssessmentRun.id)
                 .where(
                     Instrument.canonical_ticker == ticker,
                     AssessmentRun.status == RunStatus.SUCCEEDED.value,
@@ -58,6 +61,7 @@ class HistoricalMemoryRepository:
                     Validation.alpha.is_not(None),
                     Validation.max_adverse_excursion.is_not(None),
                     Validation.max_favorable_excursion.is_not(None),
+                    latest_integrity.c.status == "safe",
                 )
                 .order_by(
                     AssessmentRequest.analysis_date.desc(),

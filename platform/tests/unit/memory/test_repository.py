@@ -20,10 +20,11 @@ class _Session:
     def __init__(self, rows):
         self.rows = rows
         self.calls = 0
+        self.last_statement = None
 
     async def execute(self, statement):
-        del statement
         self.calls += 1
+        self.last_statement = statement
         return _Result(self.rows)
 
 
@@ -84,6 +85,10 @@ async def test_repository_builds_snapshot_from_completed_validations_only():
         uuid.UUID(int=1),
         uuid.UUID(int=2),
     ]
+    sql = str(session.last_statement)
+    assert "run_integrity_assessments" in sql
+    assert "point-in-time.v1" in str(session.last_statement.compile().params.values())
+    assert "safe" in str(session.last_statement.compile().params.values())
 
 
 async def test_repository_does_not_query_for_independent_mode():

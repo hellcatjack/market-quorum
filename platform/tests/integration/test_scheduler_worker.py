@@ -20,6 +20,9 @@ from tradingng_platform.assessments.service import AssessmentService
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.gateway.client import GatewaySnapshot
+from tradingng_platform.integrity.contracts import IntegrityStatus
+from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.models import (
     AssessmentRun,
     Decision,
@@ -222,6 +225,18 @@ async def test_admission_pins_an_eligible_validated_prior_assessment(
                 },
                 attempts=1,
             )
+        )
+        recorder = PointInTimeRecorder(date(2026, 6, 1), now=observed_at)
+        recorder.record(
+            "evidence",
+            IntegrityStatus.SAFE,
+            "sealed_evidence_verified",
+        )
+        await IntegrityRepository(session).persist_document(
+            old_run.id,
+            recorder.finalize(),
+            artifact_id=None,
+            audit_mode="retrospective",
         )
 
     new_run = (

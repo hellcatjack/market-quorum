@@ -9,6 +9,9 @@ from tradingng_platform.assessments.contracts import AssessmentItem, SubmitAsses
 from tradingng_platform.assessments.service import AssessmentService
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.gateway.client import GatewaySnapshot
+from tradingng_platform.integrity.contracts import IntegrityStatus
+from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.models import (
     Artifact,
     AssessmentRequest,
@@ -446,6 +449,21 @@ async def test_instrument_overview_preserves_decision_and_binds_validations(
                     total_alpha=Decimal(total_alpha) if total_alpha else None,
                 )
             )
+        recorder = PointInTimeRecorder(
+            date(2026, 6, 1),
+            now=datetime(2026, 7, 26, tzinfo=timezone.utc),
+        )
+        recorder.record(
+            "evidence",
+            IntegrityStatus.SAFE,
+            "sealed_evidence_verified",
+        )
+        await IntegrityRepository(session).persist_document(
+            nvda_success.id,
+            recorder.finalize(),
+            artifact_id=None,
+            audit_mode="retrospective",
+        )
 
     service = RecordService(session_factory, LocalArtifactStore(tmp_path / "artifacts"))
     first_page = await service.instrument_overviews(
@@ -459,6 +477,13 @@ async def test_instrument_overview_preserves_decision_and_binds_validations(
     assert first_page.items[0].latest_successful_run.status == "succeeded"
     assert first_page.items[0].latest_decision.rating == "Underweight"
     assert first_page.items[0].preferred_validation.horizon == 20
+    twenty_day = next(
+        item for item in first_page.items[0].validation_stats if item.horizon == 20
+    )
+    assert twenty_day.completed == 1
+    assert twenty_day.accuracy == Decimal("1")
+    assert twenty_day.excluded_at_risk == 0
+    assert twenty_day.excluded_unknown == 0
     assert first_page.items[0].run_counts.anomalous == 1
     assert first_page.items[0].run_counts.total == 2
     assert first_page.next_cursor is not None
