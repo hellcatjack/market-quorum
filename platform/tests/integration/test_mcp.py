@@ -155,6 +155,7 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                             "list_assessments",
                             "cancel_assessment",
                             "retry_assessment",
+                            "delete_assessment",
                             "compare_assessments",
                             "get_instrument_summary",
                             "list_instrument_overviews",
@@ -261,6 +262,33 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                         )
                         assert overviews["items"][0]["instrument"]["ticker"] == "NVDA"
 
+                        deletable = _tool_payload(
+                            await session.call_tool(
+                                "submit_assessment",
+                                {
+                                    **submission,
+                                    "ticker": "TSLA",
+                                    "idempotency_key": "mcp-delete-tsla-20260725",
+                                },
+                            )
+                        )
+                        deletable_run_id = deletable["run_id"]
+                        await session.call_tool(
+                            "cancel_assessment",
+                            {"run_id": deletable_run_id},
+                        )
+                        deleted = _tool_payload(
+                            await session.call_tool(
+                                "delete_assessment",
+                                {"run_id": deletable_run_id},
+                            )
+                        )
+                        assert deleted == {
+                            "run_id": deletable_run_id,
+                            "deleted": True,
+                            "message": "Assessment was permanently deleted",
+                        }
+
                         concurrent_results = await asyncio.gather(
                             *(
                                 session.call_tool(
@@ -292,6 +320,8 @@ async def test_mcp_protocol_rest_parity_and_concurrency_gate(
                 assert rest_run.status_code == 200
                 assert rest_run.json()["id"] == status["id"]
                 assert rest_run.json()["config_snapshot_sha256"] == status["config_snapshot_sha256"]
+                deleted_run = await rest.get(f"/api/v1/assessments/{deletable_run_id}")
+                assert deleted_run.status_code == 404
 
                 missing = await rest.post("/mcp", json={})
                 invalid = await rest.post(

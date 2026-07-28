@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.assessments.contracts import (
     AssessmentItem,
     ComparisonView,
@@ -18,6 +21,7 @@ from tradingng_platform.assessments.contracts import (
     RunView,
     SubmitAssessments,
 )
+from tradingng_platform.assessments.files import delete_run_directory
 from tradingng_platform.assessments.repository import (
     AssessmentRepository,
     InstrumentAssetTypeConflict,
@@ -36,6 +40,8 @@ _RETRYABLE_STATUSES = {
     RunStatus.NEEDS_ATTENTION,
 }
 
+logger = logging.getLogger(__name__)
+
 
 class AssessmentNotFound(Exception):
     def __init__(self, run_id: uuid.UUID):
@@ -51,6 +57,20 @@ class AssessmentRetryNotAllowed(Exception):
     def __init__(self, status: RunStatus):
         self.status = status
         super().__init__(f"assessment in {status.value} cannot be retried")
+
+
+class AssessmentDeleteNotAllowed(Exception):
+    def __init__(
+        self,
+        reason: str,
+        *,
+        status: RunStatus | None = None,
+        dependent_run_ids: tuple[uuid.UUID, ...] = (),
+    ):
+        self.reason = reason
+        self.status = status
+        self.dependent_run_ids = dependent_run_ids
+        super().__init__(f"assessment deletion is not allowed: {reason}")
 
 
 class AssessmentIdempotencyConflict(Exception):
@@ -93,6 +113,14 @@ class ResolvedAssessmentItem:
     analysts: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DeletedAssessment:
+    run_id: uuid.UUID
+    ticker: str
+    analysis_date: date
+    status: RunStatus
+
+
 def _compatible_analysts(
     analysts: tuple[str, ...],
     asset_type: AssetType,
@@ -103,9 +131,17 @@ def _compatible_analysts(
 
 
 class AssessmentService:
-    def __init__(self, sessions: async_sessionmaker[AsyncSession], classifier):
+    def __init__(
+        self,
+        sessions: async_sessionmaker[AsyncSession],
+        classifier,
+        artifact_store: LocalArtifactStore | None = None,
+        job_dir: Path | None = None,
+    ):
         self.sessions = sessions
         self.classifier = classifier
+        self.artifact_store = artifact_store
+        self.job_dir = job_dir
 
     async def submit(
         self,
@@ -316,6 +352,89 @@ class AssessmentService:
                 retry_context.request,
                 retry_context.instrument,
             )
+
+    async def delete(
+        self,
+        principal: Principal,
+        run_id: uuid.UUID,
+        request_id: str,
+    ) -> DeletedAssessment:
+        principal.require("assessments:admin")
+        if "Admin" not in principal.roles:
+            raise AssessmentAccessDenied("assessment deletion requires the Admin role")
+
+        async with self.sessions() as session, session.begin():
+            repository = AssessmentRepository(session)
+            context = await repository.get_run_context(run_id, for_update=True)
+            if context is None:
+                raise AssessmentNotFound(run_id)
+
+            run_status = RunStatus(context.run.status)
+            if run_status not in TERMINAL_STATUSES:
+                raise AssessmentDeleteNotAllowed(
+                    "run_not_terminal",
+                    status=run_status,
+                )
+            if await repository.has_active_work(run_id):
+                raise AssessmentDeleteNotAllowed(
+                    "active_work",
+                    status=run_status,
+                )
+            dependent_run_ids = tuple(await repository.find_dependent_run_ids(run_id))
+            if dependent_run_ids:
+                raise AssessmentDeleteNotAllowed(
+                    "dependent_runs_exist",
+                    status=run_status,
+                    dependent_run_ids=dependent_run_ids,
+                )
+
+            deleted = DeletedAssessment(
+                run_id=run_id,
+                ticker=context.instrument.canonical_ticker,
+                analysis_date=context.request.analysis_date,
+                status=run_status,
+            )
+            request_row_id = context.request.id
+            batch_id = context.request.batch_id
+            deletion_counts = await repository.delete_assessment_graph(context)
+            await repository.append_audit(
+                principal,
+                "assessment.delete",
+                "assessment_run",
+                str(run_id),
+                request_id,
+                {
+                    "ticker": deleted.ticker,
+                    "analysis_date": deleted.analysis_date.isoformat(),
+                    "status": deleted.status.value,
+                    "request_id": str(request_row_id),
+                    "batch_id": str(batch_id),
+                    "deleted": deletion_counts,
+                },
+            )
+
+        self._cleanup_run_files(run_id)
+        return deleted
+
+    def _cleanup_run_files(self, run_id: uuid.UUID) -> None:
+        if self.artifact_store is not None:
+            try:
+                self.artifact_store.delete_run(run_id)
+            except (OSError, ValueError):
+                logger.warning(
+                    "assessment_artifact_cleanup_failed run_id=%s",
+                    run_id,
+                    exc_info=True,
+                )
+        if self.job_dir is not None:
+            try:
+                delete_run_directory(self.job_dir, run_id)
+            except (OSError, ValueError):
+                logger.warning(
+                    "assessment_job_cleanup_failed run_id=%s",
+                    run_id,
+                    exc_info=True,
+                )
 
     async def compare(
         self,

@@ -153,7 +153,8 @@ export interface paths {
         get: operations["get_assessment"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Assessment */
+        delete: operations["delete_assessment"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2004,6 +2005,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["RunDetailView"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_assessment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

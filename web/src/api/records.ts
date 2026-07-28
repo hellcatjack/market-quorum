@@ -74,6 +74,10 @@ export const retryRun = (runId: string) =>
     method: "POST",
     body: jsonBody({}),
   });
+export const deleteRun = (runId: string) =>
+  apiRequest<void>(`/api/v1/assessments/${encodeURIComponent(runId)}`, {
+    method: "DELETE",
+  });
 export const cleanReassessRun = (runId: string) =>
   apiRequest<Run>(`/api/v1/assessments/${encodeURIComponent(runId)}/clean-reassessment`, {
     method: "POST",

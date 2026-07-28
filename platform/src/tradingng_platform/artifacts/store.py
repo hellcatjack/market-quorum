@@ -5,6 +5,8 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from tradingng_platform.assessments.files import delete_run_directory
+
 _ARTIFACT_KIND = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
 _COPY_BUFFER_SIZE = 1024 * 1024
 
@@ -84,6 +86,9 @@ class LocalArtifactStore:
             while chunk := artifact.read(_COPY_BUFFER_SIZE):
                 digest.update(chunk)
         return digest.hexdigest() == expected_sha256
+
+    def delete_run(self, run_id: uuid.UUID) -> bool:
+        return delete_run_directory(self.root, run_id)
 
     @staticmethod
     def _fsync_directory(directory: Path) -> None:

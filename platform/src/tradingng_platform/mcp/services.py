@@ -33,11 +33,17 @@ class McpServices:
         instrument_classifier=None,
     ) -> McpServices:
         classifier = instrument_classifier or YahooInstrumentClassifier()
+        artifact_store = LocalArtifactStore(settings.artifact_dir)
         return cls(
-            assessments=AssessmentService(database.sessions, classifier),
+            assessments=AssessmentService(
+                database.sessions,
+                classifier,
+                artifact_store,
+                settings.job_dir,
+            ),
             records=RecordService(
                 database.sessions,
-                LocalArtifactStore(settings.artifact_dir),
+                artifact_store,
                 settings.job_dir,
             ),
             system=SystemService(

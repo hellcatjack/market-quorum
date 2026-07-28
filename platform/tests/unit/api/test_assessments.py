@@ -17,7 +17,9 @@ from tradingng_platform.assessments.contracts import (
 from tradingng_platform.assessments.service import (
     AssessmentAnalystsIncompatible,
     AssessmentAssetTypeConflict,
+    AssessmentDeleteNotAllowed,
     AssessmentInstrumentIdentityConflict,
+    DeletedAssessment,
 )
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.instruments import AssetType
@@ -63,6 +65,16 @@ def _principal(scopes=None):
     )
 
 
+def _admin_principal():
+    return Principal(
+        "issuer",
+        "admin",
+        "user",
+        frozenset({"assessments:read", "assessments:admin"}),
+        roles=frozenset({"Admin"}),
+    )
+
+
 def _run(run_id=RUN_ID, status=RunStatus.QUEUED):
     return RunView(
         id=run_id,
@@ -79,6 +91,7 @@ def _run(run_id=RUN_ID, status=RunStatus.QUEUED):
 class _Assessments:
     def __init__(self):
         self.submissions = {}
+        self.deleted = []
 
     async def submit(self, principal, command, request_id):
         self.submissions.setdefault(command.idempotency_key, [_run()])
@@ -119,6 +132,15 @@ class _Assessments:
     async def retry(self, principal, run_id, request_id):
         return _run(RETRY_ID)
 
+    async def delete(self, principal, run_id, request_id):
+        self.deleted.append((principal, run_id, request_id))
+        return DeletedAssessment(
+            run_id=run_id,
+            ticker="NVDA",
+            analysis_date=date(2026, 7, 25),
+            status=RunStatus.SUCCEEDED,
+        )
+
     async def compare(self, principal, run_ids):
         return ComparisonView(
             runs=[_run(), _run(RETRY_ID)],
@@ -134,6 +156,15 @@ class _FailingAssessments(_Assessments):
 
     async def submit(self, principal, command, request_id):
         raise self.error
+
+
+class _DeleteFailingAssessments(_Assessments):
+    async def delete(self, principal, run_id, request_id):
+        raise AssessmentDeleteNotAllowed(
+            "dependent_runs_exist",
+            status=RunStatus.SUCCEEDED,
+            dependent_run_ids=(RETRY_ID,),
+        )
 
 
 class _Integrity:
@@ -301,6 +332,48 @@ def test_scope_is_enforced_before_submission(monkeypatch):
 
     assert response.status_code == 403
     assert response.json()["error"]["code"] == "insufficient_scope"
+
+
+def test_admin_can_delete_terminal_assessment(monkeypatch):
+    app = _client(monkeypatch, _admin_principal())
+    service = _Assessments()
+    with TestClient(app) as client:
+        app.state.assessments = service
+        response = client.delete(f"/api/v1/assessments/{RUN_ID}")
+
+    assert response.status_code == 204
+    assert response.content == b""
+    assert len(service.deleted) == 1
+    assert service.deleted[0][1] == RUN_ID
+
+
+def test_delete_requires_admin_scope(monkeypatch):
+    app = _client(monkeypatch, _principal({"assessments:read"}))
+    with TestClient(app) as client:
+        app.state.assessments = _Assessments()
+        response = client.delete(f"/api/v1/assessments/{RUN_ID}")
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "insufficient_scope"
+
+
+def test_delete_conflict_has_stable_machine_readable_details(monkeypatch):
+    app = _client(monkeypatch, _admin_principal())
+    with TestClient(app) as client:
+        app.state.assessments = _DeleteFailingAssessments()
+        response = client.delete(f"/api/v1/assessments/{RUN_ID}")
+
+    assert response.status_code == 409
+    assert response.json()["error"] == {
+        "code": "delete_not_allowed",
+        "message": "Assessment cannot be deleted in its current state",
+        "request_id": response.headers["X-Request-ID"],
+        "details": {
+            "reason": "dependent_runs_exist",
+            "status": "succeeded",
+            "dependent_run_ids": [str(RETRY_ID)],
+        },
+    }
 
 
 def test_events_support_json_and_terminal_sse_replay(monkeypatch):

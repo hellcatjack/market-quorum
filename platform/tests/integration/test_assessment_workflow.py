@@ -1,8 +1,10 @@
-from datetime import date
+from datetime import date, datetime, timezone
+from decimal import Decimal
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
+from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.assessments.contracts import (
     AssessmentItem,
     RunListFilters,
@@ -15,7 +17,27 @@ from tradingng_platform.assessments.service import (
 )
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
-from tradingng_platform.models import AssessmentRun, AuditEvent, RunConfigSnapshot
+from tradingng_platform.models import (
+    Artifact,
+    AssessmentBatch,
+    AssessmentRequest,
+    AssessmentRun,
+    AuditEvent,
+    Comment,
+    Decision,
+    DecisionPriceBasis,
+    EvidenceItem,
+    Instrument,
+    Review,
+    RunConfigSnapshot,
+    RunEvent,
+    RunIntegrityAssessment,
+    RunStep,
+    User,
+    Validation,
+    Webhook,
+    WebhookDelivery,
+)
 
 
 def _analyst(subject):
@@ -25,6 +47,16 @@ def _analyst(subject):
         "user",
         frozenset({"assessments:submit", "assessments:read", "assessments:cancel"}),
         roles=frozenset({"Analyst"}),
+    )
+
+
+def _admin():
+    return Principal(
+        "issuer",
+        "admin",
+        "user",
+        frozenset({"assessments:admin"}),
+        roles=frozenset({"Admin"}),
     )
 
 
@@ -202,3 +234,187 @@ async def test_run_detail_exposes_immutable_execution_metadata(
     assert detail.memory.snapshot_sha256 == "b" * 64
     assert detail.memory.sources[0].horizon == 5
     assert not hasattr(detail.memory.sources[0], "decision")
+
+
+async def test_delete_removes_complete_run_graph_and_orphans(
+    session_factory,
+    instrument_classifier,
+    tmp_path,
+):
+    artifact_store = LocalArtifactStore(tmp_path / "artifacts")
+    job_dir = tmp_path / "jobs"
+    service = AssessmentService(
+        session_factory,
+        instrument_classifier,
+        artifact_store,
+        job_dir,
+    )
+    owner = _analyst("delete-owner")
+    run_view = (
+        await service.submit(
+            owner,
+            SubmitAssessments(
+                items=[AssessmentItem(ticker="NVDA", analysis_date=date(2026, 7, 25))],
+                idempotency_key="delete-complete-graph-20260725",
+            ),
+            "request-submit-delete",
+        )
+    )[0]
+    await service.cancel(owner, run_view.id, "request-cancel-delete")
+
+    async with session_factory() as session, session.begin():
+        run = await session.get(AssessmentRun, run_view.id)
+        request = await session.get(AssessmentRequest, run.request_id)
+        owner_row = await session.scalar(select(User).where(User.subject == "delete-owner"))
+        event = await session.scalar(
+            select(RunEvent).where(RunEvent.run_id == run_view.id).limit(1)
+        )
+        snapshot = RunConfigSnapshot(
+            content_json={"request": {"depth": "deep"}},
+            sha256="d" * 64,
+            gateway_snapshot_id="delete-snapshot",
+        )
+        session.add(snapshot)
+        await session.flush()
+        run.config_snapshot_id = snapshot.id
+
+        artifact = Artifact(
+            run_id=run_view.id,
+            kind="complete_report",
+            media_type="text/markdown",
+            size=6,
+            sha256="e" * 64,
+            storage_key=f"{run_view.id}/complete_report/{'e' * 64}",
+            redacted=True,
+            retention_class="permanent",
+            metadata_json={},
+        )
+        session.add(artifact)
+        await session.flush()
+        session.add_all(
+            [
+                RunStep(
+                    run_id=run_view.id,
+                    name="finalizing",
+                    status="completed",
+                    attempt=1,
+                ),
+                Decision(
+                    run_id=run_view.id,
+                    rating="Buy",
+                    executive_summary="summary",
+                    investment_thesis="thesis",
+                    price_target=Decimal("200"),
+                    time_horizon="12 months",
+                    structured_json={},
+                ),
+                EvidenceItem(
+                    run_id=run_view.id,
+                    source="test",
+                    tool_name="test_tool",
+                    arguments_json={},
+                    collected_at=datetime.now(timezone.utc),
+                    artifact_id=artifact.id,
+                    content_hash="f" * 64,
+                ),
+                Review(
+                    run_id=run_view.id,
+                    reviewer_id=owner_row.id,
+                    verdict="approved",
+                    comment="review",
+                ),
+                Comment(
+                    run_id=run_view.id,
+                    author_id=owner_row.id,
+                    body="comment",
+                ),
+                Validation(
+                    run_id=run_view.id,
+                    horizon=20,
+                    status="completed",
+                    scheduled_for=datetime.now(timezone.utc),
+                    data_artifact_id=artifact.id,
+                ),
+                DecisionPriceBasis(
+                    run_id=run_view.id,
+                    status="completed",
+                    target_price=Decimal("200"),
+                    reference_session=date(2026, 7, 25),
+                    reference_close=Decimal("180"),
+                ),
+                RunIntegrityAssessment(
+                    run_id=run_view.id,
+                    artifact_id=artifact.id,
+                    policy_version="integrity.v1",
+                    status="safe",
+                    audit_mode="point_in_time",
+                    temporal_scope="historical",
+                    analysis_date=date(2026, 7, 25),
+                    checked_at=datetime.now(timezone.utc),
+                    reason_codes_json=[],
+                    tool_findings_json=[],
+                    input_fingerprint="1" * 64,
+                ),
+            ]
+        )
+        webhook = Webhook(
+            owner_id=owner_row.id,
+            endpoint="https://example.test/hook",
+            event_types_json=["assessment.cancelled"],
+            encrypted_secret="encrypted",
+            status="active",
+        )
+        session.add(webhook)
+        await session.flush()
+        session.add(
+            WebhookDelivery(
+                webhook_id=webhook.id,
+                event_id=event.id,
+                status="delivered",
+            )
+        )
+        request_id = request.id
+        batch_id = request.batch_id
+        snapshot_id = snapshot.id
+        instrument_id = request.instrument_id
+
+    artifact_path = artifact_store.root / str(run_view.id) / "complete_report" / "report.md"
+    artifact_path.parent.mkdir(parents=True)
+    artifact_path.write_text("report", encoding="utf-8")
+    job_path = job_dir / str(run_view.id) / "worker.log"
+    job_path.parent.mkdir(parents=True)
+    job_path.write_text("log", encoding="utf-8")
+
+    deleted = await service.delete(_admin(), run_view.id, "request-delete")
+
+    assert deleted.run_id == run_view.id
+    assert not artifact_path.parent.parent.exists()
+    assert not job_path.parent.exists()
+    async with session_factory() as session:
+        owned_models = (
+            WebhookDelivery,
+            RunIntegrityAssessment,
+            Validation,
+            DecisionPriceBasis,
+            EvidenceItem,
+            Review,
+            Comment,
+            Decision,
+            RunStep,
+            Artifact,
+            RunEvent,
+            AssessmentRun,
+        )
+        for model in owned_models:
+            assert await session.scalar(select(func.count()).select_from(model)) == 0
+        assert await session.get(AssessmentRequest, request_id) is None
+        assert await session.get(AssessmentBatch, batch_id) is None
+        assert await session.get(RunConfigSnapshot, snapshot_id) is None
+        assert await session.get(Instrument, instrument_id) is not None
+        audit = await session.scalar(
+            select(AuditEvent)
+            .where(AuditEvent.action == "assessment.delete")
+            .order_by(AuditEvent.created_at.desc())
+        )
+    assert audit.object_id == str(run_view.id)
+    assert audit.metadata_json["ticker"] == "NVDA"

@@ -52,6 +52,12 @@ class OperationResult(BaseModel):
     message: str
 
 
+class DeletionResult(BaseModel):
+    run_id: uuid.UUID
+    deleted: bool
+    message: str
+
+
 def _accepted(run) -> JobAccepted:
     return JobAccepted(
         run_id=run.id,
@@ -176,6 +182,21 @@ def register_tools(server: FastMCP, services: McpServices) -> None:
             run_id=run.id,
             status=run.status,
             message="Retry was queued",
+        )
+
+    @server.tool(structured_output=True)
+    @safe_tool
+    async def delete_assessment(run_id: uuid.UUID) -> DeletionResult:
+        """Permanently delete one eligible terminal assessment as an administrator."""
+        deleted = await services.assessments.delete(
+            current_principal(),
+            run_id,
+            _request_id(),
+        )
+        return DeletionResult(
+            run_id=deleted.run_id,
+            deleted=True,
+            message="Assessment was permanently deleted",
         )
 
     @server.tool(structured_output=True)

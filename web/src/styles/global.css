@@ -1022,6 +1022,116 @@ h1 {
   text-decoration: none;
 }
 
+.run-actions .run-action--danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 6%, var(--surface));
+}
+
+.run-actions .run-action--danger:hover {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 11%, var(--surface));
+}
+
+.delete-dialog-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(17 26 31 / 58%);
+  backdrop-filter: blur(4px);
+}
+
+.delete-dialog {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 18px;
+  width: min(100%, 560px);
+  padding: 28px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--line));
+  border-radius: 16px;
+  color: var(--ink);
+  background: var(--surface);
+  box-shadow: 0 24px 72px rgb(17 26 31 / 28%);
+}
+
+.delete-dialog__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--danger);
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.delete-dialog h2 {
+  margin: 4px 0 12px;
+  font-size: 1.45rem;
+}
+
+.delete-dialog p {
+  line-height: 1.6;
+}
+
+.delete-dialog__notice {
+  color: var(--ink-muted);
+}
+
+.delete-dialog__error {
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger);
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 7%, var(--surface));
+}
+
+.delete-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.delete-dialog__actions button {
+  padding: 10px 15px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+}
+
+.delete-dialog__actions .delete-dialog__confirm {
+  border-color: var(--danger);
+  color: #fff;
+  background: var(--danger);
+}
+
+.delete-dialog__actions button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+@media (max-width: 560px) {
+  .delete-dialog {
+    grid-template-columns: 1fr;
+    padding: 22px;
+  }
+
+  .delete-dialog__actions {
+    flex-direction: column-reverse;
+  }
+
+  .delete-dialog__actions button {
+    width: 100%;
+  }
+}
+
 .metadata-strip {
   margin-top: 26px;
   padding: 22px 24px;

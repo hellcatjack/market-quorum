@@ -80,14 +80,17 @@ def create_app(
             resolved_database.sessions,
             app_settings.token_pepper.get_secret_value(),
         )
+        resolved_artifact_store = LocalArtifactStore(app_settings.artifact_dir)
         app.state.assessments = AssessmentService(
             resolved_database.sessions,
             resolved_classifier,
+            resolved_artifact_store,
+            app_settings.job_dir,
         )
         app.state.integrity = IntegrityService(resolved_database.sessions)
         app.state.records = RecordService(
             resolved_database.sessions,
-            LocalArtifactStore(app_settings.artifact_dir),
+            resolved_artifact_store,
             app_settings.job_dir,
         )
         app.state.system = SystemService(

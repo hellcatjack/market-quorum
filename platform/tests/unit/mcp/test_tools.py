@@ -5,6 +5,7 @@ import pytest
 from mcp.server.fastmcp.exceptions import ToolError
 
 from tradingng_platform.assessments.contracts import RunView
+from tradingng_platform.assessments.service import DeletedAssessment
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.mcp.context import reset_principal, set_principal
@@ -25,6 +26,7 @@ class _View:
 class _Assessments:
     def __init__(self):
         self.submit_calls = []
+        self.delete_calls = []
         self.wait_calls = 0
 
     async def submit(self, principal, command, request_id):
@@ -42,6 +44,16 @@ class _Assessments:
                 created_at=datetime(2026, 7, 25, tzinfo=timezone.utc),
             )
         ]
+
+    async def delete(self, principal, run_id, request_id):
+        principal.require("assessments:admin")
+        self.delete_calls.append((principal, run_id, request_id))
+        return DeletedAssessment(
+            run_id=run_id,
+            ticker="NVDA",
+            analysis_date=date(2026, 7, 25),
+            status=RunStatus.SUCCEEDED,
+        )
 
 
 class _Records:
@@ -153,6 +165,7 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
         "list_assessments",
         "cancel_assessment",
         "retry_assessment",
+        "delete_assessment",
         "compare_assessments",
         "get_instrument_summary",
         "list_instrument_overviews",
@@ -222,9 +235,21 @@ async def test_tool_inventory_and_submit_use_existing_application_command():
         {"run_id": "11111111-1111-1111-1111-111111111111"},
     )
     assert cleaned.model_dump(mode="json")["status"] == "queued"
-    assert integrity.clean_calls[0][0] == uuid.UUID(
-        "11111111-1111-1111-1111-111111111111"
+    assert integrity.clean_calls[0][0] == uuid.UUID("11111111-1111-1111-1111-111111111111")
+
+    deleted = await _call(
+        server,
+        _principal("assessments:admin"),
+        "delete_assessment",
+        {"run_id": "11111111-1111-1111-1111-111111111111"},
     )
+    assert deleted.model_dump(mode="json") == {
+        "run_id": "11111111-1111-1111-1111-111111111111",
+        "deleted": True,
+        "message": "Assessment was permanently deleted",
+    }
+    assert assessments.delete_calls[0][1] == uuid.UUID("11111111-1111-1111-1111-111111111111")
+    assert assessments.delete_calls[0][2].startswith("mcp-")
 
 
 @pytest.mark.asyncio

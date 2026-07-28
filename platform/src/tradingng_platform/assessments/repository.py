@@ -25,18 +25,27 @@ from tradingng_platform.auth.principal import Principal
 from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.instruments.classification import InstrumentClassification
 from tradingng_platform.models import (
+    Artifact,
     AssessmentBatch,
     AssessmentRequest,
     AssessmentRun,
     AuditEvent,
+    Comment,
     Decision,
+    DecisionPriceBasis,
+    EvidenceItem,
     Instrument,
+    Review,
     Role,
     RunConfigSnapshot,
     RunEvent,
+    RunIntegrityAssessment,
     RunStep,
     User,
     UserRole,
+    Validation,
+    WebhookDelivery,
+    WorkerLease,
 )
 from tradingng_platform.persistence.locks import acquire_transaction_lock
 from tradingng_platform.persistence.upsert import insert_ignore, session_dialect
@@ -318,6 +327,101 @@ class AssessmentRepository:
         if row is None:
             return None
         return self._run_view(*row)
+
+    async def find_dependent_run_ids(self, run_id: uuid.UUID) -> tuple[uuid.UUID, ...]:
+        return tuple(
+            await self.session.scalars(
+                select(AssessmentRun.id)
+                .where(
+                    or_(
+                        AssessmentRun.retry_of_run_id == run_id,
+                        AssessmentRun.clean_reassessment_of_run_id == run_id,
+                    )
+                )
+                .order_by(AssessmentRun.created_at, AssessmentRun.id)
+                .with_for_update()
+            )
+        )
+
+    async def has_active_work(self, run_id: uuid.UUID) -> bool:
+        lease_ids = tuple(
+            await self.session.scalars(
+                select(WorkerLease.id).where(WorkerLease.run_id == run_id).with_for_update()
+            )
+        )
+        validation_statuses = tuple(
+            await self.session.scalars(
+                select(Validation.status).where(Validation.run_id == run_id).with_for_update()
+            )
+        )
+        basis_statuses = tuple(
+            await self.session.scalars(
+                select(DecisionPriceBasis.status)
+                .where(DecisionPriceBasis.run_id == run_id)
+                .with_for_update()
+            )
+        )
+        return bool(lease_ids or "running" in validation_statuses or "running" in basis_statuses)
+
+    async def delete_assessment_graph(self, context: RunContext) -> dict[str, int]:
+        run_id = context.run.id
+        request_id = context.request.id
+        batch_id = context.request.batch_id
+        snapshot_id = context.run.config_snapshot_id
+        event_ids = select(RunEvent.id).where(RunEvent.run_id == run_id)
+
+        counts: dict[str, int] = {}
+
+        async def remove(label: str, model, *criteria) -> None:
+            result = await self.session.execute(delete(model).where(*criteria))
+            counts[label] = max(int(result.rowcount or 0), 0)
+
+        await remove("webhook_deliveries", WebhookDelivery, WebhookDelivery.event_id.in_(event_ids))
+        await remove(
+            "integrity_assessments",
+            RunIntegrityAssessment,
+            RunIntegrityAssessment.run_id == run_id,
+        )
+        await remove("validations", Validation, Validation.run_id == run_id)
+        await remove(
+            "decision_price_bases",
+            DecisionPriceBasis,
+            DecisionPriceBasis.run_id == run_id,
+        )
+        await remove("evidence_items", EvidenceItem, EvidenceItem.run_id == run_id)
+        await remove("reviews", Review, Review.run_id == run_id)
+        await remove("comments", Comment, Comment.run_id == run_id)
+        await remove("decisions", Decision, Decision.run_id == run_id)
+        await remove("worker_leases", WorkerLease, WorkerLease.run_id == run_id)
+        await remove("run_steps", RunStep, RunStep.run_id == run_id)
+        await remove("artifacts", Artifact, Artifact.run_id == run_id)
+        await remove("events", RunEvent, RunEvent.run_id == run_id)
+        await remove("runs", AssessmentRun, AssessmentRun.id == run_id)
+
+        request_is_referenced = await self.session.scalar(
+            select(AssessmentRun.id).where(AssessmentRun.request_id == request_id).limit(1)
+        )
+        if request_is_referenced is None:
+            await remove("requests", AssessmentRequest, AssessmentRequest.id == request_id)
+            batch_is_referenced = await self.session.scalar(
+                select(AssessmentRequest.id).where(AssessmentRequest.batch_id == batch_id).limit(1)
+            )
+            if batch_is_referenced is None:
+                await remove("batches", AssessmentBatch, AssessmentBatch.id == batch_id)
+
+        if snapshot_id is not None:
+            snapshot_is_referenced = await self.session.scalar(
+                select(AssessmentRun.id)
+                .where(AssessmentRun.config_snapshot_id == snapshot_id)
+                .limit(1)
+            )
+            if snapshot_is_referenced is None:
+                await remove(
+                    "config_snapshots",
+                    RunConfigSnapshot,
+                    RunConfigSnapshot.id == snapshot_id,
+                )
+        return counts
 
     async def get_run_detail(self, run_id: uuid.UUID) -> RunDetailView | None:
         row = (

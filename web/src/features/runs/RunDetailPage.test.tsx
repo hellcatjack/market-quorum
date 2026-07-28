@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Route, Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
@@ -198,6 +199,7 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
   );
 
   expect(await screen.findByRole("heading", { name: "SPCX 评估详情" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "删除评估" })).not.toBeInTheDocument();
   expect(screen.getByText("快速分析路由")).toBeInTheDocument();
   expect(screen.getByText("gpt-5.6-terra · 中")).toBeInTheDocument();
   expect(screen.getAllByText("关键裁决路由")).toHaveLength(2);
@@ -255,4 +257,95 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
   for (const disclosure of screen.getAllByTestId("timeline-disclosure")) {
     expect(disclosure).not.toHaveAttribute("open");
   }
+});
+
+test("admin confirms a terminal assessment deletion and returns to overview", async () => {
+  vi.stubGlobal("EventSource", SilentEventSource);
+  const requests: Array<{ path: string; method: string }> = [];
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = init?.method ?? "GET";
+    requests.push({ path, method });
+    if (method === "DELETE") return new Response(null, { status: 204 });
+    if (path.endsWith("/api/v1/me")) {
+      return json({
+        subject: "admin",
+        display_name: "管理员",
+        scopes: ["assessments:read", "assessments:admin"],
+        roles: ["Admin"],
+      });
+    }
+    if (path.endsWith("/decision")) return json({}, 404);
+    if (path.endsWith("/integrity")) {
+      return json({
+        run_id: "run-delete",
+        policy_version: "point-in-time.v1",
+        status: "safe",
+        audit_mode: "live",
+        temporal_scope: "contemporaneous",
+        analysis_date: "2026-07-25",
+        checked_at: "2026-07-25T12:03:00Z",
+        reason_codes: [],
+        findings: [],
+        input_fingerprint: "a".repeat(64),
+      });
+    }
+    if (path.endsWith("/llm-interactions")) {
+      return json({ items: [], source: "sealed", complete: true });
+    }
+    if (
+      path.endsWith("/steps")
+      || path.endsWith("/evidence")
+      || path.endsWith("/artifacts")
+      || path.endsWith("/validations")
+      || path.endsWith("/reviews")
+      || path.endsWith("/comments")
+    ) return json([]);
+    if (path.includes("/events?")) return json({ items: [] });
+    return json({
+      id: "run-delete",
+      request_id: "request-delete",
+      ticker: "NVDA",
+      exchange: "NASDAQ",
+      asset_type: "stock",
+      analysis_date: "2026-07-25",
+      status: "succeeded",
+      attempt: 1,
+      created_at: "2026-07-25T12:00:00Z",
+      memory: { mode: "independent", snapshot_sha256: null, sources: [] },
+      request_config: {},
+      resolved_config: {},
+      data_vendors: {},
+      tool_vendors: {},
+    });
+  });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const location = memoryLocation({ path: "/runs/run-delete" });
+  render(
+    <QueryClientProvider client={queryClient}>
+      <Router hook={location.hook}>
+        <Route path="/runs/:runId"><RunDetailPage /></Route>
+        <Route path="/"><p>评估总览已返回</p></Route>
+      </Router>
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+
+  expect(await screen.findByRole("heading", { name: "NVDA 评估详情" })).toBeInTheDocument();
+  const deleteButton = await screen.findByRole("button", { name: "删除评估" });
+  await user.click(deleteButton);
+  const dialog = screen.getByRole("dialog", { name: "永久删除 NVDA 的这次评估？" });
+  expect(dialog).toHaveTextContent("2026-07-25");
+  await user.click(within(dialog).getByRole("button", { name: "暂不删除" }));
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  await user.click(deleteButton);
+  await user.click(
+    within(screen.getByRole("dialog")).getByRole("button", { name: "确认永久删除" }),
+  );
+
+  expect(await screen.findByText("评估总览已返回")).toBeInTheDocument();
+  expect(
+    requests.filter(({ path, method }) => method === "DELETE" && path.endsWith("/assessments/run-delete")),
+  ).toHaveLength(1);
 });

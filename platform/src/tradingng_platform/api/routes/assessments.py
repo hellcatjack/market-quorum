@@ -20,6 +20,7 @@ from tradingng_platform.assessments.service import (
     AssessmentAccessDenied,
     AssessmentAnalystsIncompatible,
     AssessmentAssetTypeConflict,
+    AssessmentDeleteNotAllowed,
     AssessmentIdempotencyConflict,
     AssessmentInstrumentIdentityConflict,
     AssessmentNotFound,
@@ -47,6 +48,18 @@ def _translate(error: Exception) -> None:
             "retry_not_allowed",
             "Assessment state does not allow retry",
             {"status": error.status.value},
+        ) from None
+    if isinstance(error, AssessmentDeleteNotAllowed):
+        details = {
+            "reason": error.reason,
+            "status": error.status.value if error.status is not None else None,
+            "dependent_run_ids": [str(item) for item in error.dependent_run_ids],
+        }
+        raise ApiError(
+            409,
+            "delete_not_allowed",
+            "Assessment cannot be deleted in its current state",
+            details,
         ) from None
     if isinstance(error, AssessmentIdempotencyConflict):
         raise ApiError(
@@ -220,6 +233,30 @@ async def get_assessment(
     if run is None:
         raise ApiError(404, "assessment_not_found", "Assessment was not found")
     return run
+
+
+@router.delete(
+    "/assessments/{run_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    operation_id="delete_assessment",
+)
+async def delete_assessment(
+    run_id: uuid.UUID,
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scopes("assessments:admin"))],
+) -> None:
+    try:
+        await request.app.state.assessments.delete(
+            principal,
+            run_id,
+            request_id_for(request),
+        )
+    except (
+        AssessmentNotFound,
+        AssessmentAccessDenied,
+        AssessmentDeleteNotAllowed,
+    ) as error:
+        _translate(error)
 
 
 @router.get(

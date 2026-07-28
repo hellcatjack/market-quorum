@@ -6,6 +6,7 @@ import { subscribeToRun, type RunEvent } from "../../api/events";
 import {
   cancelRun,
   cleanReassessRun,
+  deleteRun,
   getArtifacts,
   getComments,
   getCurrentUser,
@@ -33,6 +34,85 @@ const CANCELLABLE = new Set([
   "risk_debate", "portfolio_decision", "finalizing",
 ]);
 const RETRYABLE = new Set(["failed", "cancelled", "needs_attention"]);
+const TERMINAL = new Set(["succeeded", "failed", "cancelled", "needs_attention"]);
+
+function DeleteAssessmentDialog({
+  ticker,
+  analysisDate,
+  pending,
+  errorMessage,
+  onCancel,
+  onConfirm,
+}: {
+  ticker: string;
+  analysisDate: string;
+  pending: boolean;
+  errorMessage: string | null;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useI18n();
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !pending) onCancel();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onCancel, pending]);
+
+  return (
+    <div
+      className="delete-dialog-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !pending) onCancel();
+      }}
+    >
+      <section
+        className="delete-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-assessment-title"
+        aria-describedby="delete-assessment-description"
+      >
+        <span className="delete-dialog__icon" aria-hidden="true">!</span>
+        <div>
+          <p className="eyebrow">{t("删除评估")}</p>
+          <h2 id="delete-assessment-title">
+            {t("永久删除 {ticker} 的这次评估？", { ticker })}
+          </h2>
+          <p id="delete-assessment-description">
+            {t("将永久删除 {date} 的评估结论、验证、证据、时间线与关联产物。", {
+              date: analysisDate,
+            })}
+          </p>
+          <p className="delete-dialog__notice">
+            {t("此操作无法撤销，且不会影响该标的的其他评估。")}
+          </p>
+          {errorMessage ? <p className="delete-dialog__error" role="alert">{errorMessage}</p> : null}
+          <div className="delete-dialog__actions">
+            <button type="button" onClick={onCancel} disabled={pending} autoFocus>
+              {t("暂不删除")}
+            </button>
+            <button
+              type="button"
+              className="delete-dialog__confirm"
+              onClick={onConfirm}
+              disabled={pending}
+            >
+              {pending ? t("正在删除…") : t("确认永久删除")}
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 async function optionalRecord<T>(loader: () => Promise<T>): Promise<T | null> {
   try {
@@ -80,6 +160,7 @@ export function RunDetailPage() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
   const [degraded, setDegraded] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [liveEvents, setLiveEvents] = useState<RunEvent[]>([]);
   const lastSequence = useRef(0);
   const user = useQuery({ queryKey: ["current-user"], queryFn: getCurrentUser, retry: false });
@@ -177,12 +258,30 @@ export function RunDetailPage() {
     mutationFn: () => cleanReassessRun(runId),
     onSuccess: (next) => navigate(`/runs/${next.id}`),
   });
+  const deleteAssessment = useMutation({
+    mutationFn: () => deleteRun(runId),
+    onSuccess: () => {
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey.includes(runId),
+      });
+      queryClient.removeQueries({ queryKey: ["assessments"] });
+      queryClient.removeQueries({ queryKey: ["instrument-overviews"] });
+      queryClient.removeQueries({ queryKey: ["instrument", run.data?.ticker] });
+      queryClient.removeQueries({ queryKey: ["instrument-history", run.data?.ticker] });
+      navigate("/");
+    },
+  });
 
   if (run.isLoading) return <p className="page-shell page-loading" role="status">{t("正在载入评估记录…")}</p>;
   if (run.isError || !run.data) return <p className="page-shell page-warning" role="alert">{t("无法读取该评估记录。")}</p>;
   const canCancel = Boolean(user.data?.scopes.includes("assessments:cancel")) && CANCELLABLE.has(run.data.status);
   const canRetry = Boolean(user.data?.scopes.includes("assessments:submit")) && RETRYABLE.has(run.data.status);
   const canReadArtifacts = Boolean(user.data?.scopes.includes("artifacts:read"));
+  const canDelete = Boolean(
+    user.data?.roles.includes("Admin")
+      && user.data.scopes.includes("assessments:admin")
+      && TERMINAL.has(run.data.status),
+  );
   const canCleanReassess = Boolean(
     user.data?.roles.includes("Admin")
       && user.data.scopes.includes("assessments:admin")
@@ -200,6 +299,17 @@ export function RunDetailPage() {
     sources: [],
   };
   const memoryLabel = memory.mode === "historical" ? t("历史辅助") : t("独立评估");
+  const deleteErrorMessage = deleteAssessment.error instanceof ApiClientError
+    ? deleteAssessment.error.details?.reason === "active_work"
+      ? t("该评估正在被执行或验证，暂时不能删除。")
+      : deleteAssessment.error.details?.reason === "dependent_runs_exist"
+        ? t("该评估仍被后续重试或干净重评估引用，请先删除后续评估。")
+        : deleteAssessment.error.code === "delete_not_allowed"
+          ? t("当前状态不允许删除，请刷新后重试。")
+          : t("删除失败，请稍后重试。")
+    : deleteAssessment.isError
+      ? t("删除失败，请稍后重试。")
+      : null;
 
   return (
     <section className="page-shell run-detail-page">
@@ -213,6 +323,18 @@ export function RunDetailPage() {
           <Link href={`/instruments/${run.data.ticker}`}>{t("查看标的历史")}</Link>
           {canCancel ? <button type="button" onClick={() => cancel.mutate()} disabled={cancel.isPending}>{t("取消任务")}</button> : null}
           {canRetry ? <button type="button" onClick={() => retry.mutate()} disabled={retry.isPending}>{t("重新评估")}</button> : null}
+          {canDelete ? (
+            <button
+              type="button"
+              className="run-action--danger"
+              onClick={() => {
+                deleteAssessment.reset();
+                setDeleteDialogOpen(true);
+              }}
+            >
+              {t("删除评估")}
+            </button>
+          ) : null}
         </div>
       </header>
       {degraded ? <p className="page-warning" role="alert">{t("实时连接不稳定，已启用每 5 秒 REST 轮询，记录不会丢失。")}</p> : null}
@@ -283,6 +405,18 @@ export function RunDetailPage() {
         />
         <ReviewPanel runId={runId} reviews={collaboration.data?.reviews ?? []} comments={collaboration.data?.comments ?? []} canReview={Boolean(user.data?.scopes.includes("assessments:review"))} />
       </div>
+      {deleteDialogOpen ? (
+        <DeleteAssessmentDialog
+          ticker={run.data.ticker}
+          analysisDate={run.data.analysis_date}
+          pending={deleteAssessment.isPending}
+          errorMessage={deleteErrorMessage}
+          onCancel={() => {
+            if (!deleteAssessment.isPending) setDeleteDialogOpen(false);
+          }}
+          onConfirm={() => deleteAssessment.mutate()}
+        />
+      ) : null}
     </section>
   );
 }
