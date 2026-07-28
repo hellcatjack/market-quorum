@@ -38,6 +38,7 @@ tradingng-platform-runner = "tradingng_platform.runner.cli:main"
 tradingng-platform-mcp-stdio = "tradingng_platform.mcp.stdio:main"
 tradingng-platform-validation = "tradingng_platform.validation.main:main"
 tradingng-platform-alpha-broker = "tradingng_platform.vendors.alpha_vantage_broker_app:main"
+tradingng-platform-integrity-audit = "tradingng_platform.integrity.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

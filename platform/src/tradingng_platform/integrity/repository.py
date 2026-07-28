@@ -48,3 +48,16 @@ class IntegrityRepository:
         self.session.add(row)
         await self.session.flush()
         return row
+
+    async def find_document(
+        self,
+        run_id: uuid.UUID,
+        document: IntegrityDocument,
+    ) -> RunIntegrityAssessment | None:
+        return await self.session.scalar(
+            select(RunIntegrityAssessment).where(
+                RunIntegrityAssessment.run_id == run_id,
+                RunIntegrityAssessment.policy_version == document.policy_version,
+                RunIntegrityAssessment.input_fingerprint == document.input_fingerprint,
+            )
+        )
