@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.domain.runs import RunStatus, assert_transition
+from tradingng_platform.integrity.contracts import IntegrityDocument, IntegrityStatus
+from tradingng_platform.integrity.policy import PointInTimeRecorder
+from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.models import (
     Artifact,
     AssessmentRequest,
@@ -301,6 +304,7 @@ class WorkerRepository:
         artifact_specs = self._artifact_specs(work_dir)
         manifest = []
         evidence_artifact_id = None
+        artifact_ids: dict[str, uuid.UUID] = {}
         for kind, media_type, path in artifact_specs:
             stored = store.put(run_id, kind, media_type, path)
             artifact = Artifact(
@@ -316,6 +320,7 @@ class WorkerRepository:
             await self.session.flush()
             if kind == "evidence":
                 evidence_artifact_id = artifact.id
+            artifact_ids[kind] = artifact.id
             manifest.append(
                 {
                     "kind": kind,
@@ -358,6 +363,11 @@ class WorkerRepository:
             )
         )
         await self._persist_evidence(run_id, work_dir, evidence_artifact_id)
+        await self._persist_integrity(
+            run,
+            work_dir,
+            artifact_ids.get("point_in_time_integrity"),
+        )
         assert_transition(RunStatus.FINALIZING, RunStatus.SUCCEEDED)
         run.status = RunStatus.SUCCEEDED.value
         run.finished_at = datetime.now(timezone.utc)
@@ -388,6 +398,7 @@ class WorkerRepository:
         for line in evidence_path.read_text(encoding="utf-8").splitlines():
             item = json.loads(line)
             collected_at = datetime.fromisoformat(item["collected_at"].replace("Z", "+00:00"))
+            effective_at = item.get("effective_at")
             self.session.add(
                 EvidenceItem(
                     run_id=run_id,
@@ -395,12 +406,54 @@ class WorkerRepository:
                     tool_name=item["tool_name"],
                     arguments_json=item["arguments"],
                     collected_at=collected_at,
-                    effective_at=None,
-                    freshness=None,
+                    effective_at=(
+                        datetime.fromisoformat(effective_at.replace("Z", "+00:00"))
+                        if isinstance(effective_at, str)
+                        else None
+                    ),
+                    freshness=item.get("freshness"),
                     artifact_id=artifact_id,
                     content_hash=item["output_sha256"],
                 )
             )
+
+    async def _persist_integrity(
+        self,
+        run: AssessmentRun,
+        work_dir: Path,
+        artifact_id: uuid.UUID | None,
+    ) -> None:
+        request = await self.session.get(AssessmentRequest, run.request_id)
+        if request is None:
+            raise RuntimeError("integrity persistence references an unknown assessment request")
+        integrity_path = work_dir / "working" / "point_in_time_integrity.json"
+        if integrity_path.is_file():
+            document = IntegrityDocument.model_validate_json(
+                integrity_path.read_text(encoding="utf-8")
+            )
+        else:
+            recorder = PointInTimeRecorder(request.analysis_date)
+            recorder.record(
+                "run",
+                IntegrityStatus.UNKNOWN,
+                "integrity_artifact_missing",
+            )
+            document = recorder.finalize()
+        row = await IntegrityRepository(self.session).persist_document(
+            run.id,
+            document,
+            artifact_id=artifact_id,
+            audit_mode="live",
+        )
+        await AssessmentRepository(self.session).append_event(
+            run.id,
+            "assessment.integrity_recorded",
+            {
+                "integrity_id": str(row.id),
+                "policy_version": row.policy_version,
+                "status": row.status,
+            },
+        )
 
     async def finalize_failure(
         self,
@@ -524,6 +577,11 @@ class WorkerRepository:
                 "dependency_health",
                 "application/x-ndjson",
                 work_dir / "working" / "dependency_health.jsonl",
+            ),
+            (
+                "point_in_time_integrity",
+                "application/json",
+                work_dir / "working" / "point_in_time_integrity.json",
             ),
         )
         specs.extend(item for item in fixed if item[2].is_file())

@@ -56,6 +56,10 @@ class AssessmentRun(UuidPrimaryKey, Timestamped, Base):
         ForeignKey("run_config_snapshots.id")
     )
     retry_of_run_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("assessment_runs.id"))
+    clean_reassessment_of_run_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("assessment_runs.id"),
+        index=True,
+    )
     version: Mapped[int] = mapped_column(default=1)
     admitted_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME)
     started_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME)

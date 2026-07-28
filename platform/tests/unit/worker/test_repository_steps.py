@@ -1,18 +1,25 @@
+import json
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from tradingng_platform.artifacts.store import LocalArtifactStore
 from tradingng_platform.domain.runs import RunStatus
+from tradingng_platform.integrity.policy import PointInTimeRecorder
 from tradingng_platform.models import (
+    Artifact,
     AssessmentBatch,
     AssessmentRequest,
     AssessmentRun,
     Base,
+    EvidenceItem,
     Instrument,
     RunEvent,
+    RunIntegrityAssessment,
     RunStep,
     User,
 )
@@ -261,5 +268,130 @@ async def test_automatic_retry_is_bounded_and_rejects_non_vendor_errors():
                 )
                 is None
             )
+    finally:
+        await engine.dispose()
+
+
+async def _allow_archive_lock(*args, **kwargs):
+    return True
+
+
+async def _skip_validation_schedule(*args, **kwargs):
+    return []
+
+
+def _write_success_artifacts(work_dir: Path, analysis_date: date) -> None:
+    (work_dir / "working").mkdir(parents=True)
+    (work_dir / "decision.json").write_text(
+        json.dumps(
+            {
+                "rating": "Hold",
+                "executive_summary": "Wait.",
+                "investment_thesis": "Evidence is balanced.",
+                "price_target": None,
+                "time_horizon": "20 trading days",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (work_dir / "final_state.json").write_text("{}", encoding="utf-8")
+    evidence = {
+        "tool_name": "get_stock_data",
+        "source": "alpha_vantage",
+        "arguments": {"ticker": "NVDA"},
+        "output": {"close": 100},
+        "output_sha256": "a" * 64,
+        "collected_at": "2026-07-27T12:00:00+00:00",
+        "effective_at": "2025-07-01T23:59:59.999999+00:00",
+        "freshness": "point_in_time_bounded",
+        "retention_class": "raw_180d",
+    }
+    (work_dir / "working" / "evidence.jsonl").write_text(
+        json.dumps(evidence) + "\n",
+        encoding="utf-8",
+    )
+    recorder = PointInTimeRecorder(
+        analysis_date,
+        now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+    recorder.record("get_stock_data", "safe", "date_bounded_route")
+    (work_dir / "working" / "point_in_time_integrity.json").write_text(
+        recorder.finalize().model_dump_json(),
+        encoding="utf-8",
+    )
+
+
+async def test_finalize_success_archives_and_persists_integrity(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setattr(repository_module, "acquire_transaction_lock", _allow_archive_lock)
+    monkeypatch.setattr(repository_module, "schedule_validations", _skip_validation_schedule)
+    engine, sessions = await _database()
+    try:
+        async with sessions() as session, session.begin():
+            user = User(
+                issuer="issuer",
+                subject="integrity-owner",
+                display_name="Owner",
+                email=None,
+            )
+            instrument = Instrument(
+                canonical_ticker="NVDA",
+                asset_type="stock",
+                exchange="NASDAQ",
+                name="NVIDIA",
+                metadata_json={},
+            )
+            session.add_all([user, instrument])
+            await session.flush()
+            batch = AssessmentBatch(
+                submitted_by=user.id,
+                idempotency_key="integrity-finalize-test",
+                defaults_json={"analysts": ["market"], "depth": "deep", "language": "Chinese"},
+            )
+            session.add(batch)
+            await session.flush()
+            analysis_date = date(2025, 7, 1)
+            request = AssessmentRequest(
+                batch_id=batch.id,
+                instrument_id=instrument.id,
+                analysis_date=analysis_date,
+                requested_config_json={},
+            )
+            session.add(request)
+            await session.flush()
+            run = AssessmentRun(
+                request_id=request.id,
+                status=RunStatus.FINALIZING.value,
+                attempt=1,
+                version=1,
+            )
+            session.add(run)
+            await session.flush()
+            work_dir = tmp_path / "job"
+            _write_success_artifacts(work_dir, analysis_date)
+
+            await WorkerRepository(session).finalize_success(
+                run.id,
+                work_dir,
+                LocalArtifactStore(tmp_path / "artifacts"),
+            )
+
+            integrity = await session.scalar(
+                select(RunIntegrityAssessment).where(
+                    RunIntegrityAssessment.run_id == run.id
+                )
+            )
+            evidence = await session.scalar(
+                select(EvidenceItem).where(EvidenceItem.run_id == run.id)
+            )
+            artifact = await session.get(Artifact, integrity.artifact_id)
+
+        assert integrity.status == "safe"
+        assert integrity.audit_mode == "live"
+        assert artifact.kind == "point_in_time_integrity"
+        assert evidence.effective_at.isoformat() == "2025-07-01T23:59:59.999999+00:00"
+        assert evidence.freshness == "point_in_time_bounded"
     finally:
         await engine.dispose()
