@@ -490,11 +490,13 @@ h1 {
 }
 
 .ledger-table-wrap {
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .ledger-table {
   width: 100%;
+  min-width: 1160px;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.86rem;
@@ -505,11 +507,11 @@ h1 {
 }
 
 .ledger-column-main {
-  width: 42%;
+  width: 39%;
 }
 
 .ledger-column-signals {
-  width: 21%;
+  width: 24%;
 }
 
 .ledger-column-operations {
@@ -518,13 +520,17 @@ h1 {
 
 .ledger-table th,
 .ledger-table td {
-  padding: 12px 13px;
   border-bottom: 1px solid var(--line);
   text-align: left;
   vertical-align: middle;
 }
 
+.ledger-table td {
+  padding: 7px 12px;
+}
+
 .ledger-table th {
+  padding: 9px 12px;
   color: var(--ink-muted);
   background: var(--surface-muted);
   font-size: 0.73rem;
@@ -539,15 +545,46 @@ h1 {
 .ledger-asset-type,
 .ledger-latest-status,
 .ledger-counts small {
-  display: block;
-  margin-top: 5px;
   color: var(--ink-muted);
   font-size: 0.72rem;
 }
 
+.ledger-lines {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ledger-line {
+  display: flex;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  min-height: 1.05rem;
+  white-space: nowrap;
+}
+
+.ledger-line .instrument-link {
+  display: inline;
+  min-width: 0;
+}
+
+.ledger-line .instrument-name,
+.ledger-line .instrument-symbol,
+.ledger-asset-type,
+.ledger-latest-status {
+  white-space: nowrap;
+}
+
+.ledger-asset-type,
+.ledger-line .ledger-latest-status {
+  display: inline;
+  margin-top: 0;
+}
+
 .ledger-decision {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 5px 10px;
 }
@@ -562,14 +599,6 @@ h1 {
   color: var(--ink-muted);
   font-size: 0.72rem;
   white-space: nowrap;
-}
-
-.ledger-main,
-.ledger-signal-stack,
-.ledger-operation {
-  display: grid;
-  gap: 8px;
-  min-width: 0;
 }
 
 .ledger-anomaly {
@@ -594,7 +623,7 @@ h1 {
 
 .prediction-outcome {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px 7px;
   min-width: 0;
@@ -638,7 +667,7 @@ h1 {
 
 .ledger-reliability {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: baseline;
   gap: 4px 7px;
   white-space: nowrap;
@@ -651,10 +680,9 @@ h1 {
 }
 
 .ledger-reliability__exclusions {
-  flex-basis: 100%;
   color: var(--warning);
   font-size: 0.68rem;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .ledger-rating-transition {
@@ -666,7 +694,7 @@ h1 {
 
 .ledger-counts {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 3px 10px;
   min-width: 0;
 }
@@ -2704,6 +2732,10 @@ pre {
     width: 100%;
   }
 
+  .ledger-table {
+    min-width: 0;
+  }
+
   .ledger-table colgroup {
     display: none;
   }
@@ -2728,6 +2760,25 @@ pre {
     grid-template-columns: 8.5rem minmax(0, 1fr);
     gap: 14px;
     padding: 12px 14px;
+  }
+
+  .ledger-line,
+  .ledger-decision,
+  .prediction-outcome,
+  .ledger-reliability,
+  .ledger-counts {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+
+  .ledger-line {
+    align-items: baseline;
+    min-height: 0;
+  }
+
+  .ledger-reliability__exclusions {
+    flex-basis: 100%;
+    white-space: normal;
   }
 
   .ledger-table td::before {

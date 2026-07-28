@@ -91,86 +91,106 @@ export function InstrumentLedgerTable({
             return (
               <tr key={item.instrument.id}>
                 <td data-label={t("标的")}>
-                  <Link
-                    className="instrument-link"
-                    href={`/instruments/${encodeURIComponent(item.instrument.ticker)}`}
-                    aria-label={instrumentLabel(item)}
-                  >
-                    <span className="instrument-name">
-                      {item.instrument.name ?? item.instrument.ticker}
-                    </span>
-                    <span className="instrument-symbol">
-                      {item.instrument.ticker}
-                      {item.instrument.exchange ? ` · ${item.instrument.exchange}` : ""}
-                    </span>
-                  </Link>
-                  <span className="ledger-asset-type">{assetTypeLabel(item.instrument.asset_type, locale)}</span>
+                  <div className="ledger-lines">
+                    <div className="ledger-line ledger-line--primary">
+                      <Link
+                        className="instrument-link"
+                        href={`/instruments/${encodeURIComponent(item.instrument.ticker)}`}
+                        aria-label={instrumentLabel(item)}
+                      >
+                        <span className="instrument-name">
+                          {item.instrument.name ?? item.instrument.ticker}
+                        </span>
+                      </Link>
+                    </div>
+                    <div className="ledger-line ledger-line--secondary">
+                      <span className="instrument-symbol">
+                        {item.instrument.ticker}
+                        {item.instrument.exchange ? ` · ${item.instrument.exchange}` : ""}
+                      </span>
+                      <span className="ledger-asset-type">
+                        {assetTypeLabel(item.instrument.asset_type, locale)}
+                      </span>
+                    </div>
+                  </div>
                 </td>
                 <td data-label={t("结论与表现")}>
-                  <div className="ledger-main">
-                    {item.latest_decision && item.latest_successful_run ? (
-                      <div className="ledger-decision">
-                        <Link
-                          href={`/runs/${item.latest_successful_run.id}`}
-                          aria-label={t("查看最新有效结论")}
-                        >
-                          <strong>{item.latest_decision.rating}</strong>
-                        </Link>
-                        <span>{item.latest_successful_run.analysis_date}</span>
-                      </div>
-                    ) : null}
-                    {validationsVisible ? (
-                      <PredictionOutcome item={item} />
-                    ) : item.latest_decision ? (
-                      <span className="validation-permission">{t("缺少表现验证读取权限")}</span>
-                    ) : <span className="ledger-empty">{t("尚无有效结论")}</span>}
+                  <div className="ledger-lines">
+                    <div className="ledger-line ledger-line--primary">
+                      {item.latest_decision && item.latest_successful_run ? (
+                        <div className="ledger-decision">
+                          <Link
+                            href={`/runs/${item.latest_successful_run.id}`}
+                            aria-label={t("查看最新有效结论")}
+                          >
+                            <strong>{item.latest_decision.rating}</strong>
+                          </Link>
+                          <span>{item.latest_successful_run.analysis_date}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                    <div className="ledger-line ledger-line--secondary">
+                      {validationsVisible ? (
+                        <PredictionOutcome item={item} />
+                      ) : item.latest_decision ? (
+                        <span className="validation-permission">{t("缺少表现验证读取权限")}</span>
+                      ) : <span className="ledger-empty">{t("尚无有效结论")}</span>}
+                    </div>
                   </div>
                 </td>
                 <td data-label={t("可靠性与变化")}>
-                  <div className="ledger-signal-stack">
-                    {validationsVisible ? (
-                      <div className="ledger-reliability">
-                        <strong>{preferredHorizon}D</strong>
-                        <span>{reliabilityLabel(stats, locale)}</span>
-                        {stats && (stats.excluded_at_risk > 0 || stats.excluded_unknown > 0) ? (
-                          <small className="ledger-reliability__exclusions">
-                            {t("排除 {risk} 条风险 / {unknown} 条未知", {
-                              risk: stats.excluded_at_risk,
-                              unknown: stats.excluded_unknown,
-                            })}
-                          </small>
-                        ) : null}
-                      </div>
-                    ) : <span aria-hidden="true">—</span>}
-                    <span className="ledger-rating-transition">
-                      {ratingTransition(item.previous_rating, item.latest_decision?.rating, locale)}
-                    </span>
+                  <div className="ledger-lines">
+                    <div className="ledger-line ledger-line--primary">
+                      {validationsVisible ? (
+                        <div className="ledger-reliability">
+                          <strong>{preferredHorizon}D</strong>
+                          <span>{reliabilityLabel(stats, locale)}</span>
+                          {stats && (stats.excluded_at_risk > 0 || stats.excluded_unknown > 0) ? (
+                            <small className="ledger-reliability__exclusions">
+                              {t("排除 {risk} 条风险 / {unknown} 条未知", {
+                                risk: stats.excluded_at_risk,
+                                unknown: stats.excluded_unknown,
+                              })}
+                            </small>
+                          ) : null}
+                        </div>
+                      ) : <span aria-hidden="true">—</span>}
+                    </div>
+                    <div className="ledger-line ledger-line--secondary">
+                      <span className="ledger-rating-transition">
+                        {ratingTransition(item.previous_rating, item.latest_decision?.rating, locale)}
+                      </span>
+                    </div>
                   </div>
                 </td>
                 <td data-label={t("运行")}>
-                  <div className="ledger-operation">
-                    {latestIsAnomalous ? (
-                      <Link
-                        className="ledger-anomaly"
-                        href={`/runs/${item.latest_run.id}`}
-                        aria-label={t("最新任务{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
-                      >
-                        <span aria-hidden="true">!</span>
-                        {t("最新任务{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
-                      </Link>
-                    ) : (
-                      <span className="ledger-latest-status">
-                        {t("最新任务：{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
-                      </span>
-                    )}
-                    <div className="ledger-counts" aria-label={t("共 {count} 次任务", { count: item.run_counts.total })}>
-                      <span>{t("成功")} <strong>{item.run_counts.succeeded}</strong></span>
-                      {item.run_counts.active > 0 ? <span>{t("运行")} <strong>{item.run_counts.active}</strong></span> : null}
-                      {item.run_counts.queued > 0 ? <span>{t("排队")} <strong>{item.run_counts.queued}</strong></span> : null}
-                      {item.run_counts.anomalous > 0 ? (
-                        <span className="ledger-counts__anomaly">{t("异常")} <strong>{item.run_counts.anomalous}</strong></span>
-                      ) : null}
-                      <small>{t("共 {count}", { count: item.run_counts.total })}</small>
+                  <div className="ledger-lines">
+                    <div className="ledger-line ledger-line--primary">
+                      {latestIsAnomalous ? (
+                        <Link
+                          className="ledger-anomaly"
+                          href={`/runs/${item.latest_run.id}`}
+                          aria-label={t("最新任务{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
+                        >
+                          <span aria-hidden="true">!</span>
+                          {t("最新任务{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
+                        </Link>
+                      ) : (
+                        <span className="ledger-latest-status">
+                          {t("最新任务：{status}", { status: runStatusLabel(item.latest_run.status, locale) })}
+                        </span>
+                      )}
+                    </div>
+                    <div className="ledger-line ledger-line--secondary">
+                      <div className="ledger-counts" aria-label={t("共 {count} 次任务", { count: item.run_counts.total })}>
+                        <span>{t("成功")} <strong>{item.run_counts.succeeded}</strong></span>
+                        {item.run_counts.active > 0 ? <span>{t("运行")} <strong>{item.run_counts.active}</strong></span> : null}
+                        {item.run_counts.queued > 0 ? <span>{t("排队")} <strong>{item.run_counts.queued}</strong></span> : null}
+                        {item.run_counts.anomalous > 0 ? (
+                          <span className="ledger-counts__anomaly">{t("异常")} <strong>{item.run_counts.anomalous}</strong></span>
+                        ) : null}
+                        <small>{t("共 {count}", { count: item.run_counts.total })}</small>
+                      </div>
                     </div>
                   </div>
                 </td>

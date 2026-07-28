@@ -174,6 +174,19 @@ test("defaults to one instrument row and keeps the full task view available", as
 
   const instrument = await screen.findByRole("link", { name: "英伟达 NVDA NASDAQ" });
   expect(instrument).toHaveAttribute("href", "/instruments/NVDA");
+  const ledgerRow = instrument.closest("tr");
+  expect(ledgerRow).not.toBeNull();
+  for (const cell of ledgerRow?.querySelectorAll("td") ?? []) {
+    const lines = cell.querySelector(":scope > .ledger-lines");
+    expect(lines).not.toBeNull();
+    expect(lines?.querySelectorAll(":scope > .ledger-line")).toHaveLength(2);
+  }
+  expect(ledgerRow).toHaveTextContent("英伟达");
+  expect(ledgerRow).toHaveTextContent("NVDA · NASDAQ");
+  expect(ledgerRow).toHaveTextContent("股票");
+  expect(ledgerRow).toHaveTextContent("成功 15");
+  expect(ledgerRow).toHaveTextContent("异常 2");
+  expect(ledgerRow).toHaveTextContent("共 20");
   expect(screen.getAllByRole("columnheader").map((header) => header.textContent)).toEqual([
     "标的",
     "结论与表现",
