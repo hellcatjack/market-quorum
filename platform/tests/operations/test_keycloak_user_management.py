@@ -1,10 +1,15 @@
 import importlib.util
+import stat
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = ROOT / "scripts/sync_keycloak_user_management.py"
+
+
+def test_sync_script_is_executable():
+    assert SCRIPT.stat().st_mode & stat.S_IXUSR
 
 
 def _module():
@@ -47,9 +52,7 @@ def snapshot(*, converged=False, enabled_admin=True):
         "scopes": scopes,
         "clients": clients,
         "web_scopes": web_scopes,
-        "service_roles": (
-            {"query-users", "view-users", "manage-users"} if converged else set()
-        ),
+        "service_roles": ({"query-users", "view-users", "manage-users"} if converged else set()),
         "users": users,
     }
 

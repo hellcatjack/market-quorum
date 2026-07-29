@@ -86,7 +86,9 @@ def parse_action(action: str) -> tuple[str, str, str | None]:
 def _credential(env_file: Path, name: str) -> str:
     value = os.getenv(name) or dotenv_values(env_file).get(name)
     if not value:
-        raise KeycloakUserManagementError(f"required deployment setting is missing: {name}")
+        raise KeycloakUserManagementError(
+            f"required deployment setting is missing: {name}"
+        )
     return str(value)
 
 
@@ -100,7 +102,9 @@ def ensure_private_secret(env_file: Path) -> None:
         print("management client credential: configured")
         return
     if not env_file.exists():
-        raise KeycloakUserManagementError("private platform environment file does not exist")
+        raise KeycloakUserManagementError(
+            "private platform environment file does not exist"
+        )
     generated = secrets.token_urlsafe(48)
     original = env_file.read_text(encoding="utf-8")
     lines = [
@@ -170,7 +174,9 @@ class LiveSynchronizer:
         response.raise_for_status()
 
     def _delete(self, path: str, payload: list | None = None) -> None:
-        response = self.client.request("DELETE", path, json=payload, headers=self.headers)
+        response = self.client.request(
+            "DELETE", path, json=payload, headers=self.headers
+        )
         response.raise_for_status()
 
     def _one_client(self, client_id: str) -> dict:
@@ -179,7 +185,9 @@ class LiveSynchronizer:
             params={"clientId": client_id},
         )
         if len(clients) != 1:
-            raise KeycloakUserManagementError(f"expected one Keycloak client: {client_id}")
+            raise KeycloakUserManagementError(
+                f"expected one Keycloak client: {client_id}"
+            )
         return clients[0]
 
     def _user_roles(self, user_id: str) -> list[dict]:
@@ -274,7 +282,9 @@ class LiveSynchronizer:
             elif kind == "remove_role":
                 self._delete(f"/admin/realms/{REALM}/roles/{value}")
             else:
-                raise KeycloakUserManagementError(f"unsupported reconciliation action: {kind}")
+                raise KeycloakUserManagementError(
+                    f"unsupported reconciliation action: {kind}"
+                )
 
     def _grant_service_roles(self) -> None:
         management = self._one_client(MANAGEMENT_CLIENT)
@@ -299,7 +309,9 @@ class LiveSynchronizer:
         scopes = self._get(f"/admin/realms/{REALM}/client-scopes")
         matching = [item for item in scopes if item.get("name") == scope_name]
         if len(matching) != 1:
-            raise KeycloakUserManagementError(f"expected one client scope: {scope_name}")
+            raise KeycloakUserManagementError(
+                f"expected one client scope: {scope_name}"
+            )
         self._put(
             f"/admin/realms/{REALM}/clients/{web['id']}"
             f"/default-client-scopes/{matching[0]['id']}"
@@ -380,7 +392,9 @@ async def _sync_platform(snapshot: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Reconcile TradingNG Keycloak user management")
+    parser = argparse.ArgumentParser(
+        description="Reconcile TradingNG Keycloak user management"
+    )
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--check", action="store_true")
     action.add_argument("--apply", action="store_true")
@@ -424,7 +438,9 @@ def main() -> None:
         converged = synchronizer.snapshot()
         remaining = plan(converged)
         if remaining:
-            raise KeycloakUserManagementError("identity management reconciliation did not converge")
+            raise KeycloakUserManagementError(
+                "identity management reconciliation did not converge"
+            )
         asyncio.run(_sync_platform(converged))
         print(f"identity management realm: synchronized ({len(actions)} actions)")
 
