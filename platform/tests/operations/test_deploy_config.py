@@ -180,7 +180,7 @@ def test_parallel_login_flows_keep_independent_bounded_csrf_cookies():
         assert caddy.index(favicon_handler) < caddy.index("@noSession")
 
 
-def test_oauth2_proxy_logs_out_the_keycloak_session_before_clearing_its_cookie():
+def test_oauth2_proxy_attempts_keycloak_backend_logout_before_clearing_its_cookie():
     compose = yaml.safe_load((ROOT / "deploy/compose.prod.yml").read_text())
     assert compose["services"]["oauth2-proxy"]["image"] == (
         "quay.io/oauth2-proxy/oauth2-proxy:v7.15.1"
@@ -191,6 +191,12 @@ def test_oauth2_proxy_logs_out_the_keycloak_session_before_clearing_its_cookie()
         'backend_logout_url = "https://ushome.amycat.com/realms/tradingng/'
         'protocol/openid-connect/logout?id_token_hint={id_token}"'
     ) in config
+
+
+def test_oauth2_proxy_forces_the_login_form_after_browser_sign_out():
+    config = (ROOT / "deploy/oauth2-proxy.cfg").read_text()
+
+    assert 'prompt = "login"' in config
 
 
 def test_browser_api_forward_auth_passes_the_access_token_to_platform():
