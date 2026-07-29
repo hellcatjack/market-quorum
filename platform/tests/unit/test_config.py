@@ -182,3 +182,41 @@ def test_mysql_database_identifier_is_rejected(monkeypatch, name):
 
     with pytest.raises(ValidationError):
         Settings(_env_file=None)
+
+
+def test_keycloak_admin_settings_keep_client_secret_private(monkeypatch):
+    monkeypatch.setenv("TRADINGNG_KEYCLOAK_ADMIN_URL", "http://127.0.0.1:18081")
+    monkeypatch.setenv("TRADINGNG_KEYCLOAK_ADMIN_REALM", "tradingng")
+    monkeypatch.setenv("TRADINGNG_KEYCLOAK_ADMIN_CLIENT_ID", "tradingng-user-admin")
+    monkeypatch.setenv("TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET", "management-secret")
+
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+    )
+
+    assert str(settings.keycloak_admin_url) == "http://127.0.0.1:18081/"
+    assert settings.keycloak_admin_realm == "tradingng"
+    assert settings.keycloak_admin_client_id == "tradingng-user-admin"
+    assert settings.keycloak_admin_client_secret.get_secret_value() == "management-secret"
+    assert "management-secret" not in repr(settings)
+    assert "management-secret" not in settings.model_dump_json()
+
+
+def test_keycloak_admin_secret_can_be_unset():
+    settings = Settings(
+        _env_file=None,
+        database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+    )
+
+    assert settings.keycloak_admin_client_secret is None
+
+
+@pytest.mark.parametrize("field", ["../master", "", "client/child"])
+def test_keycloak_admin_identifiers_are_path_safe(field):
+    with pytest.raises(ValidationError):
+        Settings(
+            _env_file=None,
+            database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
+            keycloak_admin_realm=field,
+        )

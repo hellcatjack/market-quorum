@@ -260,7 +260,7 @@ Run: `cd platform && ../.venv/bin/pytest tests/unit/auth/test_oidc.py tests/unit
 
 Expected: PASS.
 
-- [ ] **Step 10: Commit the formal access boundary**
+- [x] **Step 10: Commit the formal access boundary**
 
 ```bash
 git add platform/src/tradingng_platform/identity platform/src/tradingng_platform/auth/oidc.py platform/src/tradingng_platform/api/auth.py platform/src/tradingng_platform/assessments/repository.py platform/tests/unit/auth/test_oidc.py platform/tests/unit/identity/test_access.py platform/tests/unit/assessments/test_repository.py
@@ -278,17 +278,17 @@ git commit -m "feat: enforce formal user roles on every request"
 - Modify test: `platform/tests/unit/test_config.py`
 - Create test: `platform/tests/unit/identity/test_keycloak.py`
 
-- [ ] **Step 1: Write failing settings tests for private Keycloak configuration**
+- [x] **Step 1: Write failing settings tests for private Keycloak configuration**
 
 Add a test that sets the four documented `TRADINGNG_KEYCLOAK_ADMIN_*` variables, asserts the URL/realm/client id, asserts `get_secret_value()` for the secret, and proves neither `repr(settings)` nor `settings.model_dump_json()` contains the secret. Add a second test proving an unset secret yields `None` so health/read-only endpoints can start while the management feature reports a configured 503.
 
-- [ ] **Step 2: Run settings tests and observe missing fields**
+- [x] **Step 2: Run settings tests and observe missing fields**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/test_config.py -q`
 
 Expected: FAIL on missing `keycloak_admin_url` or `keycloak_admin_client_secret`.
 
-- [ ] **Step 3: Add settings with non-leaking defaults**
+- [x] **Step 3: Add settings with non-leaking defaults**
 
 Add:
 
@@ -302,11 +302,11 @@ keycloak_admin_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
 
 Exclude the secret from serialization and validate realm/client identifiers as non-empty path-safe names.
 
-- [ ] **Step 4: Define complete client contracts and stable errors**
+- [x] **Step 4: Define complete client contracts and stable errors**
 
 `contracts.py` must include immutable `KeycloakUser`, `KeycloakSession`, and `KeycloakPage` types. `KeycloakUser` fields are `subject`, `username`, `display_name`, `email`, `enabled`, `role`; role is exactly `Admin|User`. `errors.py` must define `IdentityError(code, status_code, message)` subclasses/makers for conflict, missing, forbidden configuration, unavailable provider, and sync pending; `str(error)` must contain only stable code/message.
 
-- [ ] **Step 5: Write MockTransport tests for the full Keycloak protocol**
+- [x] **Step 5: Write MockTransport tests for the full Keycloak protocol**
 
 Create tests that assert:
 
@@ -320,13 +320,13 @@ Create tests that assert:
 - sessions GET maps only id/start/last-access timestamps;
 - 409 maps by operation to `username_conflict` or `email_conflict`, 404 to `user_not_found`, 401/403 to `identity_provider_forbidden`, and timeout/429/5xx to `identity_provider_unavailable` without upstream body text.
 
-- [ ] **Step 6: Run the client tests and confirm missing implementation**
+- [x] **Step 6: Run the client tests and confirm missing implementation**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/identity/test_keycloak.py -q`
 
 Expected: collection or import FAIL because `KeycloakAdminClient` does not exist.
 
-- [ ] **Step 7: Implement the async Keycloak transport**
+- [x] **Step 7: Implement the async Keycloak transport**
 
 Give `KeycloakAdminClient` these exact public methods:
 
@@ -344,7 +344,7 @@ async def close(self) -> None
 
 Use one injected/owned `httpx.AsyncClient`, an `asyncio.Lock` around token refresh, `time.monotonic()` for expiry, and a redacting operation-specific response mapper. Never include request JSON for password calls in debug logging.
 
-- [ ] **Step 8: Run and lint the client slice**
+- [x] **Step 8: Run and lint the client slice**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/test_config.py tests/unit/identity/test_keycloak.py -q && ../.venv/bin/ruff check src/tradingng_platform/config.py src/tradingng_platform/identity tests/unit/identity`
 

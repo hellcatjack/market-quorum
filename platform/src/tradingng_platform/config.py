@@ -14,6 +14,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy.engine import URL, make_url
 
 _DB_IDENTIFIER = re.compile(r"^[A-Za-z0-9_]+$")
+_KEYCLOAK_IDENTIFIER = re.compile(r"^[A-Za-z0-9._-]+$")
 _MYSQL_CHARSETS = frozenset({"utf8mb4"})
 _MYSQL_COLLATIONS = frozenset({"utf8mb4_unicode_ci", "utf8mb4_0900_ai_ci"})
 
@@ -62,6 +63,11 @@ class Settings(BaseSettings):
     oidc_issuer: AnyHttpUrl = "https://ushome.amycat.com/realms/tradingng"
     oidc_audience: str = "tradingng-api"
     oidc_jwks_ttl_seconds: int = 300
+    keycloak_admin_url: AnyHttpUrl = "http://127.0.0.1:18081"
+    keycloak_admin_realm: str = "tradingng"
+    keycloak_admin_client_id: str = "tradingng-user-admin"
+    keycloak_admin_client_secret: SecretStr | None = Field(default=None, repr=False, exclude=True)
+    keycloak_admin_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
     mcp_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     mcp_resource_uri: AnyHttpUrl = "https://ushome.amycat.com/mcp"
     token_pepper: SecretStr = SecretStr("")
@@ -182,6 +188,14 @@ class Settings(BaseSettings):
         normalized = value.strip()
         if not normalized:
             raise ValueError("SEC User-Agent cannot be empty")
+        return normalized
+
+    @field_validator("keycloak_admin_realm", "keycloak_admin_client_id")
+    @classmethod
+    def validate_keycloak_identifier(cls, value: str) -> str:
+        normalized = value.strip()
+        if not _KEYCLOAK_IDENTIFIER.fullmatch(normalized):
+            raise ValueError("Keycloak realm and client identifiers must be path safe")
         return normalized
 
     @property
