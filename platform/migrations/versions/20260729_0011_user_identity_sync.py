@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column(
             "synced_at",
             datetime_type(),
-            server_default=sa.func.current_timestamp(),
+            server_default=sa.text("CURRENT_TIMESTAMP(6)"),
             nullable=False,
         ),
     )

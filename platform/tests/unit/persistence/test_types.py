@@ -1,7 +1,10 @@
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 
 from alembic.config import Config
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy.dialects import mysql, postgresql
 from sqlalchemy.schema import CreateTable
@@ -68,3 +71,19 @@ def test_every_migration_revision_can_be_imported():
         "20260725_0002",
         "20260725_0001",
     ]
+
+
+def test_identity_sync_migration_matches_mysql_fractional_datetime_precision():
+    platform_root = Path(__file__).resolve().parents[3]
+    scripts = ScriptDirectory.from_config(Config(str(platform_root / "alembic.ini")))
+    migration = scripts.get_revision("20260729_0011").module
+    output = StringIO()
+    context = MigrationContext.configure(
+        dialect=mysql.dialect(),
+        opts={"as_sql": True, "output_buffer": output},
+    )
+
+    with Operations.context(context):
+        migration.upgrade()
+
+    assert "DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)" in output.getvalue()
