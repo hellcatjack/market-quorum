@@ -32,7 +32,7 @@
 - Modify: `web/src/app/Layout.tsx`
 - Modify: `web/src/app/App.test.tsx`
 
-- [ ] **Step 1: Write the failing URL structure test**
+- [x] **Step 1: Write the failing URL structure test**
 
 Create `web/src/auth/logout.test.ts`:
 
@@ -57,7 +57,7 @@ test("browser logout clears OAuth2 Proxy and Keycloak before returning to login"
 });
 ```
 
-- [ ] **Step 2: Update the shell test to require the new target**
+- [x] **Step 2: Update the shell test to require the new target**
 
 In `web/src/app/App.test.tsx`, import `BROWSER_LOGOUT_URL` and replace the old literal assertion:
 
@@ -70,7 +70,7 @@ expect(screen.getByRole("link", { name: "退出" })).toHaveAttribute(
 );
 ```
 
-- [ ] **Step 3: Run the focused tests and verify RED**
+- [x] **Step 3: Run the focused tests and verify RED**
 
 Run:
 
@@ -81,7 +81,7 @@ npm test -- --run src/auth/logout.test.ts src/app/App.test.tsx
 
 Expected: FAIL because `src/auth/logout.ts` and `BROWSER_LOGOUT_URL` do not exist. The failure must be import/expectation related, not a test-environment error.
 
-- [ ] **Step 4: Implement the fixed nested redirect URL**
+- [x] **Step 4: Implement the fixed nested redirect URL**
 
 Create `web/src/auth/logout.ts`:
 
@@ -100,7 +100,7 @@ export const BROWSER_LOGOUT_URL =
 
 The placeholder is deliberately encoded only by the outer `rd`: OAuth2 Proxy decodes `rd`, sees the raw `{id_token}`, replaces it from the authenticated session, clears its cookie, and redirects the browser to Keycloak.
 
-- [ ] **Step 5: Consume the URL with a full-page anchor**
+- [x] **Step 5: Consume the URL with a full-page anchor**
 
 In `web/src/app/Layout.tsx`:
 
@@ -114,7 +114,7 @@ import { BROWSER_LOGOUT_URL } from "../auth/logout";
 
 Do not use Wouter navigation or an asynchronous click handler; the browser must cross the Caddy/OAuth2 Proxy boundary.
 
-- [ ] **Step 6: Run focused tests, typecheck, and lint**
+- [x] **Step 6: Run focused tests, typecheck, and lint**
 
 Run:
 
@@ -127,7 +127,7 @@ npm run lint
 
 Expected: both test files pass, TypeScript exits 0, and ESLint exits 0.
 
-- [ ] **Step 7: Commit the Web behavior**
+- [x] **Step 7: Commit the Web behavior**
 
 ```bash
 cd /app/devs/TradingNG

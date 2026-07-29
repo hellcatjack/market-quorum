@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 
 import { useCurrentUser } from "../auth/CurrentUserContext";
+import { BROWSER_LOGOUT_URL } from "../auth/logout";
 import { useI18n } from "../i18n/I18nProvider";
 
 function navigationClass(isActive: boolean): string {
@@ -62,7 +63,7 @@ export function Layout({ children }: { children: ReactNode }) {
           <span className="current-user" aria-live="polite">
             {currentUser.user?.display_name || (currentUser.isError ? t("身份不可用") : t("载入中…"))}
           </span>
-          <a className="logout-link" href="/oauth2/sign_out">
+          <a className="logout-link" href={BROWSER_LOGOUT_URL}>
             {t("退出")}
           </a>
         </div>

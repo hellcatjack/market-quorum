@@ -4,6 +4,7 @@ import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
 import { App } from "./App";
+import { BROWSER_LOGOUT_URL } from "../auth/logout";
 import { I18nProvider } from "../i18n/I18nProvider";
 
 let currentIdentity: {
@@ -100,7 +101,7 @@ test("renders the Chinese management shell and all primary routes", async () => 
   expect(await screen.findByRole("link", { name: "用户管理" })).toHaveAttribute("href", "/users");
   expect(screen.getByRole("link", { name: "退出" })).toHaveAttribute(
     "href",
-    "/oauth2/sign_out",
+    BROWSER_LOGOUT_URL,
   );
   expect(await screen.findByText("Alice")).toBeInTheDocument();
   expect(screen.getByLabelText("排队任务")).toHaveTextContent("队列");
