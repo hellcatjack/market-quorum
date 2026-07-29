@@ -44,9 +44,10 @@ Keycloak 是以下信息的权威来源：
 - 当前登录会话。
 
 新增机密客户端 `tradingng-user-admin`。其 service account 只取得
-`realm-management` 中用户管理所需的最小角色，例如 `view-users`、`manage-users`
-和必要的 realm 查询权限。平台通过 client credentials 获取短期管理令牌，不使用
-bootstrap 管理员密码执行日常操作。
+`realm-management` 中用户管理所需的 `query-users`、`view-users`、`manage-users`
+和 `view-realm`；`view-realm` 是读取 `Admin` / `User` 角色表示并执行角色分配所必需。
+平台通过 client credentials 获取短期管理令牌，不使用 bootstrap 管理员密码执行
+日常操作。
 
 私有环境新增以下配置，示例文件只保存占位值：
 

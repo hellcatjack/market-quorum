@@ -331,8 +331,10 @@ scope 重新计算实际权限：
 移除自己的管理权限，最后一个已启用管理员也不能被停用或降级。
 
 Keycloak 继续作为用户名、资料、启用状态、正式角色、凭据和会话的权威来源。平台使用
-独立的 `tradingng-user-admin` 服务账号及最小化 Realm 管理权限，运行时不使用
-Keycloak bootstrap 管理员凭据。只在被 Git 忽略的私有 `.env.platform` 中配置：
+独立的 `tradingng-user-admin` 服务账号及最小化 Realm 管理权限：`query-users`、
+`view-users`、`manage-users` 和 `view-realm`；其中最后一项用于在分配前解析 `Admin` 与
+`User` Realm 角色。运行时不使用 Keycloak bootstrap 管理员凭据。只在被 Git 忽略的
+私有 `.env.platform` 中配置：
 
 ```dotenv
 TRADINGNG_KEYCLOAK_ADMIN_URL=http://127.0.0.1:18081

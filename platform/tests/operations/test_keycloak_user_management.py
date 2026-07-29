@@ -52,9 +52,20 @@ def snapshot(*, converged=False, enabled_admin=True):
         "scopes": scopes,
         "clients": clients,
         "web_scopes": web_scopes,
-        "service_roles": ({"query-users", "view-users", "manage-users"} if converged else set()),
+        "service_roles": (
+            {"query-users", "view-users", "manage-users", "view-realm"} if converged else set()
+        ),
         "users": users,
     }
+
+
+def test_runtime_client_can_read_realm_roles_needed_for_assignment():
+    module = _module()
+
+    assert (
+        frozenset({"query-users", "view-users", "manage-users", "view-realm"})
+        == module.REQUIRED_SERVICE_ROLES
+    )
 
 
 def test_plan_creates_missing_identity_resources_and_migrates_legacy_users():

@@ -17,7 +17,9 @@ WEB_CLIENT = "tradingng-web"
 FORMAL_ROLES = frozenset({"Admin", "User"})
 LEGACY_ROLES = frozenset({"Analyst", "Viewer"})
 REQUIRED_SCOPES = ("assessments:review", "users:manage")
-REQUIRED_SERVICE_ROLES = frozenset({"query-users", "view-users", "manage-users"})
+REQUIRED_SERVICE_ROLES = frozenset(
+    {"query-users", "view-users", "manage-users", "view-realm"}
+)
 
 
 class KeycloakUserManagementError(RuntimeError):

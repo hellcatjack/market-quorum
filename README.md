@@ -385,8 +385,10 @@ administrator cannot be disabled or demoted.
 Keycloak remains authoritative for usernames, profiles, enabled state, formal
 roles, credentials, and sessions. The platform uses the dedicated
 `tradingng-user-admin` service account with least-privilege realm-management
-roles; runtime code does not use Keycloak bootstrap credentials. Configure only
-the private, ignored `.env.platform` file:
+roles (`query-users`, `view-users`, `manage-users`, and `view-realm`); the last
+permission is required to resolve the `Admin` and `User` realm roles before
+assignment. Runtime code does not use Keycloak bootstrap credentials. Configure
+only the private, ignored `.env.platform` file:
 
 ```dotenv
 TRADINGNG_KEYCLOAK_ADMIN_URL=http://127.0.0.1:18081

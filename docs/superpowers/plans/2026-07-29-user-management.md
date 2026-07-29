@@ -671,7 +671,7 @@ Follow the authenticated request pattern in `scripts/sync_keycloak_public_urls.p
 1. authenticate to master only with existing bootstrap credentials for deployment reconciliation;
 2. validate at least one enabled Admin before mutating users;
 3. create scopes/role/client if absent;
-4. configure the management service account with only `query-users`, `view-users`, and `manage-users` realm-management roles;
+4. configure the management service account with only `query-users`, `view-users`, `manage-users`, and `view-realm` realm-management roles; `view-realm` is required to resolve formal role representations before assignment;
 5. migrate legacy user assignments to User and revoke changed-user sessions;
 6. remove legacy role assignments, then remove unused legacy roles;
 7. emit counts and stable action names only;
@@ -976,7 +976,7 @@ git commit -m "docs: document secure user administration"
 - Modify private deployment state only: `.env.platform` (gitignored; secret value must never be printed)
 - No tracked source changes unless a smoke test exposes a reproducible defect, in which case return to the relevant TDD task and commit the fix separately.
 
-- [ ] **Step 1: Check repository and active assessment state before deployment**
+- [x] **Step 1: Check repository and active assessment state before deployment**
 
 Run:
 
@@ -1008,7 +1008,7 @@ PY
 
 Expected: services report active and the count is recorded. A nonzero count does not block Keycloak reconciliation or static web build, but API restart waits for no `running`/`cancelling` work or uses the already verified worker-lifecycle coordination without stopping workers.
 
-- [ ] **Step 2: Ensure a private management client secret without exposing it**
+- [x] **Step 2: Ensure a private management client secret without exposing it**
 
 Run the synchronizer's secret bootstrap mode:
 
@@ -1019,7 +1019,7 @@ cd /app/devs/TradingNG
 
 Expected: it reports only `management client secret: configured`, preserves `.env.platform` permissions, writes/updates exactly `TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET`, and prints no secret value. Verify with a boolean-only command supplied by the script: `--check-private-secret` exits 0.
 
-- [ ] **Step 3: Reconcile the live realm twice**
+- [x] **Step 3: Reconcile the live realm twice**
 
 Run:
 
@@ -1032,9 +1032,12 @@ cd /app/devs/TradingNG
 
 Expected: first check may report stable drift action names, apply reports counts only, second check exits 0 with `identity management realm: converged`; at least one enabled Admin remains.
 
-- [ ] **Step 4: Restart only the API when operationally safe and deploy the built web assets**
+- [x] **Step 4: Restart the API unit when operationally safe and deploy the built web assets**
 
-Use the repository's existing deployment/service commands; do not stop scheduler/workers. Restart `tradingng-platform-api.service` only after the activity check satisfies the lifecycle rule, then verify:
+Use the repository's existing deployment/service commands. Restart
+`tradingng-platform-api.service` only after the activity check satisfies the lifecycle rule;
+its systemd `PartOf` dependency intentionally coordinates a safe scheduler/worker restart with
+the API unit, so first prove there are no active assessments and then verify all units recover:
 
 ```bash
 systemctl --user restart tradingng-platform-api.service
@@ -1044,14 +1047,14 @@ curl --fail --silent http://127.0.0.1:8010/health/ready
 
 Expected: API is active and readiness returns `status: ok`. The configured Caddy/OAuth2 Proxy path continues to serve the web build at `https://ushome.amycat.com`.
 
-- [ ] **Step 5: Execute role, session, and audit smoke acceptance**
+- [x] **Step 5: Execute role, session, and audit smoke acceptance**
 
 With an authenticated test Admin session/API harness:
 
 1. list users and record the enabled Admin count;
 2. create a uniquely named User and capture the temporary password only in process memory;
 3. complete first-login password change in Keycloak;
-4. prove the User can call `/me`, admission summary, read assessments, and submit an assessment;
+4. prove the User can call `/me`, admission summary, read assessments, and reach submission input validation (HTTP 422 for an intentionally empty batch) without creating a production assessment;
 5. prove `/system/status`, `/system/capacity`, and all `/admin/users` calls return 403;
 6. disable the User and prove the existing browser bearer and its API credential are immediately rejected;
 7. re-enable, reset password, and prove the old session cannot refresh;
