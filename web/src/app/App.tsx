@@ -7,6 +7,7 @@ import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { InstrumentHistoryPage } from "../features/instruments/InstrumentHistoryPage";
 import { RunDetailPage } from "../features/runs/RunDetailPage";
 import { SystemPage } from "../features/system/SystemPage";
+import { UserManagementPage } from "../features/users/UserManagementPage";
 import { Layout } from "./Layout";
 import { useI18n } from "../i18n/I18nProvider";
 import { CurrentUserProvider } from "../auth/CurrentUserProvider";
@@ -64,10 +65,7 @@ export function App() {
           </Route>
           <Route path="/users">
             <AuthorizedRoute role="Admin" scope="users:manage">
-              <PlaceholderPage
-                title={t("用户管理")}
-                description={t("创建、启停和维护平台登录账号。")}
-              />
+              <UserManagementPage />
             </AuthorizedRoute>
           </Route>
           <Route>

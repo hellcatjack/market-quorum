@@ -797,7 +797,7 @@ Run: `cd web && npm test -- --run src/api/users.test.ts src/features/users/Tempo
 
 Expected: PASS.
 
-- [ ] **Step 6: Commit typed user operations**
+- [x] **Step 6: Commit typed user operations**
 
 ```bash
 git add web/src/api/users.ts web/src/api/users.test.ts web/src/features/users/TemporaryPasswordDialog.tsx web/src/features/users/TemporaryPasswordDialog.test.tsx
@@ -815,7 +815,7 @@ git commit -m "feat: add safe web user administration client"
 - Modify: `web/src/i18n/messages.ts`
 - Modify: `web/src/styles/global.css`
 
-- [ ] **Step 1: Write page behavior tests**
+- [x] **Step 1: Write page behavior tests**
 
 Test search debounce, role/status filters, pagination, row detail selection, create form, profile edit, role edit, enable/disable confirmation, reset confirmation, logout confirmation, query invalidation, and stable API error messages. The fixture detail must include action flags:
 
@@ -837,33 +837,33 @@ Assert protected controls are disabled with visible explanations, not merely hid
 
 Add a second fixture for a different last enabled Admin whose role/enabled flags are disabled with `last_admin_protected`, while profile edit, reset password, and logout retain their independently allowed states.
 
-- [ ] **Step 2: Run page tests and confirm missing components**
+- [x] **Step 2: Run page tests and confirm missing components**
 
 Run: `cd web && npm test -- --run src/features/users/UserEditor.test.tsx src/features/users/UserManagementPage.test.tsx`
 
 Expected: FAIL due to missing components.
 
-- [ ] **Step 3: Implement validated create/edit forms**
+- [x] **Step 3: Implement validated create/edit forms**
 
 `UserEditor` has immutable username in edit mode, trimmed display name, valid email, single Admin/User selector, and enabled control only in edit mode. Prevent duplicate submissions, retain non-secret form values after server errors, and put focus on the first invalid field. Create success immediately transfers the returned password into the one-time dialog and removes it from mutation cache/state after close.
 
-- [ ] **Step 4: Implement the dense ledger and detail action panel**
+- [x] **Step 4: Implement the dense ledger and detail action panel**
 
 Use one compact table row per user on desktop: username/name, email, formal role, enabled state, and last sync. On narrow screens use two-line cards without dropping fields. Search/filter parameters are part of the query key. Selecting a row loads detail and session summary. Every destructive state transition has an explicit confirmation naming the target username.
 
 Map stable error codes to localized messages; show request id for support, never raw upstream content. On `identity_sync_pending`, explain that Keycloak changed successfully and refresh/reconciliation is required rather than telling the admin to repeat create blindly.
 
-- [ ] **Step 5: Add complete zh-CN/en-US messages and responsive styles**
+- [x] **Step 5: Add complete zh-CN/en-US messages and responsive styles**
 
 Add all labels, states, confirmations, validation errors, access-denied copy, action-reason copy, and provider/sync error copy to `messages.ts`. Style modal focus, status colors with text/icons, 44px action targets, table overflow, and a 720px narrow layout. Do not convey role/status only by color.
 
-- [ ] **Step 6: Register `/users` and run UI tests**
+- [x] **Step 6: Register `/users` and run UI tests**
 
 Run: `cd web && npm test -- --run src/features/users src/app/App.test.tsx src/i18n/i18n.test.tsx`
 
 Expected: PASS.
 
-- [ ] **Step 7: Run typecheck and lint**
+- [x] **Step 7: Run typecheck and lint**
 
 Run: `cd web && npm run typecheck && npm run lint`
 
