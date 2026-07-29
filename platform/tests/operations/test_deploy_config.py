@@ -32,8 +32,7 @@ def test_keycloak_clients_scopes_and_mcp_audience_match_platform():
     assert realm["attributes"]["frontendUrl"] == "https://ushome.amycat.com"
     assert {item["name"] for item in realm["roles"]["realm"]} == {
         "Admin",
-        "Analyst",
-        "Viewer",
+        "User",
     }
     scope_definitions = {item["name"]: item for item in realm["clientScopes"]}
     scopes = set(scope_definitions)
@@ -45,11 +44,13 @@ def test_keycloak_clients_scopes_and_mcp_audience_match_platform():
         "assessments:read",
         "assessments:submit",
         "assessments:cancel",
+        "assessments:review",
         "assessments:admin",
         "validations:read",
         "validations:write",
         "system:read",
         "artifacts:read",
+        "users:manage",
     } <= scopes
     basic_mappers = scope_definitions["basic"]["protocolMappers"]
     assert basic_mappers == [
@@ -86,6 +87,7 @@ def test_keycloak_clients_scopes_and_mcp_audience_match_platform():
         "tradingng-web",
         "tradingng-api",
         "tradingng-mcp",
+        "tradingng-user-admin",
     }
     for client in realm["clients"]:
         assert "basic" in client["defaultClientScopes"]
@@ -95,13 +97,24 @@ def test_keycloak_clients_scopes_and_mcp_audience_match_platform():
         "assessments:read",
         "assessments:submit",
         "assessments:cancel",
+        "assessments:review",
         "assessments:admin",
         "validations:read",
         "validations:write",
         "system:read",
         "artifacts:read",
+        "users:manage",
         "tradingng-api-resource",
     } <= set(web["defaultClientScopes"])
+    management = next(
+        item for item in realm["clients"] if item["clientId"] == "tradingng-user-admin"
+    )
+    assert management["publicClient"] is False
+    assert management["serviceAccountsEnabled"] is True
+    assert management["standardFlowEnabled"] is False
+    assert management["directAccessGrantsEnabled"] is False
+    assert management["secret"] == "${TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET}"
+    assert "users:manage" not in management["defaultClientScopes"]
 
 
 def test_keycloak_bootstraps_one_environment_secured_platform_admin():
@@ -301,6 +314,7 @@ def test_offline_compose_gate_supplies_every_required_bootstrap_variable():
     assert ":${test_database_password}@127.0.0.1:5432/tradingng_test" in script
     assert "TRADINGNG_INITIAL_ADMIN_USERNAME=config-check" in script
     assert "TRADINGNG_INITIAL_ADMIN_PASSWORD=config-check" in script
+    assert "TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=config-check" in script
 
 
 def test_verification_gate_covers_both_databases_public_config_and_artifacts():
@@ -312,6 +326,7 @@ def test_verification_gate_covers_both_databases_public_config_and_artifacts():
     assert "--adapter caddyfile" in script
     assert "docker compose" in script
     assert "sync_keycloak_public_urls.py --check" in script
+    assert "sync_keycloak_user_management.py --check" in script
     assert "verify_artifacts.py" in script
     assert "--database-url-env TRADINGNG_VERIFY_DATABASE_URL" in script
     assert "tradingng\\.internal" in script

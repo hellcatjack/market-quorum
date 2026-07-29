@@ -75,6 +75,7 @@ OAUTH2_PROXY_CLIENT_SECRET=config-check \
 OAUTH2_PROXY_COOKIE_SECRET=01234567890123456789012345678901 \
 TRADINGNG_API_CLIENT_SECRET=config-check \
 TRADINGNG_MCP_CLIENT_SECRET=config-check \
+TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=config-check \
 TRADINGNG_INITIAL_ADMIN_USERNAME=config-check \
 TRADINGNG_INITIAL_ADMIN_PASSWORD=config-check \
   docker compose -f deploy/compose.prod.yml config --quiet
@@ -89,6 +90,8 @@ if [[ -f "$platform_env_file" ]]; then
   live_compose=(docker compose --env-file "$platform_env_file" -f deploy/compose.prod.yml)
   if "${live_compose[@]}" ps --services --status running 2>/dev/null | grep -qx keycloak; then
     .venv/bin/python scripts/sync_keycloak_public_urls.py --check \
+      --env-file "$platform_env_file"
+    .venv/bin/python scripts/sync_keycloak_user_management.py --check \
       --env-file "$platform_env_file"
   fi
 fi

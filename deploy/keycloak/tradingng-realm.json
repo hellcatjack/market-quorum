@@ -6,8 +6,7 @@
   "resetPasswordAllowed": true,
   "roles": {
     "realm": [
-      {"name": "Viewer"},
-      {"name": "Analyst"},
+      {"name": "User"},
       {"name": "Admin"}
     ]
   },
@@ -122,11 +121,13 @@
     {"name": "assessments:read", "protocol": "openid-connect"},
     {"name": "assessments:submit", "protocol": "openid-connect"},
     {"name": "assessments:cancel", "protocol": "openid-connect"},
+    {"name": "assessments:review", "protocol": "openid-connect"},
     {"name": "assessments:admin", "protocol": "openid-connect"},
     {"name": "validations:read", "protocol": "openid-connect"},
     {"name": "validations:write", "protocol": "openid-connect"},
     {"name": "system:read", "protocol": "openid-connect"},
     {"name": "artifacts:read", "protocol": "openid-connect"},
+    {"name": "users:manage", "protocol": "openid-connect"},
     {
       "name": "tradingng-api-resource",
       "protocol": "openid-connect",
@@ -169,7 +170,7 @@
       "serviceAccountsEnabled": false,
       "redirectUris": ["https://ushome.amycat.com/oauth2/callback"],
       "webOrigins": ["https://ushome.amycat.com"],
-      "defaultClientScopes": ["basic", "profile", "email", "roles", "assessments:read", "assessments:submit", "assessments:cancel", "assessments:admin", "validations:read", "validations:write", "system:read", "artifacts:read", "tradingng-api-resource"],
+      "defaultClientScopes": ["basic", "profile", "email", "roles", "assessments:read", "assessments:submit", "assessments:cancel", "assessments:review", "assessments:admin", "validations:read", "validations:write", "system:read", "artifacts:read", "users:manage", "tradingng-api-resource"],
       "optionalClientScopes": []
     },
     {
@@ -180,7 +181,7 @@
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "defaultClientScopes": ["basic", "assessments:read", "assessments:submit", "assessments:cancel", "validations:read", "validations:write", "system:read", "artifacts:read", "tradingng-api-resource"]
+      "defaultClientScopes": ["basic", "assessments:read", "assessments:submit", "assessments:cancel", "assessments:review", "validations:read", "validations:write", "system:read", "artifacts:read", "tradingng-api-resource"]
     },
     {
       "clientId": "tradingng-mcp",
@@ -190,7 +191,18 @@
       "standardFlowEnabled": false,
       "directAccessGrantsEnabled": false,
       "serviceAccountsEnabled": true,
-      "defaultClientScopes": ["basic", "assessments:read", "assessments:submit", "assessments:cancel", "validations:read", "validations:write", "system:read", "artifacts:read", "tradingng-api-resource", "tradingng-mcp-resource"]
+      "defaultClientScopes": ["basic", "assessments:read", "assessments:submit", "assessments:cancel", "assessments:review", "validations:read", "validations:write", "system:read", "artifacts:read", "tradingng-api-resource", "tradingng-mcp-resource"]
+    },
+    {
+      "clientId": "tradingng-user-admin",
+      "enabled": true,
+      "publicClient": false,
+      "secret": "${TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "defaultClientScopes": ["basic"],
+      "optionalClientScopes": []
     }
   ]
 }

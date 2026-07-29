@@ -614,7 +614,7 @@ Run: `cd web && npm test -- --run src/features/dashboard/DashboardPage.test.tsx 
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit diagnostic isolation**
+- [x] **Step 7: Commit diagnostic isolation**
 
 ```bash
 git add platform/src/tradingng_platform/assessments platform/src/tradingng_platform/api/routes/assessments.py platform/tests/unit/api/test_assessments.py platform/tests/integration/test_rest_api.py web/src/api/assessments.ts web/src/features/dashboard web/src/features/assessments
@@ -631,7 +631,7 @@ git commit -m "feat: isolate system diagnostics from ordinary users"
 - Modify: `scripts/verify_platform.sh`
 - Modify: `platform/pyproject.toml`
 
-- [ ] **Step 1: Write deployment tests against the desired realm JSON**
+- [x] **Step 1: Write deployment tests against the desired realm JSON**
 
 Assert the clean-install realm has:
 
@@ -642,7 +642,7 @@ Assert the clean-install realm has:
 - its secret comes from `${TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET}`;
 - no management client scope is granted to web, API, or MCP clients.
 
-- [ ] **Step 2: Write pure migration-plan tests**
+- [x] **Step 2: Write pure migration-plan tests**
 
 Import the script as a module and feed recorded realm snapshots. Assert `plan(snapshot)`:
 
@@ -654,17 +654,17 @@ Import the script as a module and feed recorded realm snapshots. Assert `plan(sn
 - produces an empty mutation list on the converged second snapshot;
 - never prints or stores the client secret in its report.
 
-- [ ] **Step 3: Run operations tests and see desired-state failures**
+- [x] **Step 3: Run operations tests and see desired-state failures**
 
 Run: `cd platform && ../.venv/bin/pytest tests/operations/test_keycloak_user_management.py tests/operations/test_deploy_config.py -q`
 
 Expected: FAIL because the role, scopes, client, and script do not exist.
 
-- [ ] **Step 4: Update clean-install realm configuration**
+- [x] **Step 4: Update clean-install realm configuration**
 
 Replace Viewer/Analyst realm roles with User; add the two scopes; add them to the web client candidate/default scopes; add `assessments:review` where assessment service clients need it; add `tradingng-user-admin` with only `basic` as a default client scope. Do not embed realm-management roles in browser tokens.
 
-- [ ] **Step 5: Implement the live synchronizer**
+- [x] **Step 5: Implement the live synchronizer**
 
 Follow the authenticated request pattern in `scripts/sync_keycloak_public_urls.py`, but keep this script focused on identity management. Provide `--check` and `--apply`; `--check` exits 1 on drift and 0 when converged. `--apply` must:
 
@@ -679,7 +679,7 @@ Follow the authenticated request pattern in `scripts/sync_keycloak_public_urls.p
 
 The runtime platform never uses bootstrap credentials. Add a `tradingng-platform-identity-sync` console entry if the synchronizer shares packaged identity reconciliation helpers; otherwise keep the standalone script importable by operations tests.
 
-- [ ] **Step 6: Add safe example configuration and config verification**
+- [x] **Step 6: Add safe example configuration and config verification**
 
 Add the four documented management variables with blank/placeholder secrets to `.env.platform.example`. Extend `scripts/verify_platform.sh` to parse the realm JSON, validate the new scopes/client, and ensure tracked files contain no non-placeholder client secret.
 
