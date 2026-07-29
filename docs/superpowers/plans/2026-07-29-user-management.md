@@ -470,7 +470,7 @@ Run integration tests: `cd platform && TRADINGNG_TEST_DATABASE_URL="${TRADINGNG_
 
 Expected: PASS when the test DB URL is configured; otherwise SKIP with the existing explicit fixture reason.
 
-- [ ] **Step 8: Commit the administration domain**
+- [x] **Step 8: Commit the administration domain**
 
 ```bash
 git add platform/src/tradingng_platform/identity platform/pyproject.toml platform/tests/unit/identity platform/tests/integration/test_identity_management.py
@@ -488,7 +488,7 @@ git commit -m "feat: add audited identity administration service"
 - Modify test: `platform/tests/unit/api/test_app.py`
 - Modify test: `platform/tests/integration/test_rest_api.py`
 
-- [ ] **Step 1: Write API contract tests for all six endpoints**
+- [x] **Step 1: Write API contract tests for all six endpoints**
 
 Use dependency overrides and a recording fake service. Assert:
 
@@ -500,13 +500,13 @@ Use dependency overrides and a recording fake service. Assert:
 - validation rejects mutable username on PATCH and invalid role values;
 - each stable `IdentityError` maps to the designed 400/403/404/409/503 JSON error code and preserves request id.
 
-- [ ] **Step 2: Run route tests and see 404 failures**
+- [x] **Step 2: Run route tests and see 404 failures**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/api/test_users.py -q`
 
 Expected: FAIL with endpoint 404 responses.
 
-- [ ] **Step 3: Implement thin routes and error mapping**
+- [x] **Step 3: Implement thin routes and error mapping**
 
 Implement the exact routes:
 
@@ -521,23 +521,23 @@ POST /api/v1/admin/users/{user_id}/logout
 
 All routes depend on `require_admin_scope("users:manage")`. They pass `request_id_for(request)` into writes and contain no Keycloak logic. Register one `IdentityError` exception handler that emits the stable error envelope without upstream details.
 
-- [ ] **Step 4: Construct services in FastAPI lifespan**
+- [x] **Step 4: Construct services in FastAPI lifespan**
 
 Create `KeycloakAdminClient` only when the secret is configured; otherwise inject an unavailable client whose management methods raise `identity_provider_forbidden`. Store `identity_access` and `identity_admin` on `app.state`. Close the owned async client during lifespan shutdown after requests stop, without affecting the database lifecycle.
 
 For testability, extend `create_app()` with optional `keycloak_admin` and `identity_admin` injection arguments rather than monkeypatching internals.
 
-- [ ] **Step 5: Add `/me` and disabled-session integration assertions**
+- [x] **Step 5: Add `/me` and disabled-session integration assertions**
 
 Assert `/me` returns the effective local formal role and narrowed scopes. Add a request sequence where an Admin token works, the local mirror changes to User, and the same token immediately receives 403 on `/admin/users`; then set disabled and prove the same token receives `account_disabled` on `/me`.
 
-- [ ] **Step 6: Run API and auth tests**
+- [x] **Step 6: Run API and auth tests**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/api/test_users.py tests/unit/api/test_app.py tests/unit/auth tests/unit/identity -q`
 
 Expected: PASS.
 
-- [ ] **Step 7: Export OpenAPI and prove user routes are complete**
+- [x] **Step 7: Export OpenAPI and prove user routes are complete**
 
 Run: `cd /app/devs/TradingNG && .venv/bin/python scripts/export_openapi.py && rg -n 'admin/users|users:manage|admission-summary' var/openapi.json`
 

@@ -376,3 +376,16 @@ class IdentityAdminService:
             enabled=local.status == "active",
             synced_at=local.synced_at,
         )
+
+
+class UnavailableIdentityAdminService:
+    @staticmethod
+    async def _raise(*args, **kwargs):
+        raise identity_error("identity_provider_forbidden")
+
+    list_users = _raise
+    get_user = _raise
+    create_user = _raise
+    update_user = _raise
+    reset_password = _raise
+    logout_user = _raise

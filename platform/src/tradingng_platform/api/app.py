@@ -14,6 +14,7 @@ from tradingng_platform.api.dependencies import BrowserCsrfMiddleware, RequestId
 from tradingng_platform.api.errors import (
     ApiError,
     api_error_handler,
+    identity_error_handler,
     permission_error_handler,
     unexpected_error_handler,
     validation_error_handler,
@@ -27,6 +28,14 @@ from tradingng_platform.auth.tokens import ApiTokenService
 from tradingng_platform.config import Settings
 from tradingng_platform.db import Database
 from tradingng_platform.gateway.client import GatewayClient
+from tradingng_platform.identity.access import IdentityAccessService
+from tradingng_platform.identity.errors import IdentityError
+from tradingng_platform.identity.keycloak import KeycloakAdminClient
+from tradingng_platform.identity.repository import IdentityRepository
+from tradingng_platform.identity.service import (
+    IdentityAdminService,
+    UnavailableIdentityAdminService,
+)
 from tradingng_platform.instruments.classification import YahooInstrumentClassifier
 from tradingng_platform.integrity.service import IntegrityService
 from tradingng_platform.mcp.auth import McpSecurityMiddleware
@@ -58,6 +67,7 @@ def create_app(
     oidc: OidcVerifier | None = None,
     mcp_oidc: OidcVerifier | None = None,
     instrument_classifier=None,
+    identity_admin=None,
 ) -> FastAPI:
     app_settings = settings or Settings()
     mcp_server = None
@@ -80,6 +90,26 @@ def create_app(
             resolved_database.sessions,
             app_settings.token_pepper.get_secret_value(),
         )
+        identity_repository = IdentityRepository(resolved_database.sessions)
+        app.state.identity_access = IdentityAccessService(identity_repository)
+        owned_keycloak_admin = None
+        if identity_admin is not None:
+            app.state.identity_admin = identity_admin
+        elif app_settings.keycloak_admin_client_secret is None:
+            app.state.identity_admin = UnavailableIdentityAdminService()
+        else:
+            owned_keycloak_admin = KeycloakAdminClient(
+                str(app_settings.keycloak_admin_url),
+                app_settings.keycloak_admin_realm,
+                app_settings.keycloak_admin_client_id,
+                app_settings.keycloak_admin_client_secret.get_secret_value(),
+                timeout=app_settings.keycloak_admin_timeout_seconds,
+            )
+            app.state.identity_admin = IdentityAdminService(
+                owned_keycloak_admin,
+                identity_repository,
+                str(app_settings.oidc_issuer).rstrip("/"),
+            )
         resolved_artifact_store = LocalArtifactStore(app_settings.artifact_dir)
         app.state.assessments = AssessmentService(
             resolved_database.sessions,
@@ -138,6 +168,8 @@ def create_app(
         async with AsyncExitStack() as stack:
             await stack.enter_async_context(mcp_server.session_manager.run())
             yield
+            if owned_keycloak_admin is not None:
+                await owned_keycloak_admin.close()
             if owned_database:
                 await resolved_database.close()
 
@@ -147,6 +179,7 @@ def create_app(
         lifespan=lifespan,
     )
     app.add_exception_handler(ApiError, api_error_handler)
+    app.add_exception_handler(IdentityError, identity_error_handler)
     app.add_exception_handler(RequestValidationError, validation_error_handler)
     app.add_exception_handler(PermissionError, permission_error_handler)
     app.add_exception_handler(Exception, unexpected_error_handler)

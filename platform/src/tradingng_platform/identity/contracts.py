@@ -151,3 +151,10 @@ class UserPage(BaseModel):
 class TemporaryCredential:
     user: UserView
     temporary_password: SecretStr
+
+
+class TemporaryPasswordResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user: UserView
+    temporary_password: str

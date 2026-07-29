@@ -10,6 +10,7 @@ from tradingng_platform.api.routes.events import router as events_router
 from tradingng_platform.api.routes.instruments import router as instruments_router
 from tradingng_platform.api.routes.integrity import router as integrity_router
 from tradingng_platform.api.routes.system import router as system_router
+from tradingng_platform.api.routes.users import router as users_router
 from tradingng_platform.api.routes.validations import router as validations_router
 from tradingng_platform.api.routes.webhooks import router as webhooks_router
 from tradingng_platform.auth.principal import Principal
@@ -37,5 +38,6 @@ api_router.include_router(collaboration_router)
 api_router.include_router(instruments_router)
 api_router.include_router(integrity_router)
 api_router.include_router(system_router)
+api_router.include_router(users_router)
 api_router.include_router(validations_router)
 api_router.include_router(webhooks_router)

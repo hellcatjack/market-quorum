@@ -5,6 +5,8 @@ from fastapi import Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from tradingng_platform.identity.errors import IdentityError
+
 logger = logging.getLogger(__name__)
 request_id_context: ContextVar[str] = ContextVar("request_id", default="unknown")
 
@@ -51,6 +53,13 @@ def error_response(error: ApiError, request_id: str) -> JSONResponse:
 
 async def api_error_handler(request: Request, error: ApiError) -> JSONResponse:
     return error_response(error, request_id_for(request))
+
+
+async def identity_error_handler(request: Request, error: IdentityError) -> JSONResponse:
+    return error_response(
+        ApiError(error.status_code, error.code, error.message),
+        request_id_for(request),
+    )
 
 
 async def validation_error_handler(
