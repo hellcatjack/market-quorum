@@ -102,7 +102,7 @@ FORMAL_ROLES = frozenset({"Admin", "User"})
 - Create test: `platform/tests/unit/identity/test_access.py`
 - Modify test: `platform/tests/unit/assessments/test_repository.py`
 
-- [ ] **Step 1: Replace legacy scope expectations with the formal matrix in failing OIDC tests**
+- [x] **Step 1: Replace legacy scope expectations with the formal matrix in failing OIDC tests**
 
 Update `test_human_scopes_are_bounded_by_realm_role` so its cases are exactly `User` and `Admin`, include `assessments:review` and `users:manage` in the candidate token, assert User has no `system:read`, and add:
 
@@ -119,17 +119,17 @@ async def test_legacy_human_role_has_no_platform_scopes(oidc_server):
     assert principal.scopes == frozenset()
 ```
 
-- [ ] **Step 2: Run the OIDC test and confirm the old Viewer/Analyst policy fails**
+- [x] **Step 2: Run the OIDC test and confirm the old Viewer/Analyst policy fails**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/auth/test_oidc.py -q`
 
 Expected: FAIL because `User` is not recognized and the legacy roles still receive scopes.
 
-- [ ] **Step 3: Implement the formal scope ceilings**
+- [x] **Step 3: Implement the formal scope ceilings**
 
 In `auth/oidc.py`, export `FORMAL_ROLES`, `USER_SCOPES`, `ADMIN_SCOPES`, and `ROLE_SCOPES`; make `_human_scopes()` use only `User` and `Admin`. Preserve the current actor-type detection and leave service principals unbounded by human roles.
 
-- [ ] **Step 4: Add failing access-service tests for all stale-token transitions**
+- [x] **Step 4: Add failing access-service tests for all stale-token transitions**
 
 Use a fake repository exposing `resolve(principal)` and assert these exact outcomes in `test_access.py`:
 
@@ -209,13 +209,13 @@ async def test_unknown_user_with_legacy_role_is_rejected():
 
 The same file must include complete formal-role provisioning and service-principal tests. The repository fake records `provisioned` and `read_count`, proving a new User is inserted once while legacy and service cases perform no accidental insert.
 
-- [ ] **Step 5: Run access tests and confirm the package is missing**
+- [x] **Step 5: Run access tests and confirm the package is missing**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/identity/test_access.py -q`
 
 Expected: collection FAIL with `ModuleNotFoundError: tradingng_platform.identity`.
 
-- [ ] **Step 6: Implement the mirror repository and access narrowing**
+- [x] **Step 6: Implement the mirror repository and access narrowing**
 
 Define immutable `LocalIdentity(id, issuer, subject, display_name, email, status, role, synced_at)` in `contracts.py`. `IdentityRepository` must initially provide:
 
@@ -235,7 +235,7 @@ async def provision_from_principal(self, principal: Principal, role: Literal["Ad
 
 Keep repository exceptions framework-neutral; only `access.py` may emit the request-facing authorization error.
 
-- [ ] **Step 7: Route OIDC human requests through the access service**
+- [x] **Step 7: Route OIDC human requests through the access service**
 
 In `current_principal`, verify the bearer token first, then call `request.app.state.identity_access.enforce(principal)`. Add:
 
@@ -250,11 +250,11 @@ def require_admin_scope(scope: str = "users:manage") -> Callable:
 
 API tokens retain their existing owner-status check and must not be passed through OIDC provisioning.
 
-- [ ] **Step 8: Stop assessment submission from overwriting managed identity state**
+- [x] **Step 8: Stop assessment submission from overwriting managed identity state**
 
 Refactor `AssessmentRepository.upsert_user()` to use the already enforced user, update only non-authoritative profile fields for an existing active row, never set `status = "active"` after insertion, and never replace formal roles from stale claims. Add repository tests proving an existing disabled user remains disabled and a locally demoted User remains User when an old Admin principal reaches this method.
 
-- [ ] **Step 9: Run the focused backend tests**
+- [x] **Step 9: Run the focused backend tests**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/auth/test_oidc.py tests/unit/identity/test_access.py tests/unit/assessments/test_repository.py -q`
 

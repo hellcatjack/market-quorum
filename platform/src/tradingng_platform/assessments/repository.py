@@ -50,7 +50,7 @@ from tradingng_platform.models import (
 from tradingng_platform.persistence.locks import acquire_transaction_lock
 from tradingng_platform.persistence.upsert import insert_ignore, session_dialect
 
-_RECOGNIZED_ROLES = frozenset({"Admin", "Analyst", "Viewer"})
+_RECOGNIZED_ROLES = frozenset({"Admin", "User"})
 
 
 class InstrumentAssetTypeConflict(Exception):
@@ -105,20 +105,6 @@ class AssessmentRepository:
         return defaults.get("_submission_sha256") if defaults else None
 
     async def upsert_user(self, principal: Principal) -> User:
-        await self.session.execute(
-            insert_ignore(
-                session_dialect(self.session),
-                User,
-                {
-                    "issuer": principal.issuer,
-                    "subject": principal.subject,
-                    "display_name": principal.display_name or principal.subject,
-                    "email": principal.email,
-                    "status": "active",
-                },
-                [User.issuer, User.subject],
-            )
-        )
         user = await self.session.scalar(
             select(User)
             .where(
@@ -127,12 +113,36 @@ class AssessmentRepository:
             )
             .with_for_update()
         )
+        created = user is None
+        if created:
+            await self.session.execute(
+                insert_ignore(
+                    session_dialect(self.session),
+                    User,
+                    {
+                        "issuer": principal.issuer,
+                        "subject": principal.subject,
+                        "display_name": principal.display_name or principal.subject,
+                        "email": principal.email,
+                        "status": "active",
+                    },
+                    [User.issuer, User.subject],
+                )
+            )
+            user = await self.session.scalar(
+                select(User)
+                .where(
+                    User.issuer == principal.issuer,
+                    User.subject == principal.subject,
+                )
+                .with_for_update()
+            )
         if user is None:
             raise RuntimeError("user upsert did not return a user")
         user.display_name = principal.display_name or principal.subject
         user.email = principal.email
-        user.status = "active"
-        await self._sync_roles(user.id, principal.roles)
+        if created:
+            await self._sync_roles(user.id, principal.roles)
         return user
 
     async def _sync_roles(self, user_id: uuid.UUID, principal_roles: frozenset[str]) -> None:

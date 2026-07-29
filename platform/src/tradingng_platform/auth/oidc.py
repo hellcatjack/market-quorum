@@ -7,36 +7,35 @@ import jwt
 
 from tradingng_platform.auth.principal import Principal
 
-_VIEWER_SCOPES = frozenset(
+FORMAL_ROLES = frozenset({"Admin", "User"})
+USER_SCOPES = frozenset(
     {
         "assessments:read",
+        "assessments:submit",
+        "assessments:cancel",
+        "assessments:review",
         "validations:read",
-        "system:read",
+        "validations:write",
         "artifacts:read",
     }
 )
-_ROLE_SCOPES = {
-    "Viewer": _VIEWER_SCOPES,
-    "Analyst": _VIEWER_SCOPES
-    | {
-        "assessments:submit",
-        "assessments:cancel",
-        "validations:write",
-    },
-    "Admin": _VIEWER_SCOPES
-    | {
-        "assessments:submit",
-        "assessments:cancel",
+ADMIN_SCOPES = USER_SCOPES | frozenset(
+    {
         "assessments:admin",
-        "validations:write",
-    },
+        "system:read",
+        "users:manage",
+    }
+)
+ROLE_SCOPES = {
+    "User": USER_SCOPES,
+    "Admin": ADMIN_SCOPES,
 }
 
 
 def _human_scopes(token_scopes: frozenset[str], roles: frozenset[str]) -> frozenset[str]:
     allowed: set[str] = set()
     for role in roles:
-        allowed.update(_ROLE_SCOPES.get(role, ()))
+        allowed.update(ROLE_SCOPES.get(role, ()))
     return token_scopes & allowed
 
 

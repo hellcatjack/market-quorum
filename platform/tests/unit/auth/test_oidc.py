@@ -21,7 +21,7 @@ def _encode_token(private_key, **overrides):
         "iat": now,
         "exp": now + 300,
         "scope": "assessments:read assessments:submit",
-        "realm_access": {"roles": ["Analyst"]},
+        "realm_access": {"roles": ["User"]},
         "name": "Alice",
         "email": "alice@example.com",
     }
@@ -62,7 +62,7 @@ async def test_verify_maps_principal_and_caches_jwks(oidc_server):
 
     assert principal.subject == "alice-sub"
     assert principal.scopes == frozenset({"assessments:read", "assessments:submit"})
-    assert principal.roles == frozenset({"Analyst"})
+    assert principal.roles == frozenset({"User"})
     assert request_counts == {"discovery": 1, "jwks": 1}
 
 
@@ -70,23 +70,14 @@ async def test_verify_maps_principal_and_caches_jwks(oidc_server):
     ("role", "expected_scopes"),
     [
         (
-            "Viewer",
-            {
-                "assessments:read",
-                "validations:read",
-                "system:read",
-                "artifacts:read",
-            },
-        ),
-        (
-            "Analyst",
+            "User",
             {
                 "assessments:read",
                 "assessments:submit",
                 "assessments:cancel",
+                "assessments:review",
                 "validations:read",
                 "validations:write",
-                "system:read",
                 "artifacts:read",
             },
         ),
@@ -96,11 +87,13 @@ async def test_verify_maps_principal_and_caches_jwks(oidc_server):
                 "assessments:read",
                 "assessments:submit",
                 "assessments:cancel",
+                "assessments:review",
                 "assessments:admin",
                 "validations:read",
                 "validations:write",
                 "system:read",
                 "artifacts:read",
+                "users:manage",
             },
         ),
     ],
@@ -111,11 +104,13 @@ async def test_human_scopes_are_bounded_by_realm_role(oidc_server, role, expecte
         "assessments:read",
         "assessments:submit",
         "assessments:cancel",
+        "assessments:review",
         "assessments:admin",
         "validations:read",
         "validations:write",
         "system:read",
         "artifacts:read",
+        "users:manage",
     }
     token = _encode_token(
         private_key,
@@ -127,6 +122,19 @@ async def test_human_scopes_are_bounded_by_realm_role(oidc_server, role, expecte
 
     assert principal.actor_type == "user"
     assert principal.scopes == frozenset(expected_scopes)
+
+
+async def test_legacy_human_role_has_no_platform_scopes(oidc_server):
+    private_key, transport, _ = oidc_server
+    token = _encode_token(
+        private_key,
+        scope="assessments:read system:read",
+        realm_access={"roles": ["Analyst"]},
+    )
+    async with httpx.AsyncClient(transport=transport) as client:
+        principal = await OidcVerifier(ISSUER, AUDIENCE, client=client).verify(token)
+
+    assert principal.scopes == frozenset()
 
 
 async def test_service_account_scopes_are_not_role_bounded(oidc_server):
