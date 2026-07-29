@@ -170,6 +170,9 @@
       "serviceAccountsEnabled": false,
       "redirectUris": ["https://ushome.amycat.com/oauth2/callback"],
       "webOrigins": ["https://ushome.amycat.com"],
+      "attributes": {
+        "post.logout.redirect.uris": "https://ushome.amycat.com/"
+      },
       "defaultClientScopes": ["basic", "profile", "email", "roles", "assessments:read", "assessments:submit", "assessments:cancel", "assessments:review", "assessments:admin", "validations:read", "validations:write", "system:read", "artifacts:read", "users:manage", "tradingng-api-resource"],
       "optionalClientScopes": []
     },

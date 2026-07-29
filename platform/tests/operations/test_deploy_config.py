@@ -92,6 +92,7 @@ def test_keycloak_clients_scopes_and_mcp_audience_match_platform():
     for client in realm["clients"]:
         assert "basic" in client["defaultClientScopes"]
     web = next(item for item in realm["clients"] if item["clientId"] == "tradingng-web")
+    assert web["attributes"]["post.logout.redirect.uris"] == ("https://ushome.amycat.com/")
     assert {
         "roles",
         "assessments:read",

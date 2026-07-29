@@ -143,7 +143,7 @@ git commit -m "fix: route browser logout through Keycloak"
 - Modify: `scripts/sync_keycloak_public_urls.py`
 - Modify: `deploy/keycloak/tradingng-realm.json`
 
-- [ ] **Step 1: Write failing live-reconciliation assertions**
+- [x] **Step 1: Write failing live-reconciliation assertions**
 
 In `platform/tests/operations/test_keycloak_sync.py`, import the new constant:
 
@@ -172,7 +172,7 @@ Require the reconciled Web client payload to preserve the unrelated attribute an
 },
 ```
 
-- [ ] **Step 2: Write the failing clean-install Realm assertion**
+- [x] **Step 2: Write the failing clean-install Realm assertion**
 
 In `platform/tests/operations/test_deploy_config.py`, after resolving the `tradingng-web` client, add:
 
@@ -182,7 +182,7 @@ assert web["attributes"]["post.logout.redirect.uris"] == (
 )
 ```
 
-- [ ] **Step 3: Run operations tests and verify RED**
+- [x] **Step 3: Run operations tests and verify RED**
 
 Run:
 
@@ -195,7 +195,7 @@ cd /app/devs/TradingNG
 
 Expected: FAIL because the synchronizer has no post-logout drift rule and the Realm client has no explicit attribute.
 
-- [ ] **Step 4: Add drift detection and idempotent repair**
+- [x] **Step 4: Add drift detection and idempotent repair**
 
 In `scripts/sync_keycloak_public_urls.py`, add:
 
@@ -229,7 +229,7 @@ if {
     self._put(f"/admin/realms/{REALM}/clients/{web['id']}", web)
 ```
 
-- [ ] **Step 5: Add the clean-install client attribute**
+- [x] **Step 5: Add the clean-install client attribute**
 
 In the `tradingng-web` object in `deploy/keycloak/tradingng-realm.json`, add:
 
@@ -239,7 +239,7 @@ In the `tradingng-web` object in `deploy/keycloak/tradingng-realm.json`, add:
 },
 ```
 
-- [ ] **Step 6: Run operations tests and formatting checks**
+- [x] **Step 6: Run operations tests and formatting checks**
 
 Run:
 
@@ -258,7 +258,7 @@ cd /app/devs/TradingNG
 
 Expected: all tests and formatting checks exit 0.
 
-- [ ] **Step 7: Commit the Keycloak desired state**
+- [x] **Step 7: Commit the Keycloak desired state**
 
 ```bash
 cd /app/devs/TradingNG

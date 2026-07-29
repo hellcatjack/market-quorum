@@ -12,6 +12,7 @@ from dotenv import dotenv_values
 
 PUBLIC_BASE_URL = "https://ushome.amycat.com"
 PUBLIC_WEB_REDIRECT = f"{PUBLIC_BASE_URL}/oauth2/callback"
+PUBLIC_WEB_POST_LOGOUT_REDIRECT = f"{PUBLIC_BASE_URL}/"
 PUBLIC_MCP_RESOURCE = f"{PUBLIC_BASE_URL}/mcp"
 REALM = "tradingng"
 CLIENT_IDS = ("tradingng-web", "tradingng-api", "tradingng-mcp")
@@ -168,6 +169,10 @@ class PublicUrlSynchronizer:
             drift.add("tradingng-web.redirectUris")
         if web.get("webOrigins") != [PUBLIC_BASE_URL]:
             drift.add("tradingng-web.webOrigins")
+        if web.get("attributes", {}).get("post.logout.redirect.uris") != (
+            PUBLIC_WEB_POST_LOGOUT_REDIRECT
+        ):
+            drift.add("tradingng-web.postLogoutRedirectUris")
         mapper_config = snapshot.mcp_mapper.get("config", {})
         audience = mapper_config.get("included.custom.audience")
         if (
@@ -209,10 +214,14 @@ class PublicUrlSynchronizer:
         if {
             "tradingng-web.redirectUris",
             "tradingng-web.webOrigins",
+            "tradingng-web.postLogoutRedirectUris",
         } & drift:
             web = deepcopy(snapshot.clients["tradingng-web"])
             web["redirectUris"] = [PUBLIC_WEB_REDIRECT]
             web["webOrigins"] = [PUBLIC_BASE_URL]
+            web.setdefault("attributes", {})["post.logout.redirect.uris"] = (
+                PUBLIC_WEB_POST_LOGOUT_REDIRECT
+            )
             self._put(f"/admin/realms/{REALM}/clients/{web['id']}", web)
         if "tradingng-mcp-resource.audience" in drift:
             mapper = deepcopy(snapshot.mcp_mapper)
