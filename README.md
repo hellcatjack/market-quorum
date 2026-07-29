@@ -359,6 +359,63 @@ build while leaving the additive tables intact. Once integrity rows exist, do
 not run the Alembic downgrade: preserving audit artifacts and verdicts is safer
 than destructively removing production evidence.
 
+## User administration and permission boundaries
+
+Human accounts have exactly one formal realm role. Effective permissions are
+recomputed on every request from both that role and the token scopes:
+
+| Capability | Admin | User |
+|---|---:|---:|
+| Read, submit, cancel, and review assessments | Yes | Yes |
+| Read/write validations and read artifacts | Yes | Yes |
+| Read full system diagnostics | Yes | No |
+| Change scheduler/model policy | Yes | No |
+| Create and administer users | Yes | No |
+
+Administrators use `/users` to search and page through accounts, inspect active
+sessions, create users, edit profiles and roles, enable or disable access, reset
+passwords, and force sign-out. Creation and reset generate a high-entropy
+temporary password that is shown once and cleared from browser state when the
+dialog closes. The user must change it at first sign-in. MarketQuorum never
+stores password plaintext. Accounts are disabled rather than permanently
+deleted so assessment ownership, reviews, and audit history remain attributable.
+The signed-in administrator cannot remove their own access, and the last enabled
+administrator cannot be disabled or demoted.
+
+Keycloak remains authoritative for usernames, profiles, enabled state, formal
+roles, credentials, and sessions. The platform uses the dedicated
+`tradingng-user-admin` service account with least-privilege realm-management
+roles; runtime code does not use Keycloak bootstrap credentials. Configure only
+the private, ignored `.env.platform` file:
+
+```dotenv
+TRADINGNG_KEYCLOAK_ADMIN_URL=http://127.0.0.1:18081
+TRADINGNG_KEYCLOAK_ADMIN_REALM=tradingng
+TRADINGNG_KEYCLOAK_ADMIN_CLIENT_ID=tradingng-user-admin
+TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=replace-with-secret
+```
+
+Reconciliation is idempotent. Check drift before applying it and confirm a
+second check is clean:
+
+```bash
+.venv/bin/python scripts/sync_keycloak_user_management.py --env-file .env.platform --check
+.venv/bin/python scripts/sync_keycloak_user_management.py --env-file .env.platform --apply
+.venv/bin/python scripts/sync_keycloak_user_management.py --env-file .env.platform --check
+```
+
+Ordinary users read only `/api/v1/assessments/admission-summary`, which exposes
+safe queue/admission information. `/api/v1/system/*`, scheduling/model policy,
+and `/api/v1/admin/users*` remain Admin-only. User administration is available
+through versioned REST endpoints but deliberately has no MCP tools, preventing
+temporary credentials from entering model context. This integration is entirely
+outside `TradingAgents/`.
+
+On application rollback, retain the Keycloak `User` role, all accounts, disabled
+states, the additive identity-sync column, and audit events. Do not delete users,
+roll passwords back, or regrant `system:read` to legacy roles merely to match an
+older application build.
+
 ## REST, MCP, events, and webhooks
 
 REST and Web use the same application services and immutable records. The MCP

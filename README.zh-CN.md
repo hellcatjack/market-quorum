@@ -311,6 +311,53 @@ TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)
 生产环境一旦写入完整性记录，不得执行 Alembic downgrade；保留审计产物和裁决比
 破坏性删除生产证据更安全。
 
+## 用户管理与权限边界
+
+每个人类账号只具有一个正式 Realm 角色。平台在每次请求时同时依据角色和 Token
+scope 重新计算实际权限：
+
+| 能力 | 管理员 Admin | 一般用户 User |
+|---|---:|---:|
+| 读取、派发、取消和复核评估 | 允许 | 允许 |
+| 读写表现验证、读取产物 | 允许 | 允许 |
+| 查看完整系统诊断 | 允许 | 禁止 |
+| 修改调度与模型策略 | 允许 | 禁止 |
+| 创建和管理用户 | 允许 | 禁止 |
+
+管理员通过 `/users` 搜索和分页查看账号、检查活动会话、创建用户、编辑资料与角色、
+启停账号、重置密码以及强制登出。创建和重置时生成高熵临时密码，只显示一次；对话框
+关闭后即从浏览器状态清除，用户首次登录必须修改。MarketQuorum 永不保存明文密码。
+系统使用“停用”而不是永久删除，以保留评估归属、复核和审计链。当前登录管理员不能
+移除自己的管理权限，最后一个已启用管理员也不能被停用或降级。
+
+Keycloak 继续作为用户名、资料、启用状态、正式角色、凭据和会话的权威来源。平台使用
+独立的 `tradingng-user-admin` 服务账号及最小化 Realm 管理权限，运行时不使用
+Keycloak bootstrap 管理员凭据。只在被 Git 忽略的私有 `.env.platform` 中配置：
+
+```dotenv
+TRADINGNG_KEYCLOAK_ADMIN_URL=http://127.0.0.1:18081
+TRADINGNG_KEYCLOAK_ADMIN_REALM=tradingng
+TRADINGNG_KEYCLOAK_ADMIN_CLIENT_ID=tradingng-user-admin
+TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=replace-with-secret
+```
+
+对账脚本可重复执行。应用前先检查差异，应用后再检查一次并确认收敛：
+
+```bash
+.venv/bin/python scripts/sync_keycloak_user_management.py --env-file .env.platform --check
+.venv/bin/python scripts/sync_keycloak_user_management.py --env-file .env.platform --apply
+.venv/bin/python scripts/sync_keycloak_user_management.py --env-file .env.platform --check
+```
+
+一般用户只读取 `/api/v1/assessments/admission-summary`，其中仅包含安全的队列与准入
+摘要。`/api/v1/system/*`、调度/模型策略和 `/api/v1/admin/users*` 均只允许管理员。
+用户管理通过版本化 REST 接口开放，但刻意不提供 MCP 工具，避免临时凭据进入模型
+上下文。整个集成完全位于 `TradingAgents/` 外部。
+
+应用代码回滚时必须保留 Keycloak `User` 角色、全部账号、停用状态、加法新增的身份
+同步字段和审计事件；不得删除用户、回滚密码，或为了适配旧版本而重新向旧角色授予
+`system:read`。
+
 ## REST、MCP、事件与 Webhook
 
 REST 与 Web 共用同一套应用服务和不可变记录。MCP 在 `/mcp` 提供无状态

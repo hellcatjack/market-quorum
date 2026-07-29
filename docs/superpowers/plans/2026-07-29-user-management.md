@@ -869,7 +869,7 @@ Run: `cd web && npm run typecheck && npm run lint`
 
 Expected: both exit 0.
 
-- [ ] **Step 8: Commit the administration UI**
+- [x] **Step 8: Commit the administration UI**
 
 ```bash
 git add web/src/features/users web/src/app/App.tsx web/src/i18n/messages.ts web/src/styles/global.css
@@ -886,7 +886,7 @@ git commit -m "feat: add bilingual user management console"
 - Modify: `docs/superpowers/specs/2026-07-29-user-management-design.md`
 - Modify: `scripts/verify_platform.sh`
 
-- [ ] **Step 1: Regenerate the OpenAPI TypeScript contract**
+- [x] **Step 1: Regenerate the OpenAPI TypeScript contract**
 
 Run:
 
@@ -899,11 +899,11 @@ npm run api:generate
 
 Expected: `web/src/api/schema.d.ts` includes the six admin-user paths and assessment admission-summary path, and contains no delete-user operation.
 
-- [ ] **Step 2: Strengthen the contract test**
+- [x] **Step 2: Strengthen the contract test**
 
 Assert operation ids and schemas for list/detail/create/update/reset/logout plus admission summary. Assert the temporary-password property occurs only in create/reset response schemas, not `UserView`, `UserPage`, `/me`, errors, or audits.
 
-- [ ] **Step 3: Document operator and user behavior in separate languages**
+- [x] **Step 3: Document operator and user behavior in separate languages**
 
 In both READMEs document:
 
@@ -919,7 +919,7 @@ In both READMEs document:
 
 Change the design spec status to implemented only after the complete verification in Step 4 succeeds.
 
-- [ ] **Step 4: Run complete repository verification**
+- [x] **Step 4: Run complete repository verification**
 
 Run backend:
 
@@ -963,7 +963,7 @@ rg -n 'TB[D]|TO[D]O|implement la[t]er|fill in detai[l]s' platform/src web/src sc
 
 Expected: config verification passes, `git diff --check` is silent, and the placeholder scan returns no newly introduced placeholder.
 
-- [ ] **Step 5: Commit contracts and documentation**
+- [x] **Step 5: Commit contracts and documentation**
 
 ```bash
 git add web/src/api/schema.d.ts web/src/test/contract.test.ts README.md README.zh-CN.md docs/superpowers/specs/2026-07-29-user-management-design.md scripts/verify_platform.sh

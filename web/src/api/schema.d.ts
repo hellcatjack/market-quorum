@@ -38,6 +38,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Users */
+        get: operations["list_admin_users"];
+        put?: never;
+        /** Create User */
+        post: operations["create_admin_user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User */
+        get: operations["get_admin_user"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update User */
+        patch: operations["update_admin_user"];
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout User */
+        post: operations["logout_admin_user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Password */
+        post: operations["reset_admin_user_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/api-credentials": {
         parameters: {
             query?: never;
@@ -136,6 +206,23 @@ export interface paths {
         put?: never;
         /** Submit Assessment */
         post: operations["submit_assessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assessments/admission-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Assessment Admission Summary */
+        get: operations["get_assessment_admission_summary"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -646,6 +733,27 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AdmissionSummaryView */
+        AdmissionSummaryView: {
+            /**
+             * Admission
+             * @enum {string}
+             */
+            admission: "immediate" | "queued" | "paused";
+            /** Max Running */
+            max_running: number;
+            /** Oldest Queued Seconds */
+            oldest_queued_seconds: number | null;
+            /** Queued */
+            queued: number;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "capacity_available" | "capacity_busy" | "temporarily_paused";
+            /** Running */
+            running: number;
+        };
         /** ApiCredentialView */
         ApiCredentialView: {
             /**
@@ -795,6 +903,23 @@ export interface components {
             comment: string;
             /** Verdict */
             verdict: string;
+        };
+        /** CreateUserCommand */
+        CreateUserCommand: {
+            /** Display Name */
+            display_name: string;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "Admin" | "User";
+            /** Username */
+            username: string;
         };
         /** CreateWebhook */
         CreateWebhook: {
@@ -1540,6 +1665,13 @@ export interface components {
             /** Version */
             version: number;
         };
+        /** SessionSummary */
+        SessionSummary: {
+            /** Active Count */
+            active_count: number;
+            /** Last Access At */
+            last_access_at: string | null;
+        };
         /** SubmitAssessments */
         SubmitAssessments: {
             /**
@@ -1565,6 +1697,85 @@ export interface components {
             language: string;
             /** @default independent */
             memory_mode: components["schemas"]["MemoryMode"];
+        };
+        /** TemporaryPasswordResponse */
+        TemporaryPasswordResponse: {
+            /** Temporary Password */
+            temporary_password: string;
+            user: components["schemas"]["UserView"];
+        };
+        /** UpdateUserCommand */
+        UpdateUserCommand: {
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Enabled */
+            enabled?: boolean | null;
+            /** Role */
+            role?: ("Admin" | "User") | null;
+        };
+        /** UserActionFlags */
+        UserActionFlags: {
+            /** Change Enabled */
+            change_enabled: boolean;
+            /** Change Role */
+            change_role: boolean;
+            /** Edit Profile */
+            edit_profile: boolean;
+            /** Logout */
+            logout: boolean;
+            /** Reset Password */
+            reset_password: boolean;
+        };
+        /** UserDetailView */
+        UserDetailView: {
+            /** Action Reasons */
+            action_reasons: {
+                [key: string]: string;
+            };
+            allowed_actions: components["schemas"]["UserActionFlags"];
+            sessions: components["schemas"]["SessionSummary"];
+            user: components["schemas"]["UserView"];
+        };
+        /** UserPage */
+        UserPage: {
+            /** Items */
+            items: components["schemas"]["UserView"][];
+            /** Page */
+            page: number;
+            /** Page Size */
+            page_size: number;
+            /** Total */
+            total: number;
+        };
+        /** UserView */
+        UserView: {
+            /** Display Name */
+            display_name: string;
+            /** Email */
+            email: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "Admin" | "User";
+            /** Subject */
+            subject: string;
+            /**
+             * Synced At
+             * Format: date-time
+             */
+            synced_at: string;
+            /** Username */
+            username: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -1749,6 +1960,202 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    list_admin_users: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                role?: ("Admin" | "User") | null;
+                status?: ("active" | "disabled") | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_admin_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemporaryPasswordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDetailView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_admin_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateUserCommand"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDetailView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logout_admin_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserDetailView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_admin_user_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemporaryPasswordResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1998,6 +2405,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_assessment_admission_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdmissionSummaryView"];
                 };
             };
         };
