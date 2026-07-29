@@ -6,9 +6,27 @@ import { memoryLocation } from "wouter/memory-location";
 import { App } from "./App";
 import { I18nProvider } from "../i18n/I18nProvider";
 
+let currentIdentity: {
+  subject: string;
+  display_name: string;
+  email: string;
+  scopes: string[];
+  roles: string[];
+};
+let requestedPaths: string[];
+
 beforeEach(() => {
+  currentIdentity = {
+    subject: "alice",
+    display_name: "Alice",
+    email: "alice@example.com",
+    scopes: ["assessments:read", "assessments:submit"],
+    roles: ["User"],
+  };
+  requestedPaths = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = String(input);
+    requestedPaths.push(path);
     let body: unknown;
     if (path.includes("/assessments/admission-summary")) {
       body = {
@@ -49,12 +67,7 @@ beforeEach(() => {
         tool_vendors: {},
       };
     } else {
-      body = {
-        subject: "alice",
-        display_name: "Alice",
-        scopes: ["assessments:read"],
-        roles: ["Viewer"],
-      };
+      body = currentIdentity;
     }
     return new Response(JSON.stringify(body), {
       status: 200,
@@ -64,6 +77,16 @@ beforeEach(() => {
 });
 
 test("renders the Chinese management shell and all primary routes", async () => {
+  currentIdentity = {
+    ...currentIdentity,
+    scopes: [
+      "assessments:read",
+      "assessments:submit",
+      "system:read",
+      "users:manage",
+    ],
+    roles: ["Admin"],
+  };
   const { hook } = memoryLocation({ path: "/" });
   render(
     <Router hook={hook}>
@@ -73,7 +96,8 @@ test("renders the Chinese management shell and all primary routes", async () => 
 
   expect(screen.getByRole("link", { name: "总览" })).toHaveAttribute("href", "/");
   expect(screen.getByRole("link", { name: "新建评估" })).toHaveAttribute("href", "/new");
-  expect(screen.getByRole("link", { name: "系统状态" })).toHaveAttribute("href", "/system");
+  expect(await screen.findByRole("link", { name: "系统状态" })).toHaveAttribute("href", "/system");
+  expect(await screen.findByRole("link", { name: "用户管理" })).toHaveAttribute("href", "/users");
   expect(screen.getByRole("link", { name: "退出" })).toHaveAttribute(
     "href",
     "/oauth2/sign_out",
@@ -81,6 +105,24 @@ test("renders the Chinese management shell and all primary routes", async () => 
   expect(await screen.findByText("Alice")).toBeInTheDocument();
   expect(screen.getByLabelText("排队任务")).toHaveTextContent("队列");
 });
+
+test.each(["/system", "/users"])(
+  "ordinary users cannot mount protected route %s or request its data",
+  async (path) => {
+    const { hook } = memoryLocation({ path });
+    render(
+      <Router hook={hook}>
+        <App />
+      </Router>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "无权访问" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "系统状态" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "用户管理" })).not.toBeInTheDocument();
+    expect(requestedPaths.some((item) => item.includes("/system/"))).toBe(false);
+    expect(requestedPaths.some((item) => item.includes("/admin/users"))).toBe(false);
+  },
+);
 
 test("defines the run detail route", async () => {
   const { hook } = memoryLocation({ path: "/runs/run-123" });

@@ -1,4 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { Route, Switch } from "wouter";
 
 import { NewAssessmentPage } from "../features/assessments/NewAssessmentPage";
@@ -8,12 +9,16 @@ import { RunDetailPage } from "../features/runs/RunDetailPage";
 import { SystemPage } from "../features/system/SystemPage";
 import { Layout } from "./Layout";
 import { useI18n } from "../i18n/I18nProvider";
+import { CurrentUserProvider } from "../auth/CurrentUserProvider";
+import { AuthorizedRoute } from "./AuthorizedRoute";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { refetchOnWindowFocus: false },
-  },
-});
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: { refetchOnWindowFocus: false },
+    },
+  });
+}
 
 function PlaceholderPage({ title, description }: { title: string; description: string }) {
   const { t } = useI18n();
@@ -34,10 +39,12 @@ function PlaceholderPage({ title, description }: { title: string; description: s
 
 export function App() {
   const { t } = useI18n();
+  const [queryClient] = useState(createQueryClient);
   return (
     <QueryClientProvider client={queryClient}>
-      <Layout>
-        <Switch>
+      <CurrentUserProvider>
+        <Layout>
+          <Switch>
           <Route path="/">
             <DashboardPage />
           </Route>
@@ -51,13 +58,24 @@ export function App() {
             <InstrumentHistoryPage />
           </Route>
           <Route path="/system">
-            <SystemPage />
+            <AuthorizedRoute role="Admin" scope="system:read">
+              <SystemPage />
+            </AuthorizedRoute>
+          </Route>
+          <Route path="/users">
+            <AuthorizedRoute role="Admin" scope="users:manage">
+              <PlaceholderPage
+                title={t("用户管理")}
+                description={t("创建、启停和维护平台登录账号。")}
+              />
+            </AuthorizedRoute>
           </Route>
           <Route>
             <PlaceholderPage title={t("页面不存在")} description={t("请从主导航选择一个功能。")} />
           </Route>
-        </Switch>
-      </Layout>
+          </Switch>
+        </Layout>
+      </CurrentUserProvider>
     </QueryClientProvider>
   );
 }

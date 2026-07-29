@@ -1,16 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 
-import { apiRequest } from "../api/client";
+import { useCurrentUser } from "../auth/CurrentUserContext";
 import { useI18n } from "../i18n/I18nProvider";
-
-interface CurrentUser {
-  subject: string;
-  display_name: string;
-  scopes: string[];
-  roles: string[];
-}
 
 function navigationClass(isActive: boolean): string {
   return isActive ? "nav-link nav-link--active" : "nav-link";
@@ -36,12 +28,9 @@ function NavigationLink({
 
 export function Layout({ children }: { children: ReactNode }) {
   const { locale, setLocale, t } = useI18n();
-  const currentUser = useQuery({
-    queryKey: ["current-user"],
-    queryFn: () => apiRequest<CurrentUser>("/api/v1/me"),
-    staleTime: 60_000,
-    retry: false,
-  });
+  const currentUser = useCurrentUser();
+  const canSeeSystem = currentUser.hasRole("Admin") && currentUser.hasScope("system:read");
+  const canManageUsers = currentUser.hasRole("Admin") && currentUser.hasScope("users:manage");
 
   return (
     <div className="app-frame">
@@ -71,7 +60,7 @@ export function Layout({ children }: { children: ReactNode }) {
             </select>
           </label>
           <span className="current-user" aria-live="polite">
-            {currentUser.data?.display_name || (currentUser.isError ? t("身份不可用") : t("载入中…"))}
+            {currentUser.user?.display_name || (currentUser.isError ? t("身份不可用") : t("载入中…"))}
           </span>
           <a className="logout-link" href="/oauth2/sign_out">
             {t("退出")}
@@ -86,9 +75,16 @@ export function Layout({ children }: { children: ReactNode }) {
           <NavigationLink href="/new">
             <span aria-hidden="true">＋</span> {t("新建评估")}
           </NavigationLink>
-          <NavigationLink href="/system">
-            <span aria-hidden="true">◉</span> {t("系统状态")}
-          </NavigationLink>
+          {canSeeSystem ? (
+            <NavigationLink href="/system">
+              <span aria-hidden="true">◉</span> {t("系统状态")}
+            </NavigationLink>
+          ) : null}
+          {canManageUsers ? (
+            <NavigationLink href="/users">
+              <span aria-hidden="true">♙</span> {t("用户管理")}
+            </NavigationLink>
+          ) : null}
         </nav>
         <main className="main-content" id="main-content">
           {children}

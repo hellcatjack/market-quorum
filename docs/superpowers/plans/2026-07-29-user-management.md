@@ -683,7 +683,7 @@ The runtime platform never uses bootstrap credentials. Add a `tradingng-platform
 
 Add the four documented management variables with blank/placeholder secrets to `.env.platform.example`. Extend `scripts/verify_platform.sh` to parse the realm JSON, validate the new scopes/client, and ensure tracked files contain no non-placeholder client secret.
 
-- [ ] **Step 7: Run deployment tests and config verification**
+- [x] **Step 7: Run deployment tests and config verification**
 
 Run: `cd platform && ../.venv/bin/pytest tests/operations/test_keycloak_user_management.py tests/operations/test_deploy_config.py -q`
 
@@ -693,7 +693,7 @@ Run: `cd /app/devs/TradingNG && bash scripts/verify_platform.sh`
 
 Expected: all static/config checks PASS; database-dependent checks use the script's existing environment behavior.
 
-- [ ] **Step 8: Commit the realm migration**
+- [x] **Step 8: Commit the realm migration**
 
 ```bash
 git add deploy/keycloak/tradingng-realm.json scripts/sync_keycloak_user_management.py platform/tests/operations/test_keycloak_user_management.py platform/tests/operations/test_deploy_config.py .env.platform.example scripts/verify_platform.sh platform/pyproject.toml
@@ -711,17 +711,17 @@ git commit -m "feat: provision formal Keycloak user management roles"
 - Modify: `web/src/app/Layout.tsx`
 - Modify test: `web/src/app/App.test.tsx`
 
-- [ ] **Step 1: Write failing navigation and direct-route tests**
+- [x] **Step 1: Write failing navigation and direct-route tests**
 
 Render the app with Admin and User `/me` responses. Assert Admin sees System Status and User Management links. Assert User sees neither. Navigate directly to `/system` and `/users` as User, assert the bilingual access-denied heading, and assert the recorded fetch list contains neither `/system/` nor `/admin/users`.
 
-- [ ] **Step 2: Run the app tests and observe unconditional links/requests**
+- [x] **Step 2: Run the app tests and observe unconditional links/requests**
 
 Run: `cd web && npm test -- --run src/app/App.test.tsx`
 
 Expected: FAIL because system navigation is unconditional and `/users` is absent.
 
-- [ ] **Step 3: Implement one current-user source of truth**
+- [x] **Step 3: Implement one current-user source of truth**
 
 `CurrentUserProvider` owns the TanStack query `queryKey: ["current-user"]` for `/api/v1/me` and exposes:
 
@@ -744,15 +744,15 @@ interface CurrentUserContextValue {
 
 Remove the duplicate `/me` query from `Layout`.
 
-- [ ] **Step 4: Implement guards before protected page mounting**
+- [x] **Step 4: Implement guards before protected page mounting**
 
 `AuthorizedRoute` receives `role` and `scope`. While identity loads it renders a status shell; when denied it renders `AccessDeniedPage`; only when allowed does it render `children`. Wrap `/system` with Admin+`system:read` and `/users` with Admin+`users:manage`. Because children are not mounted when denied, their queries cannot run.
 
-- [ ] **Step 5: Make navigation conditional on the same effective identity**
+- [x] **Step 5: Make navigation conditional on the same effective identity**
 
 Always show Overview and New Assessment. Show System Status only when Admin+`system:read`; show User Management only when Admin+`users:manage`. Keep the existing locale and sign-out controls.
 
-- [ ] **Step 6: Run authorization tests**
+- [x] **Step 6: Run authorization tests**
 
 Run: `cd web && npm test -- --run src/auth/CurrentUserProvider.test.tsx src/app/App.test.tsx`
 
