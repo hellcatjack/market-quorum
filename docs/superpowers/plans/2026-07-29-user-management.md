@@ -1064,7 +1064,7 @@ With an authenticated test Admin session/API harness:
 
 Expected: every boundary passes, the smoke account remains disabled for traceability, and no live assessment is interrupted.
 
-- [ ] **Step 6: Final security and repository check**
+- [x] **Step 6: Final security and repository check**
 
 Run:
 
@@ -1078,7 +1078,7 @@ git ls-files .env .env.platform var reports
 
 Expected: only intended commits/changes exist, diff check is silent, and the final command prints no private environment, runtime, or report file.
 
-- [ ] **Step 7: Commit any smoke-only documentation result, without committing secrets**
+- [x] **Step 7: Commit any smoke-only documentation result, without committing secrets**
 
 If Step 5 required no source fix, do not create an empty commit. If documentation records the successful acceptance, stage only that tracked document and use:
 
