@@ -4,6 +4,7 @@ import uuid
 from datetime import date, datetime
 from decimal import Decimal
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -40,6 +41,15 @@ class SubmitAssessments(BaseModel):
     memory_mode: MemoryMode = MemoryMode.INDEPENDENT
     language: str = "Chinese"
     idempotency_key: str = Field(min_length=8, max_length=128)
+
+
+class AdmissionSummaryView(BaseModel):
+    running: int
+    max_running: int
+    queued: int
+    oldest_queued_seconds: int | None
+    admission: Literal["immediate", "queued", "paused"]
+    reason: Literal["capacity_available", "capacity_busy", "temporarily_paused"]
 
 
 class RunView(BaseModel):

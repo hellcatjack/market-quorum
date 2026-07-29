@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from tradingng_platform.api.auth import require_scopes
 from tradingng_platform.api.errors import ApiError, request_id_for
 from tradingng_platform.assessments.contracts import (
+    AdmissionSummaryView,
     ComparisonRequest,
     ComparisonView,
     RunDetailView,
@@ -184,6 +185,18 @@ async def submit_assessment_batch(
     principal: Annotated[Principal, Depends(require_scopes("assessments:submit"))],
 ) -> RunPage:
     return await _submit(command, request, response, principal)
+
+
+@router.get(
+    "/assessments/admission-summary",
+    response_model=AdmissionSummaryView,
+    operation_id="get_assessment_admission_summary",
+)
+async def assessment_admission_summary(
+    request: Request,
+    principal: Annotated[Principal, Depends(require_scopes("assessments:read"))],
+) -> AdmissionSummaryView:
+    return await request.app.state.system.admission_summary(principal)
 
 
 @router.get(

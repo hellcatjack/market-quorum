@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from tradingng_platform.assessments.contracts import AdmissionSummaryView
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
 from tradingng_platform.model_routing import (
@@ -139,6 +140,37 @@ class SystemService:
 
     async def capacity(self, principal: Principal) -> CapacityView:
         principal.require("system:read")
+        return await self._capacity_view()
+
+    async def admission_summary(self, principal: Principal) -> AdmissionSummaryView:
+        principal.require("assessments:read")
+        capacity = await self._capacity_view()
+        infrastructure_reasons = {
+            "cpu",
+            "memory",
+            "disk_gib",
+            "disk_percent",
+            "circuit_breaker",
+        }
+        if capacity.admission_allowed:
+            admission = "immediate"
+            reason = "capacity_available"
+        elif infrastructure_reasons.intersection(capacity.admission_reasons):
+            admission = "paused"
+            reason = "temporarily_paused"
+        else:
+            admission = "queued"
+            reason = "capacity_busy"
+        return AdmissionSummaryView(
+            running=capacity.admitted_or_running,
+            max_running=capacity.max_running_total,
+            queued=capacity.queued,
+            oldest_queued_seconds=capacity.oldest_queued_seconds,
+            admission=admission,
+            reason=reason,
+        )
+
+    async def _capacity_view(self) -> CapacityView:
         gateway = await self.gateway.status()
         alpha_broker = (
             await self.alpha_broker_client.status()

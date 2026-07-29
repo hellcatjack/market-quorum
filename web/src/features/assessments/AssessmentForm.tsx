@@ -2,10 +2,10 @@ import { useMutation } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 
-import type { Capacity, SubmitAssessmentBatch } from "../../api/assessments";
+import type { AdmissionSummary, SubmitAssessmentBatch } from "../../api/assessments";
 import { submitAssessmentBatch } from "../../api/assessments";
 import { ApiClientError } from "../../api/client";
-import { CapacityBanner } from "../system/CapacityBanner";
+import { AdmissionBanner } from "./AdmissionBanner";
 import { useI18n } from "../../i18n/I18nProvider";
 import type { MessageKey } from "../../i18n/messages";
 import { parseTickers } from "./tickers";
@@ -23,7 +23,7 @@ function localToday(): string {
   return local.toISOString().slice(0, 10);
 }
 
-export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
+export function AssessmentForm({ capacity }: { capacity: AdmissionSummary | null }) {
   const { t } = useI18n();
   const [, navigate] = useLocation();
   const [tickerText, setTickerText] = useState("");
@@ -225,7 +225,7 @@ export function AssessmentForm({ capacity }: { capacity: Capacity | null }) {
         </button>
       </form>
       <aside className="dispatch-aside">
-        {capacity ? <CapacityBanner capacity={capacity} /> : <div className="panel">{t("容量数据载入中…")}</div>}
+        {capacity ? <AdmissionBanner summary={capacity} /> : <div className="panel">{t("容量数据载入中…")}</div>}
         <div className="panel dispatch-note">
           <p className="eyebrow">{t("运行原则")}</p>
           <strong>{t("深度研究按安全容量串并行调度")}</strong>

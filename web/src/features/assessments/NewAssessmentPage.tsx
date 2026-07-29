@@ -1,14 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 
-import { getCapacity } from "../../api/assessments";
+import { getAdmissionSummary } from "../../api/assessments";
 import { AssessmentForm } from "./AssessmentForm";
 import { useI18n } from "../../i18n/I18nProvider";
 
 export function NewAssessmentPage() {
   const { t } = useI18n();
   const capacity = useQuery({
-    queryKey: ["system-capacity"],
-    queryFn: getCapacity,
+    queryKey: ["assessment-admission-summary"],
+    queryFn: getAdmissionSummary,
     refetchInterval: 5_000,
     retry: false,
   });

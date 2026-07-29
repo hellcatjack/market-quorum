@@ -10,19 +10,14 @@ beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const path = String(input);
     let body: unknown;
-    if (path.includes("/system/capacity")) {
+    if (path.includes("/assessments/admission-summary")) {
       body = {
-        admitted_or_running: 0,
-        max_running_total: 2,
-        hard_max_running_total: 3,
+        running: 0,
+        max_running: 2,
         queued: 0,
         oldest_queued_seconds: null,
-        gateway_active_completions: 0,
-        gateway_model: "gpt-5.6-sol",
-        gateway_reasoning_effort: "xhigh",
-        open_circuits: [],
-        admission_allowed: true,
-        admission_reasons: [],
+        admission: "immediate",
+        reason: "capacity_available",
       };
     } else if (path.includes("/assessments?")) {
       body = { items: [] };

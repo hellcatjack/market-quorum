@@ -4,29 +4,20 @@ import userEvent from "@testing-library/user-event";
 import { Router } from "wouter";
 import { memoryLocation } from "wouter/memory-location";
 
-import type { Capacity } from "../../api/assessments";
+import type { AdmissionSummary } from "../../api/assessments";
 import { AssessmentForm } from "./AssessmentForm";
 import { parseTickers } from "./tickers";
 
-const BLOCKED_CAPACITY: Capacity = {
-  admitted_or_running: 2,
-  max_running_total: 2,
-  hard_max_running_total: 3,
+const BLOCKED_CAPACITY: AdmissionSummary = {
+  running: 2,
+  max_running: 2,
   queued: 4,
   oldest_queued_seconds: 90,
-  gateway_active_completions: 2,
-  gateway_model: "gpt-5.6-sol",
-  gateway_reasoning_effort: "xhigh",
-  model_routing: {
-    fast: { model: "gpt-5.6-terra", reasoning_effort: "high" },
-    slow: { model: "gpt-5.6-sol", reasoning_effort: "high" },
-  },
-  open_circuits: ["vendor:finnhub"],
-  admission_allowed: false,
-  admission_reasons: ["running_limit_reached"],
+  admission: "queued",
+  reason: "capacity_busy",
 };
 
-function renderForm(capacity: Capacity = BLOCKED_CAPACITY) {
+function renderForm(capacity: AdmissionSummary = BLOCKED_CAPACITY) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const location = memoryLocation({ path: "/new", record: true });
   render(
@@ -148,7 +139,7 @@ test("validates dates and renders a server error next to the form", async () => 
       { status: 409, headers: { "Content-Type": "application/json" } },
     ),
   );
-  renderForm({ ...BLOCKED_CAPACITY, admission_allowed: true, admission_reasons: [] });
+  renderForm({ ...BLOCKED_CAPACITY, admission: "immediate", reason: "capacity_available" });
   await user.type(screen.getByRole("textbox", { name: "标的代码" }), "TSLA");
   await user.clear(screen.getByLabelText("分析日期"));
   await user.type(screen.getByLabelText("分析日期"), "2999-01-01");

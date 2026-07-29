@@ -3,12 +3,12 @@ import { useMemo, useState } from "react";
 import { Link } from "wouter";
 
 import {
-  getCapacity,
+  getAdmissionSummary,
   listAssessments,
   type AssessmentStatus,
 } from "../../api/assessments";
 import { listInstrumentOverviews } from "../../api/records";
-import { CapacityBanner } from "../system/CapacityBanner";
+import { AdmissionBanner } from "../assessments/AdmissionBanner";
 import { useI18n } from "../../i18n/I18nProvider";
 import { InstrumentLedgerTable } from "./InstrumentLedgerTable";
 import { RunTable } from "./RunTable";
@@ -66,8 +66,8 @@ export function DashboardPage() {
   );
 
   const capacity = useQuery({
-    queryKey: ["system-capacity"],
-    queryFn: getCapacity,
+    queryKey: ["assessment-admission-summary"],
+    queryFn: getAdmissionSummary,
     refetchInterval: 5_000,
     retry: false,
   });
@@ -125,14 +125,8 @@ export function DashboardPage() {
         </div>
         <Link className="primary-button" href="/new">{t("＋ 新建评估")}</Link>
       </header>
-      {capacity.data ? <CapacityBanner capacity={capacity.data} /> : null}
+      {capacity.data ? <AdmissionBanner summary={capacity.data} /> : null}
       {capacity.isError ? <p className="page-warning" role="alert">{t("容量数据暂时不可用。")}</p> : null}
-      {capacity.data?.open_circuits.length ? (
-        <div className="circuit-warning" role="alert">
-          <strong>{t("数据源熔断")}</strong>
-          {capacity.data.open_circuits.map((circuit) => <span key={circuit}>{circuit}</span>)}
-        </div>
-      ) : null}
       <div className="count-grid" aria-label={t("当前筛选状态统计")}>
         <article><span>{t("排队")}</span><strong data-testid="count-queued">{counts.queued}</strong></article>
         <article><span>{t("运行中")}</span><strong data-testid="count-active">{counts.active}</strong></article>

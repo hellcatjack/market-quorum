@@ -7,6 +7,15 @@ export type AssessmentStatus = components["schemas"]["RunStatus"];
 export type Capacity = components["schemas"]["CapacityView"];
 export type SubmitAssessmentBatch = components["schemas"]["SubmitAssessments"];
 
+export interface AdmissionSummary {
+  running: number;
+  max_running: number;
+  queued: number;
+  oldest_queued_seconds: number | null;
+  admission: "immediate" | "queued" | "paused";
+  reason: "capacity_available" | "capacity_busy" | "temporarily_paused";
+}
+
 export interface AssessmentFilters {
   ticker?: string;
   statuses?: AssessmentStatus[];
@@ -40,4 +49,8 @@ export async function listAssessments(
 
 export async function getCapacity(): Promise<Capacity> {
   return apiRequest<Capacity>("/api/v1/system/capacity");
+}
+
+export async function getAdmissionSummary(): Promise<AdmissionSummary> {
+  return apiRequest<AdmissionSummary>("/api/v1/assessments/admission-summary");
 }

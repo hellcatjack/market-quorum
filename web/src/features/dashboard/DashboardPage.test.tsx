@@ -14,21 +14,12 @@ function response(value: unknown) {
 }
 
 const capacity = {
-  admitted_or_running: 2,
-  max_running_total: 2,
-  hard_max_running_total: 8,
+  running: 2,
+  max_running: 2,
   queued: 3,
   oldest_queued_seconds: 125,
-  gateway_active_completions: 2,
-  gateway_model: "gpt-5.6-sol",
-  gateway_reasoning_effort: "xhigh",
-  model_routing: {
-    fast: { model: "gpt-5.6-terra", reasoning_effort: "medium" },
-    slow: { model: "gpt-5.6-sol", reasoning_effort: "high" },
-  },
-  open_circuits: ["vendor:finnhub"],
-  admission_allowed: false,
-  admission_reasons: ["running_limit_reached"],
+  admission: "queued",
+  reason: "capacity_busy",
 };
 
 const runPage = {
@@ -150,23 +141,25 @@ function renderDashboard() {
 }
 
 test("defaults to one instrument row and keeps the full task view available", async () => {
+  const requests: string[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
-    if (url.includes("/system/capacity")) return response(capacity);
+    requests.push(url);
+    if (url.includes("/assessments/admission-summary")) return response(capacity);
     if (url.includes("/instrument-overviews")) return response(overviewPage);
     if (url.includes("/assessments")) return response(runPage);
     throw new Error(`unexpected request: ${url}`);
   });
   renderDashboard();
 
-  expect(await screen.findByText("gpt-5.6-terra · 中")).toBeInTheDocument();
-  expect(screen.getByText("gpt-5.6-sol · 高")).toBeInTheDocument();
-  expect(screen.queryByText("gpt-5.6-sol · xhigh")).not.toBeInTheDocument();
+  expect(await screen.findByText("运行 2/2，排队 3")).toBeInTheDocument();
+  expect(requests).toContain("/api/v1/assessments/admission-summary");
+  expect(requests.some((url) => url.includes("/system/"))).toBe(false);
   expect(screen.getByRole("tab", { name: "标的台账" })).toHaveAttribute(
     "aria-selected",
     "true",
   );
-  expect(screen.getByText("vendor:finnhub")).toBeInTheDocument();
+  expect(screen.queryByText("vendor:finnhub")).not.toBeInTheDocument();
   expect(screen.getByTestId("count-queued")).toHaveTextContent("2");
   expect(screen.getByTestId("count-active")).toHaveTextContent("4");
   expect(screen.getByTestId("count-succeeded")).toHaveTextContent("53");
@@ -226,7 +219,7 @@ test("defaults to one instrument row and keeps the full task view available", as
 test("explains validation permission limits without hiding conclusions", async () => {
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
     const url = String(input);
-    if (url.includes("/system/capacity")) return response(capacity);
+    if (url.includes("/assessments/admission-summary")) return response(capacity);
     if (url.includes("/instrument-overviews")) {
       return response({
         ...overviewPage,

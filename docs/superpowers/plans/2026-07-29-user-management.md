@@ -543,7 +543,7 @@ Run: `cd /app/devs/TradingNG && .venv/bin/python scripts/export_openapi.py && rg
 
 Expected at this stage: six `admin/users` operations and `users:manage`; `admission-summary` is added in Task 5.
 
-- [ ] **Step 8: Commit the REST boundary**
+- [x] **Step 8: Commit the REST boundary**
 
 ```bash
 git add platform/src/tradingng_platform/api platform/tests/unit/api/test_users.py platform/tests/unit/api/test_app.py platform/tests/integration/test_rest_api.py
@@ -564,7 +564,7 @@ git commit -m "feat: expose protected user administration API"
 - Modify test: `web/src/features/dashboard/DashboardPage.test.tsx`
 - Modify test: `web/src/features/assessments/AssessmentForm.test.tsx`
 
-- [ ] **Step 1: Add failing backend tests for the sanitized response**
+- [x] **Step 1: Add failing backend tests for the sanitized response**
 
 Expect `GET /api/v1/assessments/admission-summary` under `assessments:read` to return only:
 
@@ -581,21 +581,21 @@ Expect `GET /api/v1/assessments/admission-summary` under `assessments:read` to r
 
 Allow `admission` values `immediate|queued|paused` and reason values `capacity_available|capacity_busy|temporarily_paused`. Explicitly assert the response lacks `gateway`, `model`, `reasoning`, `circuit`, `vendor`, CPU, memory, hard maximum, and internal admission reasons. Assert `system/capacity` remains 403 to User.
 
-- [ ] **Step 2: Run backend tests and observe 404**
+- [x] **Step 2: Run backend tests and observe 404**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/api/test_assessments.py -q -k admission_summary`
 
 Expected: FAIL with 404.
 
-- [ ] **Step 3: Implement the summary by projecting existing capacity state**
+- [x] **Step 3: Implement the summary by projecting existing capacity state**
 
 Add `AdmissionSummaryView` and an `AssessmentService.admission_summary(principal)` method. Reuse the system/scheduler query internally, but map every low-level block reason into one stable user category before returning. The route requires only `assessments:read`. Do not alter MCP `tradingng://system/capacity`, which remains protected by `system:read`.
 
-- [ ] **Step 4: Switch ordinary pages to the new endpoint**
+- [x] **Step 4: Switch ordinary pages to the new endpoint**
 
 In `web/src/api/assessments.ts`, replace the ordinary `fetchCapacity()` call with `fetchAdmissionSummary()` targeting `/api/v1/assessments/admission-summary`. Give `CapacityBanner` a sanitized `AdmissionSummary` mode or create an adjacent compact `AdmissionBanner`; the System page keeps its full system-capacity type and endpoint.
 
-- [ ] **Step 5: Prove ordinary pages never call system diagnostics**
+- [x] **Step 5: Prove ordinary pages never call system diagnostics**
 
 Update Dashboard and AssessmentForm tests to record requested URLs and assert:
 
@@ -604,7 +604,7 @@ expect(requests).toContain("/api/v1/assessments/admission-summary");
 expect(requests.some((url) => url.includes("/system/"))).toBe(false);
 ```
 
-- [ ] **Step 6: Run backend and web slices**
+- [x] **Step 6: Run backend and web slices**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/api/test_assessments.py tests/integration/test_rest_api.py -q`
 

@@ -228,6 +228,58 @@ def test_submit_is_accepted_idempotent_and_location_is_stable(monkeypatch):
     assert second.json()["items"][0]["id"] == str(RUN_ID)
 
 
+def test_user_can_read_only_sanitized_assessment_admission_summary(monkeypatch):
+    user = Principal(
+        issuer="https://issuer.example",
+        subject="user-sub",
+        actor_type="user",
+        scopes=frozenset({"assessments:read"}),
+        roles=frozenset({"User"}),
+    )
+    app = _client(monkeypatch, user)
+
+    class System:
+        async def admission_summary(self, principal):
+            principal.require("assessments:read")
+            return {
+                "running": 2,
+                "max_running": 4,
+                "queued": 3,
+                "oldest_queued_seconds": 18,
+                "admission": "queued",
+                "reason": "capacity_busy",
+            }
+
+    with TestClient(app) as client:
+        app.state.system = System()
+        response = client.get("/api/v1/assessments/admission-summary")
+        diagnostics = client.get("/api/v1/system/capacity")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "running": 2,
+        "max_running": 4,
+        "queued": 3,
+        "oldest_queued_seconds": 18,
+        "admission": "queued",
+        "reason": "capacity_busy",
+    }
+    forbidden_fragments = {
+        "gateway",
+        "model",
+        "reasoning",
+        "circuit",
+        "vendor",
+        "cpu",
+        "memory",
+        "hard_max",
+    }
+    assert not any(
+        fragment in response.text.casefold() for fragment in forbidden_fragments
+    )
+    assert diagnostics.status_code == 403
+
+
 @pytest.mark.parametrize(
     ("error", "status_code", "code"),
     [
