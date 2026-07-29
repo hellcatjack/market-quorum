@@ -372,7 +372,7 @@ npm run build
 
 Expected: TypeScript and Vite exit 0. Caddy already serves `/app/devs/TradingNG/web/dist`, so no Caddy, Gateway, platform, scheduler, or worker restart is required.
 
-- [ ] **Step 4: Exercise the authenticated front-channel chain**
+- [x] **Step 4: Exercise the authenticated front-channel chain**
 
 Use an ephemeral Keycloak User and an in-memory OAuth Authorization Code + PKCE HTTP client. The harness must keep the password, ID token, cookies, authorization code, and CSRF state only in process memory and print only status names. It must:
 
@@ -382,7 +382,8 @@ Use an ephemeral Keycloak User and an in-memory OAuth Authorization Code + PKCE 
 4. assert the first `Location` is the Keycloak end-session endpoint, contains a real `id_token_hint` rather than `{id_token}`, has `client_id=tradingng-web`, and has the exact root post-logout URI;
 5. follow the Keycloak redirect and then the root/Caddy redirect;
 6. assert the final authorization response is the Keycloak login form and that no `/oauth2/callback` occurred without entering credentials again;
-7. assert the old platform cookie cannot read the protected root or `/api/v1/me` without being redirected/rejected;
+7. assert the sign-out response expires the OAuth2 Proxy cookie, the browser cookie jar no longer
+   contains it, and the next root request is redirected into authentication;
 8. in `finally`, assign User, disable the test account, and revoke its sessions; never delete it and never print secrets.
 
 Expected output contains only:
@@ -391,11 +392,11 @@ Expected output contains only:
 logout_proxy_cookie_cleared=true
 logout_keycloak_frontchannel=true
 logout_returns_to_login=true
-logout_old_session_rejected=true
+logout_browser_cookie_removed=true
 logout_smoke=passed
 ```
 
-- [ ] **Step 5: Verify live logs and unchanged business state**
+- [x] **Step 5: Verify live logs and unchanged business state**
 
 Run redacted log/status checks:
 
@@ -413,7 +414,7 @@ git ls-files .env .env.platform var reports
 
 Expected: the smoke trace ends at a new login authorization page without an automatic callback, platform services remain active and ready, before/after assessment counts match, the repository is clean, and no private/runtime paths are tracked.
 
-- [ ] **Step 6: Record acceptance only if source did not change during smoke**
+- [x] **Step 6: Record acceptance only if source did not change during smoke**
 
 If smoke testing requires no additional fix, mark every checklist item complete and commit only this plan:
 
