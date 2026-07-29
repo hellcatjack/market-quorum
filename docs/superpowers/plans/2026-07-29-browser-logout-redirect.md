@@ -274,7 +274,7 @@ git commit -m "fix: constrain browser post-logout redirect"
 - Modify: `README.md`
 - Modify: `README.zh-CN.md`
 
-- [ ] **Step 1: Document the logout behavior in separate languages**
+- [x] **Step 1: Document the logout behavior in separate languages**
 
 Add to the authentication/user-management section of `README.md`:
 
@@ -292,7 +292,7 @@ Add the corresponding text to `README.zh-CN.md`:
 会话，随后浏览器返回登录流程。退出后的目标是固定的同源地址，不接受请求输入。
 ```
 
-- [ ] **Step 2: Run the complete repository verifier**
+- [x] **Step 2: Run the complete repository verifier**
 
 Run:
 
@@ -303,7 +303,7 @@ bash scripts/verify_platform.sh
 
 Expected: Gateway, platform unit/integration/operations, random real MySQL, Web tests/lint/typecheck/build, npm audit, Caddy validation, Keycloak config checks, and artifact integrity all exit 0. Existing explicitly reported migration-database skips remain acceptable.
 
-- [ ] **Step 3: Check the implementation against the design**
+- [x] **Step 3: Check the implementation against the design**
 
 Run:
 
@@ -318,7 +318,7 @@ test -z "$(git status --short TradingAgents)"
 
 Expected: diff check is silent, placeholder scan has no matches, and `TradingAgents/` is clean.
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
 ```bash
 cd /app/devs/TradingNG
@@ -332,7 +332,7 @@ git commit -m "docs: explain front-channel browser logout"
 - Modify private runtime state only: Keycloak Realm configuration through the idempotent synchronizer.
 - Build generated static assets only: `web/dist/` (gitignored).
 
-- [ ] **Step 1: Prove deployment will not interrupt assessments**
+- [x] **Step 1: Prove deployment will not interrupt assessments**
 
 Run the existing read-only activity query and service checks:
 
@@ -345,7 +345,7 @@ curl -fsS http://127.0.0.1:8010/health/ready >/dev/null
 
 Query MySQL through `Settings()` and assert that this deployment does not mutate any assessment row. Record active counts before and after; no platform service restart is required even if work is active because only Keycloak client metadata and static Web assets change.
 
-- [ ] **Step 2: Reconcile the exact live post-logout URI**
+- [x] **Step 2: Reconcile the exact live post-logout URI**
 
 Run:
 
@@ -361,7 +361,7 @@ PYTHONPATH=platform/src .venv/bin/python scripts/sync_keycloak_public_urls.py \
 
 Expected: the first check reports at most the new stable drift count, apply prints no secret values, and the second check prints `keycloak_public_urls=ok`.
 
-- [ ] **Step 3: Build and publish the static Web application**
+- [x] **Step 3: Build and publish the static Web application**
 
 Run:
 

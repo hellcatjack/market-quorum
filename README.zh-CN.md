@@ -343,6 +343,9 @@ TRADINGNG_KEYCLOAK_ADMIN_CLIENT_ID=tradingng-user-admin
 TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=replace-with-secret
 ```
 
+浏览器退出采用前端退出链路：OAuth2 Proxy 清除应用会话，Keycloak 清除浏览器 SSO
+会话，随后浏览器返回登录流程。退出后的目标是固定的同源地址，不接受请求输入。
+
 对账脚本可重复执行。应用前先检查差异，应用后再检查一次并确认收敛：
 
 ```bash

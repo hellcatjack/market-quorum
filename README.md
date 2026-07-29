@@ -397,6 +397,11 @@ TRADINGNG_KEYCLOAK_ADMIN_CLIENT_ID=tradingng-user-admin
 TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=replace-with-secret
 ```
 
+Browser sign-out is front-channel: OAuth2 Proxy clears the application session,
+Keycloak clears the browser SSO session, and the browser returns to the login
+flow. The post-logout target is a fixed same-origin URI; it is not derived from
+request input.
+
 Reconciliation is idempotent. Check drift before applying it and confirm a
 second check is clean:
 
