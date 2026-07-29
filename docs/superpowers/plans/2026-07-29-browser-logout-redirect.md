@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the management Web “Sign out” action terminate both the OAuth2 Proxy session and the browser’s Keycloak SSO session, then land directly in the login flow instead of automatically returning to the protected page.
+**Goal:** Make the management Web “Sign out” action terminate the OAuth2 Proxy session and display the Keycloak login form instead of automatically returning to the protected page.
 
-**Architecture:** The Web exports one fixed, input-free logout URL. OAuth2 Proxy clears its own cookie and replaces `{id_token}` before redirecting the browser through Keycloak’s OIDC end-session endpoint; Keycloak clears the browser SSO session and returns to the platform root, where Caddy starts a fresh login. The clean-install Realm and the live public-URL synchronizer both enforce one exact post-logout redirect URI.
+**Architecture:** The final implementation exports one fixed, input-free logout URL. OAuth2 Proxy clears its own cookie and redirects directly to a fresh OAuth start; `prompt=login` ensures Keycloak displays the login form even if its SSO cookie remains. Provider backend logout stays best-effort. Tasks 1–4 below record the superseded front-channel attempt; Task 5 records the aged-session production correction.
 
 **Tech Stack:** React 19, TypeScript 5.9, Vitest/Testing Library, OAuth2 Proxy 7.15.1, Keycloak 26.3.5, Python 3.10, httpx, pytest, Caddy.
 
@@ -425,3 +425,28 @@ git commit -m "docs: record browser logout acceptance"
 ```
 
 If smoke exposes a reproducible defect, return to the relevant Task, add a failing regression test, implement the minimal fix, rerun the complete verifier, and commit that fix before recording acceptance. Never stage `.env.platform`, browser cookies, token output, Keycloak exports, or smoke credentials.
+
+### Task 5: Aged-session production correction
+
+The fresh-session smoke in Task 4 did not cover an application session whose ID
+token had expired. Production evidence showed Keycloak rejecting the browser
+end-session request with `LOGOUT_ERROR: session_expired`, which surfaced as HTTP
+400 and could leave the user on the protected page.
+
+- [x] Reproduce the user-visible sequence and correlate OAuth2 Proxy requests with
+  the Keycloak `session_expired` event.
+- [x] Verify that `prompt=login` returns the login form even while the browser still
+  holds a Keycloak SSO cookie.
+- [x] Add failing tests that prohibit `id_token_hint` in the browser logout target,
+  require `/oauth2/start?rd=/`, and require `prompt = "login"` in OAuth2 Proxy.
+- [x] Implement the fixed same-origin logout target and OAuth2 Proxy policy, then
+  make the focused Web and deployment tests pass.
+- [x] Correct operator and design documentation so it does not claim that browser
+  sign-out always revokes the whole Keycloak SSO session.
+- [x] Run the complete repository verifier.
+- [x] Build the Web, reload only OAuth2 Proxy, and verify the live authorization
+  request contains `prompt=login`.
+- [x] Exercise both first and repeated sign-out with an authenticated browser
+  session; both must end at the login form and neither may return HTTP 400.
+- [x] Recheck service health, unchanged assessment state, repository cleanliness,
+  and record final acceptance.

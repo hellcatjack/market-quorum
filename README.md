@@ -397,10 +397,11 @@ TRADINGNG_KEYCLOAK_ADMIN_CLIENT_ID=tradingng-user-admin
 TRADINGNG_KEYCLOAK_ADMIN_CLIENT_SECRET=replace-with-secret
 ```
 
-Browser sign-out is front-channel: OAuth2 Proxy clears the application session,
-Keycloak clears the browser SSO session, and the browser returns to the login
-flow. The post-logout target is a fixed same-origin URI; it is not derived from
-request input.
+Browser sign-out clears the OAuth2 Proxy application session and immediately
+starts a fresh OIDC authorization with `prompt=login`, so the browser displays
+the login form even when a Keycloak SSO cookie remains. The redirect target is
+fixed and same-origin, and no ID token is carried in the browser redirect.
+Provider backend logout remains a best-effort operation.
 
 Reconciliation is idempotent. Check drift before applying it and confirm a
 second check is clean:
