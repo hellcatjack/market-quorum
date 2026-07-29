@@ -379,9 +379,7 @@ async def test_finalize_success_archives_and_persists_integrity(
             )
 
             integrity = await session.scalar(
-                select(RunIntegrityAssessment).where(
-                    RunIntegrityAssessment.run_id == run.id
-                )
+                select(RunIntegrityAssessment).where(RunIntegrityAssessment.run_id == run.id)
             )
             evidence = await session.scalar(
                 select(EvidenceItem).where(EvidenceItem.run_id == run.id)

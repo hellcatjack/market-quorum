@@ -122,9 +122,7 @@ class KeycloakAdminClient:
         )
         raw_users = users_response.json()
         items = tuple(
-            await asyncio.gather(
-                *(self._user_from_representation(item) for item in raw_users)
-            )
+            await asyncio.gather(*(self._user_from_representation(item) for item in raw_users))
         )
         count_document = count_response.json()
         total = int(count_document if isinstance(count_document, int) else len(items))

@@ -35,9 +35,7 @@ class IdentityAccessService:
             )
 
         token_role = next(iter(token_roles))
-        effective_role = (
-            "Admin" if token_role == identity.role == "Admin" else "User"
-        )
+        effective_role = "Admin" if token_role == identity.role == "Admin" else "User"
         ceiling = ADMIN_SCOPES if effective_role == "Admin" else USER_SCOPES
         return Principal(
             issuer=principal.issuer,

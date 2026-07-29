@@ -32,9 +32,7 @@ from tradingng_platform.models import (
     RunIntegrityAssessment,
 )
 
-_FINANCIAL_TOOLS = frozenset(
-    {"get_balance_sheet", "get_cashflow", "get_income_statement"}
-)
+_FINANCIAL_TOOLS = frozenset({"get_balance_sheet", "get_cashflow", "get_income_statement"})
 _CURRENT_SNAPSHOT_TOOLS = frozenset(
     {
         "get_fundamentals",

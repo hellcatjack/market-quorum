@@ -121,9 +121,9 @@ class _FinancialTemporalProbeGraph(_FakeGraph):
     observed_statement = None
 
     def propagate(self, ticker, analysis_date, asset_type="stock"):
-        type(self).observed_statement = VENDOR_METHODS["get_income_statement"][
-            "alpha_vantage"
-        ](ticker, "quarterly", analysis_date)
+        type(self).observed_statement = VENDOR_METHODS["get_income_statement"]["alpha_vantage"](
+            ticker, "quarterly", analysis_date
+        )
         return super().propagate(ticker, analysis_date, asset_type)
 
 
@@ -328,19 +328,16 @@ def test_historical_runner_filters_financial_statements_and_restores_routes(
             {
                 "symbol": ticker,
                 "annualReports": [],
-                "quarterlyReports": [
-                    {"fiscalDateEnding": "2025-06-30", "totalRevenue": "100"}
-                ],
+                "quarterlyReports": [{"fiscalDateEnding": "2025-06-30", "totalRevenue": "100"}],
             }
         )
+
     monkeypatch.setitem(
         VENDOR_METHODS["get_income_statement"],
         "alpha_vantage",
         original_route,
     )
-    runner_input = _runner_input(tmp_path).model_copy(
-        update={"analysis_date": date(2025, 7, 1)}
-    )
+    runner_input = _runner_input(tmp_path).model_copy(update={"analysis_date": date(2025, 7, 1)})
 
     TradingAgentsRunner(
         runner_input,
@@ -348,9 +345,7 @@ def test_historical_runner_filters_financial_statements_and_restores_routes(
         availability_resolver=_AvailabilityResolver(date(2025, 7, 24)),
     ).run()
 
-    assert json.loads(_FinancialTemporalProbeGraph.observed_statement)[
-        "quarterlyReports"
-    ] == []
+    assert json.loads(_FinancialTemporalProbeGraph.observed_statement)["quarterlyReports"] == []
     assert VENDOR_METHODS["get_income_statement"]["alpha_vantage"] is original_route
     audit = json.loads(
         (runner_input.work_dir / "working" / "point_in_time_integrity.json").read_text()

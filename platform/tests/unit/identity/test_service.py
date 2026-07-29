@@ -164,8 +164,7 @@ class FakeRepository:
 
     async def enabled_admin_count(self):
         return sum(
-            item.role == "Admin" and item.status == "active"
-            for item in self.identities.values()
+            item.role == "Admin" and item.status == "active" for item in self.identities.values()
         )
 
     async def sync_authoritative(self, user, issuer):

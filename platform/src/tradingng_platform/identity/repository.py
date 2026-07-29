@@ -243,9 +243,7 @@ class IdentityTransaction:
         await self.session.execute(
             delete(UserRole).where(
                 UserRole.user_id == local_user.id,
-                UserRole.role_id.in_(
-                    select(Role.id).where(Role.name.in_(_MANAGED_ROLES))
-                ),
+                UserRole.role_id.in_(select(Role.id).where(Role.name.in_(_MANAGED_ROLES))),
             )
         )
         await self.session.execute(

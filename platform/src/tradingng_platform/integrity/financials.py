@@ -74,9 +74,7 @@ class SecFilingClient:
             filing_date = _parse_date(row.get("filingDate"))
             if filing_date is not None:
                 filing_dates.append(filing_date)
-        result = (
-            Availability(min(filing_dates), "sec", "high") if filing_dates else None
-        )
+        result = Availability(min(filing_dates), "sec", "high") if filing_dates else None
         self._resolved[key] = result
         return result
 
@@ -102,9 +100,7 @@ class SecFilingClient:
                     continue
                 if ticker:
                     mutable.setdefault(ticker, []).append(cik)
-        self._ticker_map = {
-            ticker: tuple(dict.fromkeys(ciks)) for ticker, ciks in mutable.items()
-        }
+        self._ticker_map = {ticker: tuple(dict.fromkeys(ciks)) for ticker, ciks in mutable.items()}
         return self._ticker_map
 
     def _filing_rows(self, cik: str) -> list[dict]:
@@ -246,9 +242,7 @@ def filter_statement_payload(
                 continue
             fiscal_end = _parse_date(row.get("fiscalDateEnding"))
             if fiscal_end is None:
-                findings.append(
-                    _filtered_finding(statement_kind, "invalid_fiscal_date_filtered")
-                )
+                findings.append(_filtered_finding(statement_kind, "invalid_fiscal_date_filtered"))
                 continue
             availability = resolver.resolve(ticker, fiscal_end, frequency)
             details = {

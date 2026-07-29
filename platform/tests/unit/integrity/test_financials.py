@@ -58,9 +58,7 @@ class FakeHttpClient:
 
 
 def test_statement_after_analysis_date_is_removed():
-    resolver = StubResolver(
-        {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
-    )
+    resolver = StubResolver({date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")})
 
     result, findings = filter_statement_payload(
         PAYLOAD_WITH_2025_Q2,
@@ -77,9 +75,7 @@ def test_statement_after_analysis_date_is_removed():
 
 
 def test_statement_available_on_analysis_date_is_retained():
-    resolver = StubResolver(
-        {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
-    )
+    resolver = StubResolver({date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")})
 
     result, findings = filter_statement_payload(
         PAYLOAD_WITH_2025_Q2,
@@ -131,9 +127,7 @@ def test_sec_filing_client_maps_unique_ticker_and_uses_original_filing(tmp_path)
     submissions_url = "https://data.sec.gov/submissions/CIK0001045810.json"
     client = FakeHttpClient(
         {
-            ticker_url: {
-                "0": {"cik_str": 1045810, "ticker": "NVDA", "title": "NVIDIA CORP"}
-            },
+            ticker_url: {"0": {"cik_str": 1045810, "ticker": "NVDA", "title": "NVIDIA CORP"}},
             submissions_url: {
                 "filings": {
                     "recent": {

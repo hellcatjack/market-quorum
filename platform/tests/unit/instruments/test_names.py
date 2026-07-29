@@ -54,9 +54,7 @@ async def test_sec_provider_returns_registered_name_and_cik(
     sec_exchange,
 ):
     async with _sec_client(
-        submissions={
-            cik: {"name": name, "tickers": [ticker], "exchanges": [sec_exchange]}
-        }
+        submissions={cik: {"name": name, "tickers": [ticker], "exchanges": [sec_exchange]}}
     ) as client:
         provider = SecInstrumentNameProvider(
             client,
@@ -175,9 +173,7 @@ class _Store:
         *,
         transient,
     ):
-        self.unresolved.append(
-            (instrument_id, attempted_at, retry_at, reason, transient)
-        )
+        self.unresolved.append((instrument_id, attempted_at, retry_at, reason, transient))
 
 
 class _Provider:

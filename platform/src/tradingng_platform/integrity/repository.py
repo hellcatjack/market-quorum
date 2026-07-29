@@ -79,9 +79,7 @@ class IntegrityRepository:
             analysis_date=document.analysis_date,
             checked_at=document.checked_at,
             reason_codes_json=list(document.reason_codes),
-            tool_findings_json=[
-                finding.model_dump(mode="json") for finding in document.findings
-            ],
+            tool_findings_json=[finding.model_dump(mode="json") for finding in document.findings],
             input_fingerprint=document.input_fingerprint,
         )
         self.session.add(row)

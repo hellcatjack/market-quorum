@@ -91,10 +91,7 @@ class UpdateUserCommand(BaseModel):
 
     @model_validator(mode="after")
     def require_change(self):
-        if all(
-            value is None
-            for value in (self.display_name, self.email, self.role, self.enabled)
-        ):
+        if all(value is None for value in (self.display_name, self.email, self.role, self.enabled)):
             raise ValueError("at least one user field is required")
         return self
 

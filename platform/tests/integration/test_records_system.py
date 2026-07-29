@@ -541,9 +541,7 @@ async def test_instrument_overview_preserves_decision_and_binds_validations(
     assert first_page.items[0].latest_successful_run.status == "succeeded"
     assert first_page.items[0].latest_decision.rating == "Underweight"
     assert first_page.items[0].preferred_validation.horizon == 20
-    twenty_day = next(
-        item for item in first_page.items[0].validation_stats if item.horizon == 20
-    )
+    twenty_day = next(item for item in first_page.items[0].validation_stats if item.horizon == 20)
     assert twenty_day.completed == 1
     assert twenty_day.accuracy == Decimal("1")
     assert twenty_day.excluded_at_risk == 0

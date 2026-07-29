@@ -149,8 +149,8 @@ class IdentityAdminService:
                 if email is None:
                     email = ""
                 enabled = command.enabled if command.enabled is not None else current.enabled
-                profile_changed = (
-                    display_name != current.display_name or email != (current.email or "")
+                profile_changed = display_name != current.display_name or email != (
+                    current.email or ""
                 )
                 status_changed = enabled != current.enabled
                 role_changed = command.role is not None and command.role != current.role

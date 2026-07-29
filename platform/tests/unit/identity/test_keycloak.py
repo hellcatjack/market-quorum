@@ -166,16 +166,16 @@ async def test_create_update_role_password_logout_and_sessions_use_expected_prot
     assert subject == "user-1"
     assert sessions[0].session_id == "s1"
     assert not hasattr(sessions[0], "ip_address")
-    assert ("PUT", "/admin/realms/tradingng/users/user-1/reset-password", {
-        "type": "password", "value": "temporary-password", "temporary": True
-    }) in seen
+    assert (
+        "PUT",
+        "/admin/realms/tradingng/users/user-1/reset-password",
+        {"type": "password", "value": "temporary-password", "temporary": True},
+    ) in seen
     assert ("POST", "/admin/realms/tradingng/users/user-1/logout", None) in seen
     role_deletes = [item for item in seen if item[0] == "DELETE"]
     assert role_deletes[0][2] == [{"id": "old-admin", "name": "Admin"}]
     role_posts = [
-        item
-        for item in seen
-        if item[0] == "POST" and item[1].endswith("role-mappings/realm")
+        item for item in seen if item[0] == "POST" and item[1].endswith("role-mappings/realm")
     ]
     assert role_posts[0][2] == [{"id": "role-user", "name": "User"}]
 

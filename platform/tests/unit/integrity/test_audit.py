@@ -57,9 +57,7 @@ def test_retrospective_audit_marks_confirmed_future_statement_at_risk(tmp_path):
             }
         ),
     )
-    resolver = StubResolver(
-        {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
-    )
+    resolver = StubResolver({date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")})
 
     result = audit_evidence(
         evidence,
@@ -88,9 +86,7 @@ def test_retrospective_audit_unwraps_archived_statement_tool_message(tmp_path):
             "type": "tool",
         },
     )
-    resolver = StubResolver(
-        {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
-    )
+    resolver = StubResolver({date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")})
 
     result = audit_evidence(
         evidence,
@@ -116,9 +112,7 @@ def test_retrospective_audit_accepts_statement_published_by_analysis_date(tmp_pa
             }
         ),
     )
-    resolver = StubResolver(
-        {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
-    )
+    resolver = StubResolver({date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")})
 
     result = audit_evidence(
         evidence,
@@ -289,9 +283,7 @@ async def test_retrospective_service_archives_once_and_is_idempotent(tmp_path):
         service = RetrospectiveAuditService(
             sessions,
             store,
-            StubResolver(
-                {date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}
-            ),
+            StubResolver({date(2025, 6, 30): Availability(date(2025, 7, 24), "sec", "high")}),
             clock=lambda: datetime(2026, 7, 27, tzinfo=timezone.utc),
         )
 
@@ -299,9 +291,7 @@ async def test_retrospective_service_archives_once_and_is_idempotent(tmp_path):
         second = await service.audit_one(run_id)
 
         async with sessions() as session:
-            count = await session.scalar(
-                select(func.count()).select_from(RunIntegrityAssessment)
-            )
+            count = await session.scalar(select(func.count()).select_from(RunIntegrityAssessment))
             retro = await session.get(Artifact, first.artifact_id)
         assert first.id == second.id
         assert first.status == "at_risk"

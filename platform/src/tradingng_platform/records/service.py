@@ -82,9 +82,7 @@ def _validation_stats(
     for item in validations:
         if item.status != "completed":
             continue
-        integrity_status = (
-            "safe" if integrity_by_run is None else integrity_by_run.get(item.run_id)
-        )
+        integrity_status = "safe" if integrity_by_run is None else integrity_by_run.get(item.run_id)
         if integrity_status == "safe":
             completed_by_horizon[item.horizon].append(item)
         elif integrity_status == "at_risk":

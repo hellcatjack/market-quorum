@@ -49,9 +49,7 @@ class IntegrityService:
                     status="unassessed",
                     analysis_date=context.request.analysis_date,
                     reason_codes=("integrity_not_assessed",),
-                    clean_reassessment_of_run_id=(
-                        context.run.clean_reassessment_of_run_id
-                    ),
+                    clean_reassessment_of_run_id=(context.run.clean_reassessment_of_run_id),
                     clean_reassessment_run_id=clean.id if clean is not None else None,
                 )
             return IntegrityView(

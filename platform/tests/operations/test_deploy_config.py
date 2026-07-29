@@ -347,9 +347,7 @@ def test_point_in_time_audit_operation_is_documented_without_private_identity():
     sec_lines = [
         line for line in example.splitlines() if line.startswith("TRADINGNG_SEC_USER_AGENT=")
     ]
-    assert sec_lines == [
-        "TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)"
-    ]
+    assert sec_lines == ["TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)"]
     assert "@" not in sec_lines[0]
 
     pyproject = tomllib.loads((ROOT / "platform/pyproject.toml").read_text())
@@ -364,8 +362,6 @@ def test_official_name_backfill_and_scheduler_use_sec_configuration():
         "tradingng_platform.instruments.backfill:main"
     )
 
-    scheduler = (
-        ROOT / "platform/src/tradingng_platform/scheduler/main.py"
-    ).read_text()
+    scheduler = (ROOT / "platform/src/tradingng_platform/scheduler/main.py").read_text()
     assert "user_agent=settings.sec_user_agent" in scheduler
     assert 'cache_dir=settings.sec_cache_dir / "instrument-names"' in scheduler

@@ -158,9 +158,7 @@ async def test_enrichment_ignores_legacy_provider_retry_window(session_factory):
     assert provider.calls == [("PG", "NYQ")]
     assert instrument.name == "PROCTER & GAMBLE Co"
     assert instrument.metadata_json["name_resolution"]["provider"] == "sec_edgar"
-    assert instrument.metadata_json["name_resolution_history"] == [
-        {"name": None, **old_resolution}
-    ]
+    assert instrument.metadata_json["name_resolution_history"] == [{"name": None, **old_resolution}]
 
 
 async def test_refresh_failure_preserves_last_verified_official_name(session_factory):
@@ -181,9 +179,7 @@ async def test_refresh_failure_preserves_last_verified_official_name(session_fac
     )
     service = InstrumentNameEnrichmentService(
         SqlInstrumentMetadataStore(session_factory),
-        _Provider(
-            error=NameResolutionError("upstream_unavailable", transient=True)
-        ),
+        _Provider(error=NameResolutionError("upstream_unavailable", transient=True)),
         clock=lambda: NOW,
     )
 

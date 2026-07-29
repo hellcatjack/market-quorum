@@ -274,9 +274,7 @@ def test_user_can_read_only_sanitized_assessment_admission_summary(monkeypatch):
         "memory",
         "hard_max",
     }
-    assert not any(
-        fragment in response.text.casefold() for fragment in forbidden_fragments
-    )
+    assert not any(fragment in response.text.casefold() for fragment in forbidden_fragments)
     assert diagnostics.status_code == 403
 
 

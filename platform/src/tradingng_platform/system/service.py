@@ -72,9 +72,7 @@ class SystemService:
             circuits = list(
                 await session.scalars(select(CircuitBreaker).order_by(CircuitBreaker.name))
             )
-            instruments = list(
-                await session.scalars(select(Instrument).order_by(Instrument.id))
-            )
+            instruments = list(await session.scalars(select(Instrument).order_by(Instrument.id)))
         name_health = {
             "total": len(instruments),
             "official": 0,
@@ -84,17 +82,12 @@ class SystemService:
         }
         for instrument in instruments:
             metadata = (
-                instrument.metadata_json
-                if isinstance(instrument.metadata_json, dict)
-                else {}
+                instrument.metadata_json if isinstance(instrument.metadata_json, dict) else {}
             )
             resolution = metadata.get("name_resolution")
             resolution = resolution if isinstance(resolution, dict) else {}
             reason = resolution.get("reason")
-            if (
-                resolution.get("provider") == "sec_edgar"
-                and resolution.get("status") == "resolved"
-            ):
+            if resolution.get("provider") == "sec_edgar" and resolution.get("status") == "resolved":
                 name_health["official"] += 1
             elif reason in {"ambiguous_cik", "exchange_mismatch"}:
                 name_health["conflicts"] += 1

@@ -149,7 +149,12 @@ def test_admin_can_call_all_user_management_operations(monkeypatch):
     assert reset.json()["temporary_password"] == "reset-secret"
     assert logged_out.status_code == 200
     assert [call[0] for call in service.calls] == [
-        "list", "get", "create", "update", "reset", "logout"
+        "list",
+        "get",
+        "create",
+        "update",
+        "reset",
+        "logout",
     ]
 
 

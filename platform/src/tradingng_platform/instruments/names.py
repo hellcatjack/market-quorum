@@ -157,10 +157,7 @@ class SecInstrumentNameProvider:
         async with self._request_lock:
             now = self.monotonic()
             if self._last_request_started is not None:
-                wait = (
-                    _SEC_MIN_REQUEST_INTERVAL_SECONDS
-                    - (now - self._last_request_started)
-                )
+                wait = _SEC_MIN_REQUEST_INTERVAL_SECONDS - (now - self._last_request_started)
                 if wait > 0:
                     await self.sleeper(wait)
                     now = self.monotonic()
@@ -352,9 +349,7 @@ class InstrumentNameEnrichmentService:
         try:
             result = await self.provider.resolve(pending.ticker, pending.exchange)
         except NameResolutionError as error:
-            delay = (
-                _TRANSIENT_RETRY_DELAY if error.transient else _PERMANENT_RETRY_DELAY
-            )
+            delay = _TRANSIENT_RETRY_DELAY if error.transient else _PERMANENT_RETRY_DELAY
             await self.store.mark_unresolved(
                 pending.id,
                 now,
@@ -508,9 +503,7 @@ def _metadata(value: object) -> dict:
 def _archive_resolution(metadata: dict, name: str | None, resolution: dict) -> None:
     archived = {"name": name, **resolution}
     history = [
-        dict(item)
-        for item in metadata.get("name_resolution_history", [])
-        if isinstance(item, dict)
+        dict(item) for item in metadata.get("name_resolution_history", []) if isinstance(item, dict)
     ]
     if archived not in history:
         history.append(archived)
