@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
@@ -17,6 +17,10 @@ class User(UuidPrimaryKey, Timestamped, Base):
     display_name: Mapped[str] = mapped_column(String(255))
     email: Mapped[str | None] = mapped_column(String(320))
     status: Mapped[str] = mapped_column(String(32), default="active")
+    synced_at: Mapped[datetime] = mapped_column(
+        PORTABLE_DATETIME,
+        default=lambda: datetime.now(timezone.utc),
+    )
 
 
 class Role(UuidPrimaryKey, Base):

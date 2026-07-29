@@ -350,7 +350,7 @@ Run: `cd platform && ../.venv/bin/pytest tests/unit/test_config.py tests/unit/id
 
 Expected: all tests PASS and Ruff exits 0.
 
-- [ ] **Step 9: Commit the Keycloak client**
+- [x] **Step 9: Commit the Keycloak client**
 
 ```bash
 git add platform/src/tradingng_platform/config.py platform/src/tradingng_platform/identity platform/tests/unit/test_config.py platform/tests/unit/identity
@@ -368,7 +368,7 @@ git commit -m "feat: add secure Keycloak administration client"
 - Create test: `platform/tests/unit/identity/test_service.py`
 - Create test: `platform/tests/integration/test_identity_management.py`
 
-- [ ] **Step 1: Define API-facing identity commands and views**
+- [x] **Step 1: Define API-facing identity commands and views**
 
 Add strict Pydantic models:
 
@@ -404,19 +404,19 @@ Also define `UserPage(items, page, page_size, total)`, `UserDetailView` with ses
 
 Add `email-validator>=2.2,<3` to `platform/pyproject.toml` so `EmailStr` validation is deterministic in API and service tests.
 
-- [ ] **Step 2: Write service tests with a fake Keycloak client and fake repository**
+- [x] **Step 2: Write service tests with a fake Keycloak client and fake repository**
 
 Cover list filtering/paging, detail action flags, password length/entropy shape, create operation order, profile update, role update, enabled update, reset+logout, explicit logout, and tests named `test_current_admin_cannot_disable_self`, `test_current_admin_cannot_demote_self`, `test_last_enabled_admin_cannot_be_disabled`, `test_last_enabled_admin_cannot_be_demoted`, `test_create_returns_secret_once_and_audit_does_not_contain_it`, and `test_keycloak_success_mysql_failure_becomes_sync_pending`.
 
 Assert the first two self-operation tests raise code `self_admin_change_forbidden`; assert both last-admin tests raise `last_admin_protected`. Assert call order for writes is Keycloak mutation, authoritative `get_user`, mirror sync, audit commit. Assert role/status changes call logout after the change. Assert a profile-only update does not revoke sessions.
 
-- [ ] **Step 3: Run service tests and confirm failure**
+- [x] **Step 3: Run service tests and confirm failure**
 
 Run: `cd platform && ../.venv/bin/pytest tests/unit/identity/test_service.py -q`
 
 Expected: FAIL because `IdentityAdminService` and commands are incomplete.
 
-- [ ] **Step 4: Complete repository transactional primitives**
+- [x] **Step 4: Complete repository transactional primitives**
 
 Add:
 
@@ -434,7 +434,7 @@ Use `acquire_transaction_lock(session, "identity-admin-guard")`. Formal-role rep
 
 Use these audit action names exactly: `user.create`, `user.profile_update`, `user.role_change`, `user.enable`, `user.disable`, `user.password_reset`, `user.logout`, and `user.reconcile`. List/detail reconciliation writes `user.reconcile` only when authoritative Keycloak state actually changes the local mirror, so repeated reads do not create audit noise.
 
-- [ ] **Step 5: Implement orchestration and password generation**
+- [x] **Step 5: Implement orchestration and password generation**
 
 `IdentityAdminService` public methods must be:
 
@@ -449,7 +449,7 @@ async def logout_user(self, principal, user_id: UUID, request_id: str) -> UserDe
 
 Generate 32 URL-safe random bytes with `secrets.token_urlsafe(32)` and enforce at least 24 characters. Wrap it in `SecretStr` immediately. For create: create disabled, assign role, set temporary password, enable, logout, read back, mirror, audit. On a failure before enable, leave the new account disabled; never compensate by deleting it. Convert a mirror commit failure after an authoritative mutation to `identity_sync_pending`.
 
-- [ ] **Step 6: Add database integration tests for mirror preservation and audit**
+- [x] **Step 6: Add database integration tests for mirror preservation and audit**
 
 Using `session_factory` and a fake Keycloak client, prove:
 
@@ -460,7 +460,7 @@ Using `session_factory` and a fake Keycloak client, prove:
 - serialized rows contain no generated password;
 - repeated authoritative sync is idempotent.
 
-- [ ] **Step 7: Run identity unit and integration tests**
+- [x] **Step 7: Run identity unit and integration tests**
 
 Run unit tests: `cd platform && ../.venv/bin/pytest tests/unit/identity -q`
 
