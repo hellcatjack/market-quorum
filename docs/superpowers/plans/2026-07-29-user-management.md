@@ -758,7 +758,7 @@ Run: `cd web && npm test -- --run src/auth/CurrentUserProvider.test.tsx src/app/
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit the frontend authorization shell**
+- [x] **Step 7: Commit the frontend authorization shell**
 
 ```bash
 git add web/src/auth web/src/app web/src/features/auth
@@ -773,25 +773,25 @@ git commit -m "feat: guard administrative web routes"
 - Create: `web/src/features/users/TemporaryPasswordDialog.tsx`
 - Create: `web/src/features/users/TemporaryPasswordDialog.test.tsx`
 
-- [ ] **Step 1: Write typed-client request tests**
+- [x] **Step 1: Write typed-client request tests**
 
 Assert exact method/path/body combinations for list, detail, create, patch, reset-password, and logout. Assert list query encoding supports `search`, `role`, `status`, `page`, `page_size`; no client delete function may exist.
 
-- [ ] **Step 2: Write one-time password lifecycle tests**
+- [x] **Step 2: Write one-time password lifecycle tests**
 
 Render the dialog with `temporaryPassword="secret-once"`, copy it, close it, rerender the owning harness, and assert the value no longer appears in the DOM or owner state. Assert Escape and the explicit acknowledgment button both invoke a `clearAndClose()` callback; do not render the secret into an aria-label or notification message.
 
-- [ ] **Step 3: Run tests and confirm missing modules**
+- [x] **Step 3: Run tests and confirm missing modules**
 
 Run: `cd web && npm test -- --run src/api/users.test.ts src/features/users/TemporaryPasswordDialog.test.tsx`
 
 Expected: FAIL because both modules are missing.
 
-- [ ] **Step 4: Implement the API client and secret dialog**
+- [x] **Step 4: Implement the API client and secret dialog**
 
 Use API types matching the OpenAPI response. Only `CreatedUserResponse` and `ResetPasswordResponse` include `temporary_password: string`; `UserView` and cached list/detail types never include it. The dialog uses local selection/copy state, calls `navigator.clipboard.writeText`, reports only “copied” status, and clears secret state before closing.
 
-- [ ] **Step 5: Run the focused frontend tests**
+- [x] **Step 5: Run the focused frontend tests**
 
 Run: `cd web && npm test -- --run src/api/users.test.ts src/features/users/TemporaryPasswordDialog.test.tsx`
 
