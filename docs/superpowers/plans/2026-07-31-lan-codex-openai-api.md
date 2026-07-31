@@ -29,7 +29,7 @@
 - Modify: `platform/tests/operations/test_deploy_config.py`
 - Test: `platform/tests/operations/test_deploy_config.py`
 
-- [ ] **Step 1: Add the failing Caddy boundary test**
+- [x] **Step 1: Add the failing Caddy boundary test**
 
 Add this test after `test_public_caddy_routes_only_to_loopback_platform_services`:
 
@@ -37,7 +37,9 @@ Add this test after `test_public_caddy_routes_only_to_loopback_platform_services
 def test_public_caddy_exposes_only_authenticated_physical_lan_codex_api():
     config = (ROOT / "deploy/caddy/tradingng.caddy").read_text()
 
-    assert "route /openai/* {" in config
+    lan_handler = "handle /openai/* {"
+    assert lan_handler in config
+    assert config.index(lan_handler) < config.index("@noSession")
     assert "path /openai/v1/models /openai/v1/chat/completions" in config
     assert config.count("remote_ip 192.168.1.0/24") == 3
     assert 'header Authorization "Bearer {$CODEX_GATEWAY_LAN_API_KEY}"' in config
@@ -66,7 +68,7 @@ with:
 assert config.count("127.0.0.1:8000") == 1
 ```
 
-- [ ] **Step 2: Add the failing secret and installer test**
+- [x] **Step 2: Add the failing secret and installer test**
 
 Add:
 
@@ -105,7 +107,7 @@ with:
 assert "systemctl restart caddy" in installer
 ```
 
-- [ ] **Step 3: Run the focused tests and verify RED**
+- [x] **Step 3: Run the focused tests and verify RED**
 
 Run:
 
@@ -129,7 +131,7 @@ Expected: the new tests fail because the route, drop-in, installer behavior, and
 - Modify: `.gitignore`
 - Test: `platform/tests/operations/test_deploy_config.py`
 
-- [ ] **Step 1: Add the ignored live secret path**
+- [x] **Step 1: Add the ignored live secret path**
 
 Add these adjacent to `.env.platform` in `.gitignore` so both the live secret and its same-filesystem atomic staging file are ignored:
 
@@ -138,7 +140,7 @@ Add these adjacent to `.env.platform` in `.gitignore` so both the live secret an
 .env.gateway-lan.*
 ```
 
-- [ ] **Step 2: Add the system Caddy drop-in**
+- [x] **Step 2: Add the system Caddy drop-in**
 
 Create `deploy/systemd/caddy-lan-openai.conf`:
 
@@ -151,12 +153,12 @@ ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile
 
 The empty `ExecStart=` resets the distribution command before replacing it. The replacement deliberately omits `--environ`, which would print the API Key to the journal.
 
-- [ ] **Step 3: Add the ordered, fail-closed Caddy route**
+- [x] **Step 3: Add the ordered, fail-closed Caddy route**
 
 Insert this block in `deploy/caddy/tradingng.caddy` after the security headers and before `@apiBearer`:
 
 ```caddyfile
-	route /openai/* {
+	handle /openai/* {
 		@lanCodexAuthorized {
 			path /openai/v1/models /openai/v1/chat/completions
 			remote_ip 192.168.1.0/24
@@ -193,9 +195,14 @@ Insert this block in `deploy/caddy/tradingng.caddy` after the security headers a
 	}
 ```
 
-The enclosing `route` preserves the authorization, 401, 404, and 403 order. Do not add this route to the retired `deploy/Caddyfile` rollback service.
+The enclosing path-specific `handle` keeps the LAN API in the same top-level
+handler group and ahead of the generic browser-login handler. Its nested
+handlers preserve the authorization, 401, 404, and 403 order. This was verified
+against Caddy's adapted JSON after a live probe exposed the global directive
+ordering of the earlier `route` form. Do not add this handler to the retired
+`deploy/Caddyfile` rollback service.
 
-- [ ] **Step 4: Extend installer argument and secret validation state**
+- [x] **Step 4: Extend installer argument and secret validation state**
 
 In `scripts/install_public_caddy.sh`, add `rotate_lan_api_key=0`, accept the flag, and update usage:
 
@@ -226,7 +233,7 @@ dropin_directory="/etc/systemd/system/caddy.service.d"
 dropin_path="$dropin_directory/tradingng-lan-openai.conf"
 ```
 
-- [ ] **Step 5: Generate or validate the private key without printing it**
+- [x] **Step 5: Generate or validate the private key without printing it**
 
 Add a same-filesystem atomic writer near the top of the installer. It keeps the key out of subprocess arguments and makes both installation and rollback replace the live file atomically:
 
@@ -280,7 +287,7 @@ fi
 
 Immediately after the Caddy restart succeeds, run `unset lan_key lan_key_line` and print only `lan_api_key_state=$lan_key_state`.
 
-- [ ] **Step 6: Back up, install, and roll back the drop-in atomically**
+- [x] **Step 6: Back up, install, and roll back the drop-in atomically**
 
 Extend the existing backup state with the drop-in and in-memory secret rollback state. Capture the old secret line without printing or copying it to the backup directory:
 
@@ -349,7 +356,7 @@ Keep the existing config backup and trap semantics. After success, unset
 `lan_key`, `lan_key_line`, and `old_lan_env_line`. Do not output the key, the
 environment file, or the expanded Caddy configuration.
 
-- [ ] **Step 7: Run focused tests and Caddy validation to verify GREEN**
+- [x] **Step 7: Run focused tests and Caddy validation to verify GREEN**
 
 Run:
 
@@ -369,7 +376,7 @@ git check-ignore -q .env.gateway-lan
 
 Expected: all focused tests pass, Caddy reports `Valid configuration`, and the ignore check exits 0.
 
-- [ ] **Step 8: Commit the implementation**
+- [x] **Step 8: Commit the implementation**
 
 ```bash
 cd /app/devs/TradingNG
@@ -385,7 +392,7 @@ git commit -m "feat: protect LAN Codex API at Caddy edge"
 - Modify: `README.md`
 - Modify: `README.zh-CN.md`
 
-- [ ] **Step 1: Document the English operator flow**
+- [x] **Step 1: Document the English operator flow**
 
 After the local Gateway status section in `README.md`, add a `LAN OpenAI-compatible API` subsection that states:
 
@@ -430,11 +437,11 @@ The key must never be committed, pasted into logs, or used as an OpenAI account
 credential.
 ````
 
-- [ ] **Step 2: Document the Chinese operator flow separately**
+- [x] **Step 2: Document the Chinese operator flow separately**
 
 Add the equivalent `### 局域网 OpenAI 兼容 API` subsection to `README.zh-CN.md`, preserving the same commands, paths, allowed CIDR, exact endpoints, retrieval rule, and rotation behavior. State explicitly that this key protects the local Codex Gateway and is not an OpenAI account key.
 
-- [ ] **Step 3: Run documentation and complete repository verification**
+- [x] **Step 3: Run documentation and complete repository verification**
 
 Run:
 
@@ -450,7 +457,7 @@ bash scripts/verify_platform.sh
 
 Expected: placeholder scan and TradingAgents status are silent; Gateway, platform, real MySQL, Web, npm audit, Caddy, identity, and artifact checks all exit 0. Existing explicitly reported migration-database skips remain acceptable.
 
-- [ ] **Step 4: Commit documentation**
+- [x] **Step 4: Commit documentation**
 
 ```bash
 cd /app/devs/TradingNG
@@ -464,13 +471,13 @@ git commit -m "docs: explain LAN Codex API access"
 - Create private runtime state only: `.env.gateway-lan` through the root installer.
 - Modify system runtime state only: `/etc/caddy/sites-enabled/tradingng.caddy` and `/etc/systemd/system/caddy.service.d/tradingng-lan-openai.conf` through the guarded installer.
 
-- [ ] **Step 1: Record pre-deployment state without exposing credentials**
+- [x] **Step 1: Record pre-deployment state without exposing credentials**
 
 Run service health checks and query MySQL through `Settings()` for total, active, and queued assessment counts. Record the current system Caddy PID and Gateway PID. Do not restart Gateway, API, scheduler, validation, Alpha broker, or workers.
 
 Expected: Gateway and platform services are active; readiness is 200; the assessment counts form the immutable before-state.
 
-- [ ] **Step 2: Install the final Caddy configuration and isolated key**
+- [x] **Step 2: Install the final Caddy configuration and isolated key**
 
 Run:
 
@@ -482,7 +489,7 @@ sudo -n scripts/install_public_caddy.sh \
 
 Expected: output reports only installer mode, backup paths, and `lan_api_key_state=generated` or `reused`. It must not print the key. `systemctl is-active caddy` must report `active`, and `systemctl show caddy -p ExecStart -p EnvironmentFiles` must show the dedicated environment file with no `--environ`.
 
-- [ ] **Step 3: Verify source and credential permissions**
+- [x] **Step 3: Verify source and credential permissions**
 
 Run checks that assert:
 
@@ -495,7 +502,7 @@ CODEX_GATEWAY_LAN_API_KEY is exactly 64 lowercase hexadecimal characters
 
 Keep the key in a shell variable only for the following checks and never print it.
 
-- [ ] **Step 4: Exercise all four Caddy decisions**
+- [x] **Step 4: Exercise all four Caddy decisions**
 
 Use `curl --resolve ushome.amycat.com:443:192.168.1.31 --interface 192.168.1.31` and assert:
 
@@ -506,7 +513,7 @@ Use `curl --resolve ushome.amycat.com:443:192.168.1.31 --interface 192.168.1.31`
 
 Parse and print only status codes and error codes. Do not print headers, the token, response content, or expanded commands.
 
-- [ ] **Step 5: Exercise an OpenAI SDK completion**
+- [x] **Step 5: Exercise an OpenAI SDK completion**
 
 Use the installed Python OpenAI SDK with:
 
@@ -524,11 +531,11 @@ completion = client.chat.completions.create(
 
 Assert the model IDs contain the three aliases, the response has one non-empty assistant choice, and the finish reason is present. Print only `lan_openai_sdk=passed`; never print the prompt, answer, usage detail, or key.
 
-- [ ] **Step 6: Prove no secret or business-state leak**
+- [x] **Step 6: Prove no secret or business-state leak**
 
 Load the key in memory and fail if its full value occurs in Caddy or Gateway journal entries since deployment. Re-query total, active, and queued assessment counts; total and statuses must match the before-state except for transitions caused by independently submitted user work. Confirm the previously recorded Gateway PID and all platform service PIDs are unchanged; only system Caddy may have a new PID.
 
-- [ ] **Step 7: Verify restart persistence metadata**
+- [x] **Step 7: Verify restart persistence metadata**
 
 Run:
 
@@ -545,11 +552,11 @@ Expected: Caddy is enabled and active; the installed drop-in loads only `.env.ga
 **Files:**
 - Modify: `docs/superpowers/plans/2026-07-31-lan-codex-openai-api.md`
 
-- [ ] **Step 1: Check every acceptance statement against fresh evidence**
+- [x] **Step 1: Check every acceptance statement against fresh evidence**
 
 Mark Tasks 1–4 complete only after focused RED/GREEN evidence, the complete verifier, four live boundary decisions, the SDK completion, secret scan, service persistence, and before/after business-state checks have all passed.
 
-- [ ] **Step 2: Run the final repository boundary check**
+- [x] **Step 2: Run the final repository boundary check**
 
 Run:
 
@@ -564,7 +571,7 @@ git status --short --branch
 
 Expected: no formatting error, TradingAgents is clean, the secret is ignored and untracked, and only this acceptance plan is modified.
 
-- [ ] **Step 3: Commit acceptance without pushing**
+- [x] **Step 3: Commit acceptance without pushing**
 
 ```bash
 cd /app/devs/TradingNG
