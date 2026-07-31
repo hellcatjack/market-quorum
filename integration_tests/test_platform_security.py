@@ -55,10 +55,16 @@ def test_rest_mcp_and_browser_boundaries_fail_closed(monkeypatch):
     assert "invalid" not in forbidden_origin.text
 
 
-def test_public_routing_never_exposes_gateway_or_diagnostic_audit():
+def test_public_routing_exposes_only_authenticated_physical_lan_gateway():
     caddy = (ROOT / "deploy/caddy/tradingng.caddy").read_text()
     gateway_unit = (ROOT / "systemd/user/tradingng-codex-gateway.service").read_text()
-    assert "127.0.0.1:8000" not in caddy
+    assert caddy.count("reverse_proxy 127.0.0.1:8000") == 1
+    assert "route /openai/* {" in caddy
+    assert "path /openai/v1/models /openai/v1/chat/completions" in caddy
+    assert "remote_ip 192.168.1.0/24" in caddy
+    assert 'header Authorization "Bearer {$CODEX_GATEWAY_LAN_API_KEY}"' in caddy
+    assert "header_up -Authorization" in caddy
+    assert "/openai/internal/status" not in caddy
     assert "gateway_audit" not in caddy
     assert "codex-gateway-audit" not in gateway_unit
     assert (
