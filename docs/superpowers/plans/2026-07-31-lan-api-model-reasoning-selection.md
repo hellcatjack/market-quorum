@@ -35,7 +35,7 @@
 - Create: `gateway/tests/test_model_catalog.py`
 - Test: `gateway/tests/test_model_catalog.py`
 
-- [ ] **Step 1: Write failing normalization tests**
+- [x] **Step 1: Write failing normalization tests**
 
 Create `gateway/tests/test_model_catalog.py` with focused examples:
 
@@ -115,7 +115,7 @@ def test_rejects_catalog_over_the_hard_cap():
         normalize_model_catalog(payload, max_models=100)
 ```
 
-- [ ] **Step 2: Run the new test and verify RED**
+- [x] **Step 2: Run the new test and verify RED**
 
 Run:
 
@@ -126,7 +126,7 @@ cd /app/devs/TradingNG
 
 Expected: collection fails with `ModuleNotFoundError: No module named 'codex_gateway.model_catalog'`.
 
-- [ ] **Step 3: Implement the immutable catalog boundary**
+- [x] **Step 3: Implement the immutable catalog boundary**
 
 Create `gateway/src/codex_gateway/model_catalog.py`:
 
@@ -203,7 +203,7 @@ def normalize_model_catalog(
     return tuple(options)
 ```
 
-- [ ] **Step 4: Run catalog tests and verify GREEN**
+- [x] **Step 4: Run catalog tests and verify GREEN**
 
 Run:
 
@@ -214,7 +214,7 @@ cd /app/devs/TradingNG
 
 Expected: all catalog tests pass.
 
-- [ ] **Step 5: Commit the catalog unit**
+- [x] **Step 5: Commit the catalog unit**
 
 ```bash
 cd /app/devs/TradingNG
@@ -229,7 +229,7 @@ git commit -m "feat: normalize Codex model catalog"
 - Modify: `gateway/tests/test_runtime.py`
 - Test: `gateway/tests/test_runtime.py`
 
-- [ ] **Step 1: Script the App Server catalog in the runtime fixture**
+- [x] **Step 1: Script the App Server catalog in the runtime fixture**
 
 In `gateway/tests/test_runtime.py`, add this response to `ScriptedTransport.__init__`:
 
@@ -258,7 +258,7 @@ if method == "model/list":
     return self.model_response
 ```
 
-- [ ] **Step 2: Write failing runtime catalog tests**
+- [x] **Step 2: Write failing runtime catalog tests**
 
 Append to `gateway/tests/test_runtime.py`:
 
@@ -288,7 +288,7 @@ async def test_malformed_model_catalog_is_sanitized_as_unavailable(runtime_facto
     await runtime.stop()
 ```
 
-- [ ] **Step 3: Run the focused runtime tests and verify RED**
+- [x] **Step 3: Run the focused runtime tests and verify RED**
 
 Run:
 
@@ -300,7 +300,7 @@ cd /app/devs/TradingNG
 
 Expected: both tests fail because `CodexRuntime.available_models` does not exist.
 
-- [ ] **Step 4: Implement sanitized runtime discovery**
+- [x] **Step 4: Implement sanitized runtime discovery**
 
 Import the catalog types in `gateway/src/codex_gateway/runtime.py`:
 
@@ -325,7 +325,7 @@ async def available_models(self) -> tuple[CodexModelOption, ...]:
 
 Do not log `response` or the exception message.
 
-- [ ] **Step 5: Run runtime and catalog tests and verify GREEN**
+- [x] **Step 5: Run runtime and catalog tests and verify GREEN**
 
 Run:
 
@@ -336,7 +336,7 @@ cd /app/devs/TradingNG
 
 Expected: all tests pass.
 
-- [ ] **Step 6: Commit runtime discovery**
+- [x] **Step 6: Commit runtime discovery**
 
 ```bash
 cd /app/devs/TradingNG
@@ -352,7 +352,7 @@ git commit -m "feat: discover available Codex models"
 - Modify: `gateway/tests/test_app.py`
 - Test: `gateway/tests/test_app.py`
 
-- [ ] **Step 1: Give the fake app runtime a physical model catalog**
+- [x] **Step 1: Give the fake app runtime a physical model catalog**
 
 Import `CodexModelOption` in `gateway/tests/test_app.py` and add to
 `FakeRuntime.__init__`:
@@ -381,7 +381,7 @@ async def available_models(self):
     return self.models
 ```
 
-- [ ] **Step 2: Replace the model-list expectation and add failing public selection tests**
+- [x] **Step 2: Replace the model-list expectation and add failing public selection tests**
 
 Change `test_models_health_and_lifespan` so the expected ids are:
 
@@ -514,7 +514,7 @@ def test_private_route_bundle_wins_over_body_reasoning_effort():
     assert runtime.completion_calls[0]["run_id"] == "run-private"
 ```
 
-- [ ] **Step 3: Run the selected app tests and verify RED**
+- [x] **Step 3: Run the selected app tests and verify RED**
 
 Run:
 
@@ -526,7 +526,7 @@ cd /app/devs/TradingNG
 
 Expected: failures show that physical models are not advertised or accepted and body `reasoning_effort` is not resolved.
 
-- [ ] **Step 4: Add the explicit request field**
+- [x] **Step 4: Add the explicit request field**
 
 In `ChatCompletionRequest` in `gateway/src/codex_gateway/models.py`, add:
 
@@ -536,7 +536,7 @@ reasoning_effort: str | None = None
 
 Keep `ConfigDict(extra="allow")` for existing OpenAI client compatibility.
 
-- [ ] **Step 5: Implement public selection without weakening private pins**
+- [x] **Step 5: Implement public selection without weakening private pins**
 
 In `gateway/src/codex_gateway/app.py`:
 
@@ -611,7 +611,11 @@ catalog = await runtime.available_models()
 selected = next((item for item in catalog if item.id == body.model), None)
 if selected is None:
     raise ModelNotFound(body.model)
-effort = body.reasoning_effort or selected.default_reasoning_effort
+effort = (
+    selected.default_reasoning_effort
+    if body.reasoning_effort is None
+    else body.reasoning_effort
+)
 if effort not in selected.supported_reasoning_efforts:
     raise InvalidRequest(
         f"reasoning_effort {effort!r} is not supported by model {body.model!r}",
@@ -632,7 +636,7 @@ pinned_config = EffectiveCodexConfig(
    private route bundle, ignore `body.reasoning_effort` and retain the frozen
    header effort.
 
-- [ ] **Step 6: Run the full Gateway suite and verify GREEN**
+- [x] **Step 6: Run the full Gateway suite and verify GREEN**
 
 Run:
 
@@ -644,7 +648,7 @@ cd /app/devs/TradingNG
 Expected: every Gateway test passes; existing tool-call, retry, size, timeout,
 transport, audit, and error behavior remains green.
 
-- [ ] **Step 7: Commit the public API contract**
+- [x] **Step 7: Commit the public API contract**
 
 ```bash
 cd /app/devs/TradingNG
@@ -661,7 +665,7 @@ git commit -m "feat: select Codex model per LAN request"
 - Test: `platform/tests/operations/test_deploy_config.py`
 - Test: `integration_tests/test_platform_security.py`
 
-- [ ] **Step 1: Add failing explicit-header deletion assertions**
+- [x] **Step 1: Add failing explicit-header deletion assertions**
 
 Define this tuple in both relevant tests, or inline the same exact values:
 
@@ -701,7 +705,7 @@ platform_configuration = "\n".join(
 assert "CODEX_GATEWAY_LAN_API_KEY" not in platform_configuration
 ```
 
-- [ ] **Step 2: Run the two tests and verify RED**
+- [x] **Step 2: Run the two tests and verify RED**
 
 Run:
 
@@ -715,7 +719,7 @@ cd /app/devs/TradingNG
 
 Expected: both tests fail because Caddy currently deletes only Authorization.
 
-- [ ] **Step 3: Delete all private headers in the LAN reverse proxy**
+- [x] **Step 3: Delete all private headers in the LAN reverse proxy**
 
 Extend the existing proxy block in `deploy/caddy/tradingng.caddy`:
 
@@ -735,7 +739,7 @@ reverse_proxy 127.0.0.1:8000 {
 Do not add these deletions to loopback Gateway or the platform runner; direct
 TradingNG calls must retain them.
 
-- [ ] **Step 4: Validate adapted Caddy and verify GREEN**
+- [x] **Step 4: Validate adapted Caddy and verify GREEN**
 
 Run:
 
@@ -750,7 +754,7 @@ CODEX_GATEWAY_LAN_API_KEY=test-value caddy validate \
 
 Expected: Caddy reports `Valid configuration` and all selected tests pass.
 
-- [ ] **Step 5: Commit the edge isolation**
+- [x] **Step 5: Commit the edge isolation**
 
 ```bash
 cd /app/devs/TradingNG
@@ -766,7 +770,7 @@ git commit -m "fix: isolate LAN requests from TradingNG pins"
 - Modify: `README.md`
 - Modify: `README.zh-CN.md`
 
-- [ ] **Step 1: Update the English LAN API example**
+- [x] **Step 1: Update the English LAN API example**
 
 In the `LAN OpenAI-compatible API` section of `README.md`, retain installation,
 key retrieval, rotation, CIDR, and denial behavior. Replace the static alias-only
@@ -800,13 +804,13 @@ Document these exact rules:
   assessment execution;
 - external requests still share Codex capacity and quota with assessments.
 
-- [ ] **Step 2: Update the Chinese LAN API example separately**
+- [x] **Step 2: Update the Chinese LAN API example separately**
 
 Add the equivalent Python example and rules to `README.zh-CN.md`. Use the terms
 “物理模型”“思考深度”“继承本机配置”“TradingNG 私有路由” and state plainly that
 the key does not need to be copied to `.env.platform`.
 
-- [ ] **Step 3: Run source, documentation, and full repository verification**
+- [x] **Step 3: Run source, documentation, and full repository verification**
 
 Run:
 
@@ -828,7 +832,7 @@ real MySQL, Web tests/build, npm audit, Caddy, identity, and artifact checks all
 exit 0. Existing environment-dependent migration-database skips remain
 acceptable when explicitly reported.
 
-- [ ] **Step 4: Commit the bilingual documentation**
+- [x] **Step 4: Commit the bilingual documentation**
 
 ```bash
 cd /app/devs/TradingNG
@@ -842,7 +846,7 @@ git commit -m "docs: explain LAN model and reasoning selection"
 - Modify runtime state only: user Gateway process and system Caddy configuration.
 - Modify after acceptance: `docs/superpowers/plans/2026-07-31-lan-api-model-reasoning-selection.md`
 
-- [ ] **Step 1: Record an idle production baseline**
+- [x] **Step 1: Record an idle production baseline**
 
 Query `/internal/status`, platform `/readyz`, MySQL assessment counts through
 `Settings()`, and systemd PIDs. Require:
@@ -859,7 +863,7 @@ PIDs. If a Gateway completion or assessment is active, leave every service
 running and poll in short intervals until the system is idle; do not interrupt
 the work.
 
-- [ ] **Step 2: Restart only Gateway and install final Caddy**
+- [x] **Step 2: Restart only Gateway and install final Caddy**
 
 Run:
 
@@ -875,7 +879,7 @@ Expected: Gateway becomes active and healthy; installer reports
 environment and no `--environ`. API, scheduler, validation, Alpha broker, and
 worker PIDs remain unchanged.
 
-- [ ] **Step 3: Verify dynamic discovery and explicit selection through the LAN edge**
+- [x] **Step 3: Verify dynamic discovery and explicit selection through the LAN edge**
 
 Use a root-readable in-memory key and a local-address-pinned HTTPS transport so
 the test preserves `ushome.amycat.com` TLS validation while connecting from
@@ -890,7 +894,7 @@ the test preserves `ushome.amycat.com` TLS validation while connecting from
 Do not print the key, prompt, answer, usage, raw model catalog, or response
 headers.
 
-- [ ] **Step 4: Prove forged private headers are stripped**
+- [x] **Step 4: Prove forged private headers are stripped**
 
 Send a second explicit physical-model completion through Caddy with
 `X-TradingNG-Run-ID: lan-forgery-probe` and all six fake route-pin headers.
@@ -898,14 +902,14 @@ Assert the request still resolves from its body model and effort. Scan Gateway
 journal entries since the probe and assert the marker and fake model names do
 not appear. Print only `private_header_strip=passed`.
 
-- [ ] **Step 5: Prove internal loopback remains keyless**
+- [x] **Step 5: Prove internal loopback remains keyless**
 
 Call `http://127.0.0.1:8000/v1/chat/completions` with `model="codex"`, no
 Authorization header, and no LAN key. Assert a non-empty assistant choice and
 finish reason. Do not print response content; print only
 `internal_keyless_gateway=passed`.
 
-- [ ] **Step 6: Prove persistence, secret safety, and business-state stability**
+- [x] **Step 6: Prove persistence, secret safety, and business-state stability**
 
 Assert:
 
@@ -920,7 +924,7 @@ only Gateway and Caddy PIDs changed as planned
 TradingAgents has no worktree changes
 ```
 
-- [ ] **Step 7: Record acceptance and commit without pushing**
+- [x] **Step 7: Record acceptance and commit without pushing**
 
 Mark every completed checkbox in this plan only after fresh automated and live
 evidence. Then run:
@@ -939,3 +943,22 @@ git commit -m "docs: record LAN model selection acceptance"
 Do not push unless the user explicitly requests GitHub submission. Never stage
 the LAN key, `.env.platform`, runtime artifacts, journals, prompts, answers,
 model-list response bodies, or credentials.
+
+## Production acceptance evidence
+
+- Deployed from an idle baseline on 2026-07-31 at 16:39 EDT: zero active
+  Gateway completions, zero active or queued assessments, and 111 succeeded
+  assessment runs.
+- Fresh repository verification passed 699 Python tests with two explicitly
+  environment-dependent skips, plus 86 Web tests, lint, typecheck, production
+  build, npm audit, Caddy validation, identity convergence, and artifact checks.
+- Live discovery returned the inherited alias plus seven reasoning-capable
+  physical models. OpenAI SDK completions passed with explicit
+  `gpt-5.6-terra/high` and with forged private TradingNG headers.
+- The forgery marker, fake pin values, and full LAN key were absent from the
+  relevant Gateway and Caddy journals. A direct loopback completion without
+  Authorization also passed.
+- All 36 platform service PIDs and the 111-run business state were unchanged.
+  Only Gateway and Caddy restarted as planned; both are active and enabled.
+- `.env.gateway-lan` remains root-owned mode `0600`, ignored and untracked.
+  `TradingAgents/` remains unchanged.
