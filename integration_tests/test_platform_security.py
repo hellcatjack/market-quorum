@@ -59,7 +59,7 @@ def test_public_routing_exposes_only_authenticated_physical_lan_gateway():
     caddy = (ROOT / "deploy/caddy/tradingng.caddy").read_text()
     gateway_unit = (ROOT / "systemd/user/tradingng-codex-gateway.service").read_text()
     assert caddy.count("reverse_proxy 127.0.0.1:8000") == 1
-    assert "route /openai/* {" in caddy
+    assert "handle /openai/* {" in caddy
     assert "path /openai/v1/models /openai/v1/chat/completions" in caddy
     assert "remote_ip 192.168.1.0/24" in caddy
     assert 'header Authorization "Bearer {$CODEX_GATEWAY_LAN_API_KEY}"' in caddy

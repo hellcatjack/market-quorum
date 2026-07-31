@@ -284,7 +284,9 @@ def test_public_caddy_routes_only_to_loopback_platform_services():
 def test_public_caddy_exposes_only_authenticated_physical_lan_codex_api():
     config = (ROOT / "deploy/caddy/tradingng.caddy").read_text()
 
-    assert "route /openai/* {" in config
+    lan_handler = "handle /openai/* {"
+    assert lan_handler in config
+    assert config.index(lan_handler) < config.index("@noSession")
     assert "path /openai/v1/models /openai/v1/chat/completions" in config
     assert config.count("remote_ip 192.168.1.0/24") == 3
     assert 'header Authorization "Bearer {$CODEX_GATEWAY_LAN_API_KEY}"' in config
