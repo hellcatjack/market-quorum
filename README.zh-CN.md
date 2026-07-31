@@ -140,6 +140,30 @@ OPENAI_BASE_URL=https://ushome.amycat.com/openai/v1
 OPENAI_API_KEY=<从 .env.gateway-lan 安全取得的值>
 ```
 
+先发现当前可用的物理模型及其支持的思考深度，再通过普通 OpenAI 客户端选择模型与
+思考深度：
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://ushome.amycat.com/openai/v1",
+    api_key="<局域网 Gateway 密钥>",
+)
+models = client.models.list()
+completion = client.chat.completions.create(
+    model="gpt-5.6-sol",
+    reasoning_effort="high",
+    messages=[{"role": "user", "content": "分析这份数据。"}],
+)
+```
+
+`/models` 会给出每个物理模型的 `supported_reasoning_efforts` 和
+`default_reasoning_effort`。省略 `reasoning_effort` 时使用该物理模型在 Codex
+目录中的默认思考深度；使用 `model="codex"` 且不传思考深度时继承本机最新的 Codex
+模型和思考模式。`codex-fast` 与 `codex-slow` 是 TradingNG 私有路由，不是局域网
+模型选项。
+
 只在需要通过获准的内部保密渠道分发时读取密钥：
 
 ```bash
@@ -155,7 +179,10 @@ sudo /app/devs/TradingNG/scripts/install_public_caddy.sh \
 ```
 
 公网、VPN、Docker、回环来源以及缺少或使用错误密钥的请求都会被拒绝。该密钥只用于
-保护本机 Codex Gateway，不是 OpenAI 账户密钥；不得提交到 Git、写入日志或公开传播。
+保护本机 Codex Gateway，不是 OpenAI 账户密钥；不得提交到 Git、写入日志、公开传播
+或复制到 `.env.platform`。Caddy 会在转发前删除局域网凭据和所有 TradingNG 私有路由
+请求头，TradingNG 继续使用无需该密钥的回环 API。局域网请求与评估任务会按设计共享
+Codex 并发和账户额度。
 
 ## 连接 TradingAgents
 

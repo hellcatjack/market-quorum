@@ -156,6 +156,30 @@ OPENAI_BASE_URL=https://ushome.amycat.com/openai/v1
 OPENAI_API_KEY=<value securely retrieved from .env.gateway-lan>
 ```
 
+Discover the current physical models and their supported reasoning efforts,
+then select a pair with an ordinary OpenAI client:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://ushome.amycat.com/openai/v1",
+    api_key="<LAN Gateway key>",
+)
+models = client.models.list()
+completion = client.chat.completions.create(
+    model="gpt-5.6-sol",
+    reasoning_effort="high",
+    messages=[{"role": "user", "content": "Analyze this data."}],
+)
+```
+
+`/models` reports each physical model's `supported_reasoning_efforts` and
+`default_reasoning_effort`. Omit `reasoning_effort` to use that physical
+model's catalog default. Use `model="codex"` without `reasoning_effort` to
+inherit the latest local Codex model and effort. `codex-fast` and `codex-slow`
+are private TradingNG routes, not LAN model choices.
+
 Retrieve the key only when distributing it through an approved internal secret
 channel:
 
@@ -173,7 +197,10 @@ sudo /app/devs/TradingNG/scripts/install_public_caddy.sh \
 
 Public, VPN, Docker, loopback, missing-key, and wrong-key requests are denied.
 The key protects this local Codex Gateway; it must never be committed, pasted
-into logs, or used as an OpenAI account credential.
+into logs, copied to `.env.platform`, or used as an OpenAI account credential.
+Caddy removes the LAN credential and all private TradingNG route headers before
+proxying. TradingNG keeps using the keyless loopback API, although LAN and
+assessment requests intentionally share Codex concurrency and account quota.
 
 ## Connect TradingAgents
 
