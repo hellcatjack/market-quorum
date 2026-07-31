@@ -64,8 +64,11 @@ POST /openai/v1/chat/completions
 - 客户端使用标准 OpenAI Bearer 头，不新增自定义协议；
 - 密钥保存在仓库根目录的 `.env.gateway-lan`，文件权限固定为 `0600`；
 - `.env.gateway-lan` 必须被 Git 忽略，仓库只提供不含真实值的配置说明；
-- Caddy systemd 服务只加载 `.env.gateway-lan`，不得为了读取该密钥而加载包含其他平台
-  凭据的 `.env.platform`；
+- 系统级 `caddy.service` 通过专用 drop-in 只加载 `.env.gateway-lan`，不得为了读取该
+  密钥而加载包含其他平台凭据的 `.env.platform`；仓库中的用户级
+  `tradingng-platform-caddy.service` 是已禁用的回滚单元，不参与本功能；
+- 系统 Caddy 的发行版单元当前使用 `caddy run --environ`，会把环境变量写入 journal；
+  专用 drop-in 必须清空并重写 `ExecStart`，移除 `--environ` 后才能注入 API Key；
 - Caddy 配置引用 `CODEX_GATEWAY_LAN_API_KEY`，真实值不得写入 Caddyfile、测试快照、
   journal、README 或 Git；
 - 密钥文件缺失时 Caddy 服务启动必须失败关闭，不能退化为无鉴权访问；部署顺序必须先
@@ -86,14 +89,16 @@ POST /openai/v1/chat/completions
 源代码和部署资产需要保持以下一致性：
 
 - `deploy/caddy/tradingng.caddy`：局域网路径、来源限制、Bearer 鉴权和反向代理；
-- 公共 Caddy 安装脚本与 `tradingng-platform-caddy.service`：只加载独立密钥文件并维持
-  开机启动；
+- `deploy/systemd/caddy-lan-openai.conf`：系统级 `caddy.service` drop-in，只加载独立
+  密钥文件，移除会转储环境的 `--environ`，并维持系统 Caddy 的开机启动；
+- 公共 Caddy 安装脚本：生成或校验私有密钥、安装/回滚 systemd drop-in、验证配置并
+  重启系统 Caddy；
 - `.gitignore`：忽略 `.env.gateway-lan`；
 - 中英文 README：记录基地址、客户端配置、密钥安装和轮换方式；
 - 部署配置测试：约束来源网段、精确路径、上游回环地址、认证头删除和密钥隔离；
 - Gateway 应用、平台 API、调度器、Worker 与 `TradingAgents/` 不修改。
 
-部署只短暂重启 Caddy 以加载新的 systemd 环境。Gateway、平台 API、调度器、验证器
+部署只短暂重启系统 Caddy 以加载新的 systemd 环境。Gateway、平台 API、调度器、验证器
 和 Worker 不重启，运行中评估不应被中断。Caddy 重启前后必须记录评估总数、运行数和
 队列数，确认业务状态未被修改。
 
