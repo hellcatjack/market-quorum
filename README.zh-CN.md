@@ -121,6 +121,42 @@ curl http://127.0.0.1:8000/internal/status
 journalctl --user-unit tradingng-codex-gateway.service --follow
 ```
 
+### 局域网 OpenAI 兼容 API
+
+系统 Caddy 只向物理局域网 `192.168.1.0/24` 开放
+`GET /openai/v1/models` 和 `POST /openai/v1/chat/completions`。Gateway 本体继续仅
+监听回环地址。以 root 安装最终 Caddy 配置；如果密钥尚不存在，安装器会在被 Git
+忽略且权限为 `0600` 的 `.env.gateway-lan` 中生成一个 256 位随机密钥：
+
+```bash
+sudo /app/devs/TradingNG/scripts/install_public_caddy.sh \
+  --mode final --confirm-domain ushome.amycat.com
+```
+
+局域网客户端配置如下：
+
+```dotenv
+OPENAI_BASE_URL=https://ushome.amycat.com/openai/v1
+OPENAI_API_KEY=<从 .env.gateway-lan 安全取得的值>
+```
+
+只在需要通过获准的内部保密渠道分发时读取密钥：
+
+```bash
+sudo sed -n 's/^CODEX_GATEWAY_LAN_API_KEY=//p' \
+  /app/devs/TradingNG/.env.gateway-lan
+```
+
+使用以下命令轮换密钥并立即使旧值失效：
+
+```bash
+sudo /app/devs/TradingNG/scripts/install_public_caddy.sh \
+  --mode final --confirm-domain ushome.amycat.com --rotate-lan-api-key
+```
+
+公网、VPN、Docker、回环来源以及缺少或使用错误密钥的请求都会被拒绝。该密钥只用于
+保护本机 Codex Gateway，不是 OpenAI 账户密钥；不得提交到 Git、写入日志或公开传播。
+
 ## 连接 TradingAgents
 
 把本地 Gateway 示例复制为被忽略的实际环境文件：

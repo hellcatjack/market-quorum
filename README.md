@@ -136,6 +136,45 @@ curl http://127.0.0.1:8000/internal/status
 journalctl --user-unit tradingng-codex-gateway.service --follow
 ```
 
+### LAN OpenAI-compatible API
+
+The system Caddy exposes only `GET /openai/v1/models` and
+`POST /openai/v1/chat/completions` to the physical LAN
+`192.168.1.0/24`. Gateway itself remains on loopback. Install the final Caddy
+configuration as root; when needed, the installer creates a 256-bit key in the
+ignored, mode-`0600` `.env.gateway-lan` file:
+
+```bash
+sudo /app/devs/TradingNG/scripts/install_public_caddy.sh \
+  --mode final --confirm-domain ushome.amycat.com
+```
+
+Configure LAN clients with:
+
+```dotenv
+OPENAI_BASE_URL=https://ushome.amycat.com/openai/v1
+OPENAI_API_KEY=<value securely retrieved from .env.gateway-lan>
+```
+
+Retrieve the key only when distributing it through an approved internal secret
+channel:
+
+```bash
+sudo sed -n 's/^CODEX_GATEWAY_LAN_API_KEY=//p' \
+  /app/devs/TradingNG/.env.gateway-lan
+```
+
+Rotate the key and immediately invalidate the old value with:
+
+```bash
+sudo /app/devs/TradingNG/scripts/install_public_caddy.sh \
+  --mode final --confirm-domain ushome.amycat.com --rotate-lan-api-key
+```
+
+Public, VPN, Docker, loopback, missing-key, and wrong-key requests are denied.
+The key protects this local Codex Gateway; it must never be committed, pasted
+into logs, or used as an OpenAI account credential.
+
 ## Connect TradingAgents
 
 Copy the local Gateway example into the ignored active environment file:
