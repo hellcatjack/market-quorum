@@ -64,6 +64,7 @@ class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     model: str
+    reasoning_effort: str | None = None
     messages: list[ChatMessage] = Field(min_length=1)
     tools: list[FunctionTool] = Field(default_factory=list)
     tool_choice: ToolChoice | None = None

@@ -8,6 +8,7 @@ from codex_gateway.app import create_app
 from codex_gateway.config import Settings
 from codex_gateway.effective_config import EffectiveCodexConfig
 from codex_gateway.errors import CodexRateLimit
+from codex_gateway.model_catalog import CodexModelOption
 from codex_gateway.models import CodexTurnResult, TokenUsage
 from codex_gateway.runtime import RuntimeActivity
 
@@ -36,6 +37,19 @@ class FakeRuntime:
         self.pinned_configs = []
         self.completion_calls = []
         self.config = EffectiveCodexConfig("gpt-5.6-sol", "xhigh")
+        self.models = (
+            CodexModelOption(
+                id="gpt-5.6-sol",
+                default_reasoning_effort="medium",
+                supported_reasoning_efforts=("low", "medium", "high", "xhigh"),
+            ),
+            CodexModelOption(
+                id="gpt-5.6-terra",
+                default_reasoning_effort="low",
+                supported_reasoning_efforts=("low", "medium", "high"),
+            ),
+        )
+        self.model_catalog_calls = 0
 
     async def start(self):
         self.started = True
@@ -47,6 +61,10 @@ class FakeRuntime:
 
     async def effective_config(self):
         return self.config
+
+    async def available_models(self):
+        self.model_catalog_calls += 1
+        return self.models
 
     def activity_snapshot(self):
         return RuntimeActivity(
@@ -77,12 +95,126 @@ def test_models_health_and_lifespan():
     runtime = FakeRuntime()
     with make_client(runtime) as http:
         assert http.get("/healthz").json() == {"status": "ok"}
-        assert [model["id"] for model in http.get("/v1/models").json()["data"]] == [
+        models = http.get("/v1/models").json()["data"]
+        assert [model["id"] for model in models] == [
             "codex",
-            "codex-fast",
-            "codex-slow",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
         ]
+        assert models[1] == {
+            "id": "gpt-5.6-sol",
+            "object": "model",
+            "owned_by": "openai-codex",
+            "default_reasoning_effort": "medium",
+            "supported_reasoning_efforts": ["low", "medium", "high", "xhigh"],
+        }
     assert runtime.started and runtime.stopped
+
+
+@pytest.mark.parametrize(
+    ("payload", "expected"),
+    [
+        (
+            {"model": "gpt-5.6-sol", "reasoning_effort": "xhigh"},
+            EffectiveCodexConfig("gpt-5.6-sol", "xhigh"),
+        ),
+        (
+            {"model": "gpt-5.6-terra"},
+            EffectiveCodexConfig("gpt-5.6-terra", "low"),
+        ),
+    ],
+)
+def test_physical_model_selects_explicit_or_catalog_default_effort(payload, expected):
+    runtime = FakeRuntime()
+    with make_client(runtime) as http:
+        response = http.post(
+            "/v1/chat/completions",
+            json={
+                **payload,
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert runtime.pinned_configs == [expected]
+    assert runtime.completion_calls[0]["run_id"] is None
+
+
+def test_unknown_model_and_unsupported_effort_fail_before_completion():
+    runtime = FakeRuntime()
+    with make_client(runtime) as http:
+        unknown = http.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-does-not-exist",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+        effort = http.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-5.6-terra",
+                "reasoning_effort": "xhigh",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert unknown.status_code == 404
+    assert unknown.json()["error"]["code"] == "model_not_found"
+    assert effort.status_code == 400
+    assert effort.json()["error"]["code"] == "invalid_request"
+    assert effort.json()["error"]["param"] == "reasoning_effort"
+    assert runtime.pinned_configs == []
+
+
+def test_codex_alias_rejects_partial_effort_override_but_still_inherits():
+    runtime = FakeRuntime()
+    with make_client(runtime) as http:
+        inherited = http.post(
+            "/v1/chat/completions",
+            json={
+                "model": "codex",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+        partial = http.post(
+            "/v1/chat/completions",
+            json={
+                "model": "codex",
+                "reasoning_effort": "high",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert inherited.status_code == 200
+    assert partial.status_code == 400
+    assert partial.json()["error"]["param"] == "reasoning_effort"
+    assert runtime.pinned_configs == [None]
+
+
+def test_private_route_bundle_wins_over_body_reasoning_effort():
+    runtime = FakeRuntime()
+    headers = {
+        "X-TradingNG-Run-ID": "run-private",
+        "X-TradingNG-Codex-Fast-Model": "gpt-5.6-terra",
+        "X-TradingNG-Codex-Fast-Reasoning-Effort": "medium",
+        "X-TradingNG-Codex-Slow-Model": "gpt-5.6-sol",
+        "X-TradingNG-Codex-Slow-Reasoning-Effort": "high",
+    }
+    with make_client(runtime) as http:
+        response = http.post(
+            "/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": "codex-fast",
+                "reasoning_effort": "xhigh",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert runtime.pinned_configs == [EffectiveCodexConfig("gpt-5.6-terra", "medium")]
+    assert runtime.completion_calls[0]["run_id"] == "run-private"
 
 
 def test_internal_status_reports_effective_snapshot():

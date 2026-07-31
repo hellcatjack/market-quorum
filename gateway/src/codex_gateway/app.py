@@ -28,7 +28,9 @@ from codex_gateway.runtime import CodexRuntime
 logger = logging.getLogger(__name__)
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 _RETRY_COUNT = re.compile(r"^[0-9]{1,3}$")
-_PUBLIC_MODELS = ("codex", "codex-fast", "codex-slow")
+_INHERITED_MODEL = "codex"
+_PRIVATE_ROUTE_MODELS = ("codex-fast", "codex-slow")
+_MODEL_ALIASES = (_INHERITED_MODEL, *_PRIVATE_ROUTE_MODELS)
 
 
 def _parse_retry_count(raw: str | None) -> int:
@@ -122,10 +124,23 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
 
     @app.get("/v1/models")
     async def models():
+        physical = await runtime.available_models()
         return {
             "object": "list",
             "data": [
-                {"id": model, "object": "model", "owned_by": "local"} for model in _PUBLIC_MODELS
+                {"id": "codex", "object": "model", "owned_by": "local"},
+                *[
+                    {
+                        "id": item.id,
+                        "object": "model",
+                        "owned_by": "openai-codex",
+                        "default_reasoning_effort": item.default_reasoning_effort,
+                        "supported_reasoning_efforts": list(
+                            item.supported_reasoning_efforts
+                        ),
+                    }
+                    for item in physical
+                ],
             ],
         }
 
@@ -181,9 +196,8 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
         started = time.monotonic()
         try:
             retry_count = _parse_retry_count(x_stainless_retry_count)
-            if body.model not in _PUBLIC_MODELS:
-                raise ModelNotFound(body.model)
             pinned_config = None
+            is_tradingng_pin = False
             route_values = (
                 tradingng_run_id,
                 fast_codex_model,
@@ -192,7 +206,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                 slow_codex_reasoning_effort,
             )
             legacy_values = (tradingng_run_id, codex_model, codex_reasoning_effort)
-            if body.model == "codex":
+            if body.model == _INHERITED_MODEL:
                 if any(
                     value is not None
                     for value in (
@@ -210,7 +224,13 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                         model=codex_model,
                         reasoning_effort=codex_reasoning_effort,
                     ).require_complete()
-            else:
+                    is_tradingng_pin = True
+                elif body.reasoning_effort is not None:
+                    raise InvalidRequest(
+                        "reasoning_effort requires an explicit physical model",
+                        param="reasoning_effort",
+                    )
+            elif body.model in _PRIVATE_ROUTE_MODELS:
                 if codex_model is not None or codex_reasoning_effort is not None:
                     raise InvalidRequest("Legacy and route pin headers cannot be mixed")
                 if not all(value is not None and value.strip() for value in route_values):
@@ -225,8 +245,38 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                         model=slow_codex_model,
                         reasoning_effort=slow_codex_reasoning_effort,
                     ).require_complete()
+                is_tradingng_pin = True
+            else:
+                private_values = (
+                    tradingng_run_id,
+                    codex_model,
+                    codex_reasoning_effort,
+                    fast_codex_model,
+                    fast_codex_reasoning_effort,
+                    slow_codex_model,
+                    slow_codex_reasoning_effort,
+                )
+                if any(value is not None for value in private_values):
+                    raise InvalidRequest(
+                        "TradingNG pin headers require a private model alias"
+                    )
+                catalog = await runtime.available_models()
+                selected = next((item for item in catalog if item.id == body.model), None)
+                if selected is None:
+                    raise ModelNotFound(body.model)
+                effort = body.reasoning_effort or selected.default_reasoning_effort
+                if effort not in selected.supported_reasoning_efforts:
+                    raise InvalidRequest(
+                        f"reasoning_effort {effort!r} is not supported by "
+                        f"model {body.model!r}",
+                        param="reasoning_effort",
+                    )
+                pinned_config = EffectiveCodexConfig(
+                    model=selected.id,
+                    reasoning_effort=effort,
+                ).require_complete()
 
-            if pinned_config is not None:
+            if is_tradingng_pin:
                 if tradingng_run_id is None or not _RUN_ID.fullmatch(tradingng_run_id):
                     raise InvalidRequest("X-TradingNG-Run-ID is invalid")
                 pinned_values = (
@@ -264,7 +314,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                 adapted.output_schema,
                 pinned_config=pinned_config,
                 request_id=request_id,
-                run_id=tradingng_run_id,
+                run_id=tradingng_run_id if is_tradingng_pin else None,
                 retry_count=retry_count,
             )
             response = to_chat_completion(body, adapted, result)
