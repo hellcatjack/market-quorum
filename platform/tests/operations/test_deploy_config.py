@@ -293,6 +293,17 @@ def test_public_caddy_exposes_only_authenticated_physical_lan_codex_api():
     assert "uri strip_prefix /openai" in config
     assert config.count("reverse_proxy 127.0.0.1:8000") == 1
     assert "header_up -Authorization" in config
+    private_headers = (
+        "X-TradingNG-Run-ID",
+        "X-TradingNG-Codex-Model",
+        "X-TradingNG-Codex-Reasoning-Effort",
+        "X-TradingNG-Codex-Fast-Model",
+        "X-TradingNG-Codex-Fast-Reasoning-Effort",
+        "X-TradingNG-Codex-Slow-Model",
+        "X-TradingNG-Codex-Slow-Reasoning-Effort",
+    )
+    for header in private_headers:
+        assert f"header_up -{header}" in config
     assert 'respond `{"error":{"message":"Unauthorized"' in config
     assert '"code":"invalid_api_key"}}` 401' in config
     assert 'respond `{"error":{"message":"Not found"' in config
@@ -345,6 +356,18 @@ def test_public_caddy_installer_isolates_and_rotates_the_lan_api_key():
     assert "systemctl restart caddy" in installer
     assert "systemctl reload caddy" not in installer
     assert ".env.platform" not in dropin
+    platform_configuration = "\n".join(
+        (ROOT / path).read_text()
+        for path in (
+            ".env.platform.example",
+            "systemd/user/tradingng-platform-api.service",
+            "systemd/user/tradingng-platform-scheduler.service",
+            "systemd/user/tradingng-platform-validation.service",
+            "systemd/user/tradingng-platform-alpha-broker.service",
+            "systemd/user/tradingng-platform-worker@.service",
+        )
+    )
+    assert "CODEX_GATEWAY_LAN_API_KEY" not in platform_configuration
 
 
 def test_gateway_service_supports_unbounded_turns_and_graceful_drain():

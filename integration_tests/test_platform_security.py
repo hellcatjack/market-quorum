@@ -64,6 +64,17 @@ def test_public_routing_exposes_only_authenticated_physical_lan_gateway():
     assert "remote_ip 192.168.1.0/24" in caddy
     assert 'header Authorization "Bearer {$CODEX_GATEWAY_LAN_API_KEY}"' in caddy
     assert "header_up -Authorization" in caddy
+    private_headers = (
+        "X-TradingNG-Run-ID",
+        "X-TradingNG-Codex-Model",
+        "X-TradingNG-Codex-Reasoning-Effort",
+        "X-TradingNG-Codex-Fast-Model",
+        "X-TradingNG-Codex-Fast-Reasoning-Effort",
+        "X-TradingNG-Codex-Slow-Model",
+        "X-TradingNG-Codex-Slow-Reasoning-Effort",
+    )
+    for header in private_headers:
+        assert f"header_up -{header}" in caddy
     assert "/openai/internal/status" not in caddy
     assert "gateway_audit" not in caddy
     assert "codex-gateway-audit" not in gateway_unit

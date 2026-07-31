@@ -18,6 +18,13 @@ ushome.amycat.com {
 			uri strip_prefix /openai
 			reverse_proxy 127.0.0.1:8000 {
 				header_up -Authorization
+				header_up -X-TradingNG-Run-ID
+				header_up -X-TradingNG-Codex-Model
+				header_up -X-TradingNG-Codex-Reasoning-Effort
+				header_up -X-TradingNG-Codex-Fast-Model
+				header_up -X-TradingNG-Codex-Fast-Reasoning-Effort
+				header_up -X-TradingNG-Codex-Slow-Model
+				header_up -X-TradingNG-Codex-Slow-Reasoning-Effort
 			}
 		}
 
