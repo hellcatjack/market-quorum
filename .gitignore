@@ -11,6 +11,8 @@ build/
 *.egg-info/
 .worktrees/
 .env.platform
+.env.gateway-lan
+.env.gateway-lan.*
 var/
 reports/
 web/dist/

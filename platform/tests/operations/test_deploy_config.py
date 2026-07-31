@@ -277,8 +277,28 @@ def test_public_caddy_routes_only_to_loopback_platform_services():
     assert "Referrer-Policy" in config
     assert "Permissions-Policy" in config
     assert "-Server" in config
-    assert "127.0.0.1:8000" not in config
+    assert config.count("127.0.0.1:8000") == 1
     assert ".env" not in config
+
+
+def test_public_caddy_exposes_only_authenticated_physical_lan_codex_api():
+    config = (ROOT / "deploy/caddy/tradingng.caddy").read_text()
+
+    assert "route /openai/* {" in config
+    assert "path /openai/v1/models /openai/v1/chat/completions" in config
+    assert config.count("remote_ip 192.168.1.0/24") == 3
+    assert 'header Authorization "Bearer {$CODEX_GATEWAY_LAN_API_KEY}"' in config
+    assert "uri strip_prefix /openai" in config
+    assert config.count("reverse_proxy 127.0.0.1:8000") == 1
+    assert "header_up -Authorization" in config
+    assert 'respond `{"error":{"message":"Unauthorized"' in config
+    assert '"code":"invalid_api_key"}}` 401' in config
+    assert 'respond `{"error":{"message":"Not found"' in config
+    assert '"code":"not_found"}}` 404' in config
+    assert 'respond `{"error":{"message":"Forbidden"' in config
+    assert '"code":"lan_only"}}` 403' in config
+    assert "192.168.201.0/24" not in config
+    assert "/openai/internal/status" not in config
 
 
 def test_public_maintenance_caddy_has_no_application_upstream():
@@ -297,8 +317,32 @@ def test_public_caddy_installer_is_domain_and_mode_guarded():
     assert "/etc/caddy/sites-enabled/tradingng.caddy" in installer
     assert "import /etc/caddy/sites-enabled/*.caddy" in installer
     assert "caddy validate --config /etc/caddy/Caddyfile" in installer
-    assert "systemctl reload caddy" in installer
+    assert "systemctl restart caddy" in installer
     assert "tradingng-codex-gateway" not in installer
+
+
+def test_public_caddy_installer_isolates_and_rotates_the_lan_api_key():
+    installer = (ROOT / "scripts/install_public_caddy.sh").read_text()
+    dropin_path = ROOT / "deploy/systemd/caddy-lan-openai.conf"
+    assert dropin_path.is_file()
+    dropin = dropin_path.read_text()
+    ignored = (ROOT / ".gitignore").read_text().splitlines()
+
+    assert ".env.gateway-lan" in ignored
+    assert "EnvironmentFile=/app/devs/TradingNG/.env.gateway-lan" in dropin
+    assert "ExecStart=" in dropin
+    assert "ExecStart=/usr/bin/caddy run --config /etc/caddy/Caddyfile" in dropin
+    assert "--environ" not in dropin
+    assert "CODEX_GATEWAY_LAN_API_KEY" in installer
+    assert "openssl rand -hex 32" in installer
+    assert "--rotate-lan-api-key" in installer
+    assert "chmod 0600" in installer
+    assert "mv -f --" in installer
+    assert "/etc/systemd/system/caddy.service.d/tradingng-lan-openai.conf" in installer
+    assert "systemctl daemon-reload" in installer
+    assert "systemctl restart caddy" in installer
+    assert "systemctl reload caddy" not in installer
+    assert ".env.platform" not in dropin
 
 
 def test_gateway_service_supports_unbounded_turns_and_graceful_drain():
