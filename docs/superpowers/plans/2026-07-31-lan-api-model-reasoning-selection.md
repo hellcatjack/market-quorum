@@ -17,8 +17,7 @@
 - Create `gateway/src/codex_gateway/model_catalog.py`: immutable normalized model entries and fail-closed catalog parsing.
 - Create `gateway/tests/test_model_catalog.py`: unit contract for valid rows, filtering, deduplication, caps, and malformed envelopes.
 - Modify `gateway/src/codex_gateway/runtime.py`: request and sanitize the current App Server model catalog.
-- Modify `gateway/tests/conftest.py`: script `model/list` responses for runtime tests.
-- Modify `gateway/tests/test_runtime.py`: prove the runtime requests the stable catalog method and sanitizes failures.
+- Modify `gateway/tests/test_runtime.py`: script `model/list` responses, prove the runtime requests the stable catalog method, and sanitize failures.
 - Modify `gateway/src/codex_gateway/models.py`: make `reasoning_effort` an explicit Chat Completions request field.
 - Modify `gateway/src/codex_gateway/app.py`: advertise physical models and resolve public body selection without changing private route pins.
 - Modify `gateway/tests/test_app.py`: lock the external and internal request contracts.
@@ -227,13 +226,12 @@ git commit -m "feat: normalize Codex model catalog"
 
 **Files:**
 - Modify: `gateway/src/codex_gateway/runtime.py`
-- Modify: `gateway/tests/conftest.py`
 - Modify: `gateway/tests/test_runtime.py`
 - Test: `gateway/tests/test_runtime.py`
 
 - [ ] **Step 1: Script the App Server catalog in the runtime fixture**
 
-In `gateway/tests/conftest.py`, add this response to `ScriptedTransport.__init__`:
+In `gateway/tests/test_runtime.py`, add this response to `ScriptedTransport.__init__`:
 
 ```python
 self.model_response = {
@@ -342,7 +340,7 @@ Expected: all tests pass.
 
 ```bash
 cd /app/devs/TradingNG
-git add gateway/src/codex_gateway/runtime.py gateway/tests/conftest.py gateway/tests/test_runtime.py
+git add gateway/src/codex_gateway/runtime.py gateway/tests/test_runtime.py
 git commit -m "feat: discover available Codex models"
 ```
 
