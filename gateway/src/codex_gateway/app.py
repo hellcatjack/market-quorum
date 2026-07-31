@@ -135,9 +135,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                         "object": "model",
                         "owned_by": "openai-codex",
                         "default_reasoning_effort": item.default_reasoning_effort,
-                        "supported_reasoning_efforts": list(
-                            item.supported_reasoning_efforts
-                        ),
+                        "supported_reasoning_efforts": list(item.supported_reasoning_efforts),
                     }
                     for item in physical
                 ],
@@ -257,9 +255,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                     slow_codex_reasoning_effort,
                 )
                 if any(value is not None for value in private_values):
-                    raise InvalidRequest(
-                        "TradingNG pin headers require a private model alias"
-                    )
+                    raise InvalidRequest("TradingNG pin headers require a private model alias")
                 catalog = await runtime.available_models()
                 selected = next((item for item in catalog if item.id == body.model), None)
                 if selected is None:
@@ -267,8 +263,7 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                 effort = body.reasoning_effort or selected.default_reasoning_effort
                 if effort not in selected.supported_reasoning_efforts:
                     raise InvalidRequest(
-                        f"reasoning_effort {effort!r} is not supported by "
-                        f"model {body.model!r}",
+                        f"reasoning_effort {effort!r} is not supported by model {body.model!r}",
                         param="reasoning_effort",
                     )
                 pinned_config = EffectiveCodexConfig(
