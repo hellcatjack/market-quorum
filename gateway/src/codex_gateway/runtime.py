@@ -20,6 +20,7 @@ from codex_gateway.errors import (
     CodexTimeout,
     CodexUnavailable,
 )
+from codex_gateway.model_catalog import CodexModelOption, normalize_model_catalog
 from codex_gateway.models import CodexTurnResult, TokenUsage
 from codex_gateway.transport import AppServerTransport, JsonRpcError, TransportClosed
 
@@ -266,6 +267,17 @@ class CodexRuntime:
 
     async def effective_config(self) -> EffectiveCodexConfig:
         return await self._read_effective_config(Path(tempfile.gettempdir()))
+
+    async def available_models(self) -> tuple[CodexModelOption, ...]:
+        transport = self._require_transport()
+        try:
+            response = await transport.request(
+                "model/list",
+                {"limit": 100, "includeHidden": False},
+            )
+            return normalize_model_catalog(response, max_models=100)
+        except (JsonRpcError, TransportClosed, TypeError, ValueError) as exc:
+            raise CodexUnavailable("Codex model catalog is unavailable") from exc
 
     async def _read_effective_config(self, cwd: Path) -> EffectiveCodexConfig:
         transport = self._require_transport()

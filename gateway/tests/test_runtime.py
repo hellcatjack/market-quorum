@@ -43,6 +43,21 @@ class ScriptedTransport:
                 }
             ]
         )
+        self.model_response = {
+            "data": [
+                {
+                    "id": "gpt-5.6-sol",
+                    "defaultReasoningEffort": "medium",
+                    "supportedReasoningEfforts": [
+                        {"reasoningEffort": "low"},
+                        {"reasoningEffort": "medium"},
+                        {"reasoningEffort": "high"},
+                        {"reasoningEffort": "xhigh"},
+                    ],
+                }
+            ],
+            "nextCursor": None,
+        }
 
     async def start(self):
         self.running = True
@@ -61,6 +76,8 @@ class ScriptedTransport:
             if len(self.config_responses) > 1:
                 return self.config_responses.popleft()
             return self.config_responses[0]
+        if method == "model/list":
+            return self.model_response
         if method == "thread/start":
             self.counter += 1
             return {"thread": {"id": f"thread-{self.counter}"}}
@@ -176,6 +193,31 @@ def test_default_app_server_disables_only_gateway_playwright(monkeypatch):
         "--config",
         "mcp_servers.playwright.enabled=false",
     ]
+
+
+@pytest.mark.asyncio
+async def test_available_models_uses_picker_visible_bounded_catalog(runtime_factory):
+    runtime, transports = runtime_factory()
+    await runtime.start()
+
+    models = await runtime.available_models()
+
+    assert [model.id for model in models] == ["gpt-5.6-sol"]
+    assert models[0].default_reasoning_effort == "medium"
+    assert ("model/list", {"limit": 100, "includeHidden": False}) in transports[0].requests
+    await runtime.stop()
+
+
+@pytest.mark.asyncio
+async def test_malformed_model_catalog_is_sanitized_as_unavailable(runtime_factory):
+    runtime, transports = runtime_factory()
+    await runtime.start()
+    transports[0].model_response = {"data": []}
+
+    with pytest.raises(CodexUnavailable, match="model catalog is unavailable"):
+        await runtime.available_models()
+
+    await runtime.stop()
 
 
 @pytest.mark.asyncio
