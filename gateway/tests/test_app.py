@@ -167,6 +167,24 @@ def test_unknown_model_and_unsupported_effort_fail_before_completion():
     assert runtime.pinned_configs == []
 
 
+def test_empty_reasoning_effort_is_rejected_instead_of_using_catalog_default():
+    runtime = FakeRuntime()
+    with make_client(runtime) as http:
+        response = http.post(
+            "/v1/chat/completions",
+            json={
+                "model": "gpt-5.6-terra",
+                "reasoning_effort": "",
+                "messages": [{"role": "user", "content": "hello"}],
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "invalid_request"
+    assert response.json()["error"]["param"] == "reasoning_effort"
+    assert runtime.pinned_configs == []
+
+
 def test_codex_alias_rejects_partial_effort_override_but_still_inherits():
     runtime = FakeRuntime()
     with make_client(runtime) as http:

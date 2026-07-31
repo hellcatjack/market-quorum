@@ -260,7 +260,11 @@ def create_app(*, runtime=None, settings: Settings | None = None) -> FastAPI:
                 selected = next((item for item in catalog if item.id == body.model), None)
                 if selected is None:
                     raise ModelNotFound(body.model)
-                effort = body.reasoning_effort or selected.default_reasoning_effort
+                effort = (
+                    selected.default_reasoning_effort
+                    if body.reasoning_effort is None
+                    else body.reasoning_effort
+                )
                 if effort not in selected.supported_reasoning_efforts:
                     raise InvalidRequest(
                         f"reasoning_effort {effort!r} is not supported by model {body.model!r}",
