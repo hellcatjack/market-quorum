@@ -4,7 +4,7 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from urllib.parse import urlsplit
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
@@ -36,7 +36,7 @@ from tradingng_platform.identity.service import (
     IdentityAdminService,
     UnavailableIdentityAdminService,
 )
-from tradingng_platform.instruments.classification import YahooInstrumentClassifier
+from tradingng_platform.instruments.classification import StockLeanInstrumentClassifier
 from tradingng_platform.integrity.service import IntegrityService
 from tradingng_platform.mcp.auth import McpSecurityMiddleware
 from tradingng_platform.mcp.server import create_mcp_server, protected_resource_metadata
@@ -47,7 +47,7 @@ from tradingng_platform.scheduler.probes import SystemProbe
 from tradingng_platform.system.service import SystemService
 from tradingng_platform.validation.repository import ValidationRepository
 from tradingng_platform.validation.service import ValidationService
-from tradingng_platform.vendors.alpha_vantage_client import AsyncAlphaVantageBrokerClient
+from tradingng_platform.vendors.stocklean import StockLeanClient, UnavailableStockLeanClient
 from tradingng_platform.webhooks.service import WebhookService
 
 
@@ -78,7 +78,19 @@ def create_app(
         nonlocal mcp_http_app, mcp_server
         owned_database = database is None
         resolved_database = database or Database(app_settings)
-        resolved_classifier = instrument_classifier or YahooInstrumentClassifier()
+        stocklean_token = app_settings.stocklean_internal_token.get_secret_value()
+        stocklean_client = (
+            StockLeanClient(
+                str(app_settings.stocklean_url),
+                token=stocklean_token,
+                timeout=app_settings.stocklean_timeout_seconds,
+            )
+            if stocklean_token
+            else UnavailableStockLeanClient()
+        )
+        resolved_classifier = instrument_classifier or StockLeanInstrumentClassifier(
+            stocklean_client
+        )
         app.state.settings = app_settings
         app.state.database = resolved_database
         app.state.oidc = oidc or OidcVerifier(
@@ -116,8 +128,12 @@ def create_app(
             resolved_classifier,
             resolved_artifact_store,
             app_settings.job_dir,
+            stocklean_client=None if instrument_classifier is not None else stocklean_client,
         )
-        app.state.integrity = IntegrityService(resolved_database.sessions)
+        app.state.integrity = IntegrityService(
+            resolved_database.sessions,
+            None if instrument_classifier is not None else stocklean_client,
+        )
         app.state.records = RecordService(
             resolved_database.sessions,
             resolved_artifact_store,
@@ -127,12 +143,6 @@ def create_app(
             resolved_database.sessions,
             GatewayClient(str(app_settings.gateway_url)),
             SystemProbe(app_settings.data_dir),
-            alpha_broker_client=AsyncAlphaVantageBrokerClient(
-                str(app_settings.alpha_vantage_broker_url),
-                consumer="system",
-                timeout=5,
-            ),
-            alpha_broker_queue_limit=(app_settings.alpha_vantage_broker_admission_queue_limit),
         )
         app.state.webhooks = WebhookService(
             resolved_database.sessions,
@@ -200,7 +210,7 @@ def create_app(
     app.include_router(api_router, prefix="/api/v1")
 
     @app.get("/metrics", include_in_schema=False)
-    async def prometheus_metrics(request):
+    async def prometheus_metrics(request: Request):
         await refresh_database_metrics(request.app.state.database.sessions)
         return Response(render_metrics(), media_type="text/plain; version=0.0.4")
 

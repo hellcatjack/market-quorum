@@ -148,6 +148,7 @@ class InstrumentValidationStats(BaseModel):
 
 class InstrumentRunCounts(BaseModel):
     total: int = 0
+    waiting_for_data: int = 0
     queued: int = 0
     active: int = 0
     succeeded: int = 0

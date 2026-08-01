@@ -68,6 +68,28 @@ class AssessmentRun(UuidPrimaryKey, Timestamped, Base):
     error_summary: Mapped[str | None] = mapped_column(Text)
 
 
+class AssessmentDataRequirement(UuidPrimaryKey, Timestamped, Base):
+    __tablename__ = "assessment_data_requirements"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_assessment_data_requirements_run_id"),
+        Index("ix_assessment_data_requirements_claim", "status", "next_poll_at", "id"),
+    )
+
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("assessment_runs.id"), index=True)
+    provider_request_id: Mapped[str] = mapped_column(String(64))
+    external_request_key: Mapped[str] = mapped_column(String(128))
+    required_products_json: Mapped[list] = mapped_column(PORTABLE_JSON, default=list)
+    status: Mapped[str] = mapped_column(String(32), default="waiting", index=True)
+    progress_json: Mapped[dict] = mapped_column(PORTABLE_JSON, default=dict)
+    manifest_snapshot_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    manifest_sha256: Mapped[str | None] = mapped_column(String(64))
+    next_poll_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME, index=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(PORTABLE_DATETIME)
+    last_progress_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    version: Mapped[int] = mapped_column(default=1)
+
+
 class RunEvent(UuidPrimaryKey, Timestamped, Base):
     __tablename__ = "run_events"
     __table_args__ = (UniqueConstraint("run_id", "sequence"),)

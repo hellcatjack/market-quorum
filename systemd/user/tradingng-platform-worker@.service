@@ -1,7 +1,5 @@
 [Unit]
 Description=TradingNG assessment worker %i
-After=tradingng-platform-alpha-broker.service
-Requires=tradingng-platform-alpha-broker.service
 After=tradingng-platform-scheduler.service tradingng-codex-gateway.service
 Requires=tradingng-platform-scheduler.service
 Wants=tradingng-codex-gateway.service

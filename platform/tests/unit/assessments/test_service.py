@@ -85,7 +85,16 @@ class _FakeRepository:
             asset_type=asset_type,
         )
 
-    async def create_request_and_run(self, batch, instrument, item, request_config):
+    async def create_request_and_run(
+        self,
+        batch,
+        instrument,
+        item,
+        request_config,
+        *,
+        initial_status=RunStatus.QUEUED,
+        data_requirement=None,
+    ):
         self.request_configs.append(request_config)
         run = SimpleNamespace(id=uuid.uuid4())
         self.runs[batch.id].append(
@@ -95,7 +104,7 @@ class _FakeRepository:
                 ticker=instrument.canonical_ticker,
                 asset_type=instrument.asset_type,
                 analysis_date=item.analysis_date,
-                status=RunStatus.QUEUED,
+                status=initial_status,
                 attempt=1,
                 created_at=datetime.now(timezone.utc),
             )
@@ -327,6 +336,208 @@ async def test_submit_rejects_conflicting_asset_type_before_creating_batch(monke
     assert captured.value.requested is AssetType.STOCK
     assert captured.value.resolved is AssetType.FUND
     assert repository.created_batch_count == 0
+
+
+async def test_stocklean_waiting_submission_creates_data_gate_without_yahoo(monkeypatch):
+    repository = _FakeRepository()
+    captured = {}
+
+    async def create_request_and_run(
+        batch,
+        instrument,
+        item,
+        request_config,
+        *,
+        initial_status=RunStatus.QUEUED,
+        data_requirement=None,
+    ):
+        captured["status"] = initial_status
+        captured["requirement"] = data_requirement
+        return await _FakeRepository.create_request_and_run(
+            repository,
+            batch,
+            instrument,
+            item,
+            request_config,
+            initial_status=initial_status,
+            data_requirement=data_requirement,
+        )
+
+    repository.create_request_and_run = create_request_and_run
+    monkeypatch.setattr(service_module, "AssessmentRepository", lambda session: repository)
+
+    class StockLean:
+        calls = 0
+
+        async def resolve_candidates(self, *, subject_ref, items):
+            from tradingng_platform.vendors.stocklean import (
+                StockLeanResearchCandidateResponse,
+            )
+
+            self.calls += 1
+            return StockLeanResearchCandidateResponse.model_validate(
+                {
+                    "contract_version": "stocklean.research-intake.v1",
+                    "items": [
+                        {
+                            "external_request_key": items[0]["external_request_key"],
+                            "candidate_request_id": 42,
+                            "candidate_id": 7,
+                            "symbol": "XYZ",
+                            "scope": "research",
+                            "identity": {
+                                "asset_type": "stock",
+                                "exchange": "NASDAQ",
+                                "name": "Example",
+                                "vendor_symbol": "XYZ",
+                            },
+                            "readiness": "waiting",
+                            "required_products": ["market", "fundamental"],
+                            "job": {
+                                "batch_id": 5,
+                                "stage": "queued",
+                                "completed_items": 0,
+                                "total_items": 2,
+                            },
+                        }
+                    ],
+                }
+            )
+
+    stocklean = StockLean()
+    service = AssessmentService(lambda: _FakeSession(), classifier=None, stocklean_client=stocklean)
+    principal = Principal(
+        "issuer",
+        "alice",
+        "user",
+        frozenset({"assessments:submit", "research_symbols:enroll"}),
+    )
+    command = SubmitAssessments(
+        items=[AssessmentItem(ticker="XYZ", analysis_date=date(2026, 7, 31))],
+        analysts=("market", "fundamentals"),
+        idempotency_key="stocklean-waiting-xyz",
+    )
+
+    first = await service.submit(principal, command, request_id="request-1")
+    second = await service.submit(principal, command, request_id="request-2")
+
+    assert first[0].status is RunStatus.WAITING_FOR_DATA
+    assert second[0].id == first[0].id
+    assert stocklean.calls == 1
+    assert captured["status"] is RunStatus.WAITING_FOR_DATA
+    assert captured["requirement"]["provider_request_id"] == "42"
+
+
+async def test_retry_without_pinned_manifest_reenters_stocklean_data_gate(monkeypatch):
+    source_id = uuid.uuid4()
+    retry_id = uuid.uuid4()
+    principal = Principal(
+        "issuer",
+        "alice",
+        "user",
+        frozenset({"assessments:submit"}),
+        roles=frozenset({"Analyst"}),
+    )
+    source_context = SimpleNamespace(
+        run=SimpleNamespace(id=source_id, status="failed", attempt=1),
+        request=SimpleNamespace(
+            analysis_date=date(2026, 7, 31),
+            requested_config_json={"analysts": ["market"]},
+        ),
+        instrument=SimpleNamespace(canonical_ticker="XYZ", asset_type="stock"),
+        batch=SimpleNamespace(
+            defaults_json={
+                "analysts": ["market"],
+                "depth": "deep",
+                "memory_mode": "independent",
+                "language": "Chinese",
+            }
+        ),
+        owner=SimpleNamespace(issuer="issuer", subject="alice"),
+    )
+    captured = {}
+
+    class Repository:
+        async def get_run_context(self, run_id, for_update=False):
+            if run_id == source_id:
+                return source_context
+            return SimpleNamespace(
+                run=SimpleNamespace(
+                    id=retry_id,
+                    status="waiting_for_data",
+                    attempt=2,
+                    created_at=datetime.now(timezone.utc),
+                ),
+                request=source_context.request,
+                instrument=source_context.instrument,
+            )
+
+        async def create_retry(self, context, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(id=retry_id, attempt=2)
+
+        async def append_audit(self, *args, **kwargs):
+            return None
+
+        def _run_view(self, run, request, instrument):
+            return service_module.RunView(
+                id=run.id,
+                request_id=uuid.uuid4(),
+                ticker=instrument.canonical_ticker,
+                asset_type=instrument.asset_type,
+                analysis_date=request.analysis_date,
+                status=RunStatus(run.status),
+                attempt=run.attempt,
+                created_at=run.created_at,
+            )
+
+    monkeypatch.setattr(service_module, "AssessmentRepository", lambda session: Repository())
+
+    class StockLean:
+        async def resolve_candidates(self, *, subject_ref, items):
+            from tradingng_platform.vendors.stocklean import StockLeanResearchCandidateResponse
+
+            return StockLeanResearchCandidateResponse.model_validate(
+                {
+                    "contract_version": "stocklean.research-intake.v1",
+                    "items": [
+                        {
+                            "external_request_key": items[0]["external_request_key"],
+                            "candidate_request_id": 84,
+                            "candidate_id": 9,
+                            "symbol": "XYZ",
+                            "scope": "production",
+                            "identity": {
+                                "asset_type": "stock",
+                                "exchange": "NASDAQ",
+                                "name": "Example",
+                                "vendor_symbol": "XYZ",
+                            },
+                            "readiness": "waiting",
+                            "required_products": ["market", "validation", "integrity"],
+                            "job": {
+                                "batch_id": 6,
+                                "stage": "queued",
+                                "completed_items": 0,
+                                "total_items": 3,
+                            },
+                        }
+                    ],
+                }
+            )
+
+    service = AssessmentService(
+        lambda: _FakeSession(),
+        classifier=None,
+        stocklean_client=StockLean(),
+    )
+
+    retried = await service.retry(principal, source_id, "retry-request")
+
+    assert retried.status is RunStatus.WAITING_FOR_DATA
+    assert captured["initial_status"] is RunStatus.WAITING_FOR_DATA
+    assert captured["data_requirement"]["provider_request_id"] == "84"
+    assert "data_manifest" not in captured["request_config"]
 
 
 async def test_submit_rejects_asset_with_no_compatible_analysts(monkeypatch):

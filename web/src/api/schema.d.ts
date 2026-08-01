@@ -744,6 +744,8 @@ export interface components {
             max_running: number;
             /** Oldest Queued Seconds */
             oldest_queued_seconds: number | null;
+            /** Oldest Waiting Seconds */
+            oldest_waiting_seconds?: number | null;
             /** Queued */
             queued: number;
             /**
@@ -753,6 +755,11 @@ export interface components {
             reason: "capacity_available" | "capacity_busy" | "temporarily_paused";
             /** Running */
             running: number;
+            /**
+             * Waiting For Data
+             * @default 0
+             */
+            waiting_for_data: number;
         };
         /** ApiCredentialView */
         ApiCredentialView: {
@@ -840,10 +847,17 @@ export interface components {
             model_routing: components["schemas"]["ModelRoutingPolicy"];
             /** Oldest Queued Seconds */
             oldest_queued_seconds: number | null;
+            /** Oldest Waiting Seconds */
+            oldest_waiting_seconds?: number | null;
             /** Open Circuits */
             open_circuits: string[];
             /** Queued */
             queued: number;
+            /**
+             * Waiting For Data
+             * @default 0
+             */
+            waiting_for_data: number;
         };
         /** CommentView */
         CommentView: {
@@ -946,6 +960,26 @@ export interface components {
             scopes: string[];
             /** Token */
             token: string;
+        };
+        /** DataRequirementView */
+        DataRequirementView: {
+            /** Manifest Sha256 */
+            manifest_sha256?: string | null;
+            /** Manifest Snapshot Id */
+            manifest_snapshot_id?: string | null;
+            /** Next Poll At */
+            next_poll_at?: string | null;
+            /** Progress */
+            progress?: {
+                [key: string]: unknown;
+            };
+            /**
+             * Required Products
+             * @default []
+             */
+            required_products: string[];
+            /** Status */
+            status: string;
         };
         /** DecisionView */
         DecisionView: {
@@ -1128,6 +1162,11 @@ export interface components {
              * @default 0
              */
             total: number;
+            /**
+             * Waiting For Data
+             * @default 0
+             */
+            waiting_for_data: number;
         };
         /** InstrumentSummaryView */
         InstrumentSummaryView: {
@@ -1470,6 +1509,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            data_requirement?: components["schemas"]["DataRequirementView"] | null;
             /** Data Vendors */
             data_vendors?: {
                 [key: string]: string;
@@ -1553,7 +1593,7 @@ export interface components {
          * RunStatus
          * @enum {string}
          */
-        RunStatus: "queued" | "admitted" | "starting" | "running_analysts" | "research_debate" | "trader_plan" | "risk_debate" | "portfolio_decision" | "finalizing" | "succeeded" | "failed" | "cancel_requested" | "cancelling" | "cancelled" | "needs_attention";
+        RunStatus: "waiting_for_data" | "queued" | "admitted" | "starting" | "running_analysts" | "research_debate" | "trader_plan" | "risk_debate" | "portfolio_decision" | "finalizing" | "succeeded" | "failed" | "cancel_requested" | "cancelling" | "cancelled" | "needs_attention";
         /** RunStepView */
         RunStepView: {
             /** Attempt */

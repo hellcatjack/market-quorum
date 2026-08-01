@@ -115,16 +115,16 @@ TRADINGNG_VERIFY_DATABASE_URL="$new_database_url" PYTHONPATH=platform/src \
 
 systemctl --user stop tradingng-platform-validation.service \
   tradingng-platform-workers.target \
-  tradingng-platform-scheduler.service tradingng-platform-api.service \
-  tradingng-platform-alpha-broker.service || true
+  tradingng-platform-data-readiness.service \
+  tradingng-platform-scheduler.service tradingng-platform-api.service || true
 env_candidate="$staging/.env.platform.candidate"
 awk '!/^TRADINGNG_DATABASE_URL=/ && !/^TRADINGNG_DATA_DIR=/' "$project_root/.env.platform" >"$env_candidate"
 printf 'TRADINGNG_DATABASE_URL=%s\nTRADINGNG_DATA_DIR=%s\n' "$new_database_url" "$candidate_data" >>"$env_candidate"
 chmod 600 "$env_candidate"
 cp -p "$project_root/.env.platform" "$project_root/.env.platform.pre-restore-$restore_id"
 mv -f -- "$env_candidate" "$project_root/.env.platform"
-systemctl --user start tradingng-platform-alpha-broker.service \
-  tradingng-platform-api.service tradingng-platform-scheduler.service \
+systemctl --user start tradingng-platform-api.service \
+  tradingng-platform-data-readiness.service tradingng-platform-scheduler.service \
   tradingng-platform-workers.target \
   tradingng-platform-validation.service
 echo "restored_database=$new_database"

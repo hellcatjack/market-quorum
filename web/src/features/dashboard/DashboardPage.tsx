@@ -86,7 +86,9 @@ export function DashboardPage() {
     queryFn: () => listAssessments(runFilters),
     enabled: view === "runs",
     refetchInterval: (query) =>
-      query.state.data?.items.some((run) => run.status === "queued" || ACTIVE.has(run.status))
+      query.state.data?.items.some((run) =>
+        run.status === "waiting_for_data" || run.status === "queued" || ACTIVE.has(run.status)
+      )
         ? 5_000
         : 60_000,
     retry: false,
@@ -94,12 +96,14 @@ export function DashboardPage() {
 
   const counts = view === "instruments"
     ? {
+        waiting: overview.data?.run_counts?.waiting_for_data ?? 0,
         queued: overview.data?.run_counts?.queued ?? 0,
         active: overview.data?.run_counts?.active ?? 0,
         succeeded: overview.data?.run_counts?.succeeded ?? 0,
         failed: overview.data?.run_counts?.anomalous ?? 0,
       }
     : {
+        waiting: runs.data?.items.filter((run) => run.status === "waiting_for_data").length ?? 0,
         queued: runs.data?.items.filter((run) => run.status === "queued").length ?? 0,
         active: runs.data?.items.filter((run) => ACTIVE.has(run.status)).length ?? 0,
         succeeded: runs.data?.items.filter((run) => run.status === "succeeded").length ?? 0,
@@ -128,6 +132,7 @@ export function DashboardPage() {
       {capacity.data ? <AdmissionBanner summary={capacity.data} /> : null}
       {capacity.isError ? <p className="page-warning" role="alert">{t("容量数据暂时不可用。")}</p> : null}
       <div className="count-grid" aria-label={t("当前筛选状态统计")}>
+        <article><span>{t("等待数据")}</span><strong data-testid="count-waiting">{counts.waiting}</strong></article>
         <article><span>{t("排队")}</span><strong data-testid="count-queued">{counts.queued}</strong></article>
         <article><span>{t("运行中")}</span><strong data-testid="count-active">{counts.active}</strong></article>
         <article><span>{t("已完成")}</span><strong data-testid="count-succeeded">{counts.succeeded}</strong></article>
@@ -180,6 +185,7 @@ export function DashboardPage() {
             }}
           >
             <option value="">{t("全部状态")}</option>
+            <option value="waiting_for_data">{t("等待数据")}</option>
             <option value="queued">{t("排队中")}</option>
             <option value="running_analysts">{t("分析中")}</option>
             <option value="succeeded">{t("已完成")}</option>

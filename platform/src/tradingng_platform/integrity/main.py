@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 
@@ -16,7 +17,6 @@ from tradingng_platform.integrity.financials import (
     CompositeAvailabilityResolver,
     SecFilingClient,
 )
-from tradingng_platform.vendors.alpha_vantage_client import SyncAlphaVantageBrokerClient
 
 
 def _bounded_limit(value: str) -> int:
@@ -33,23 +33,35 @@ def parse_args(argv: list[str] | None = None):
     return parser.parse_args(argv)
 
 
-def _alpha_availability_resolver(
+def _stocklean_availability_resolver(
     settings: Settings,
     client: httpx.Client,
 ) -> AlphaEarningsAvailabilityResolver:
-    broker = SyncAlphaVantageBrokerClient(
-        str(settings.alpha_vantage_broker_url),
-        consumer="research",
-        timeout=settings.alpha_vantage_broker_request_timeout_seconds,
-        client=client,
-    )
-    return AlphaEarningsAvailabilityResolver(
-        lambda ticker: broker.query(
-            "EARNINGS",
-            {"symbol": ticker},
-            run_id="integrity-audit",
+    token = settings.stocklean_internal_token.get_secret_value()
+    if not token:
+        raise RuntimeError("TRADINGNG_STOCKLEAN_INTERNAL_TOKEN is required")
+
+    def load(ticker: str) -> str:
+        response = client.get(
+            f"{str(settings.stocklean_url).rstrip('/')}/api/internal/v1/alpha/documents/{ticker}",
+            params={
+                "functions": "EARNINGS",
+                "as_of": datetime.now(timezone.utc).isoformat(),
+            },
+            headers={
+                "Authorization": f"Bearer {token}",
+                "X-Caller-Service": "tradingng",
+                "Accept": "application/json",
+            },
+            timeout=settings.stocklean_timeout_seconds,
         )
-    )
+        response.raise_for_status()
+        items = response.json().get("items") or []
+        if not items:
+            return "{}"
+        return json.dumps(items[0]["payload"])
+
+    return AlphaEarningsAvailabilityResolver(load)
 
 
 async def run(arguments) -> int:
@@ -58,7 +70,7 @@ async def run(arguments) -> int:
     try:
         with httpx.Client(
             follow_redirects=True,
-            timeout=settings.alpha_vantage_broker_request_timeout_seconds,
+            timeout=settings.stocklean_timeout_seconds,
         ) as client:
             sec = SecFilingClient(
                 client=client,
@@ -66,7 +78,7 @@ async def run(arguments) -> int:
                 cache_dir=settings.sec_cache_dir,
                 timeout_seconds=settings.sec_request_timeout_seconds,
             )
-            alpha = _alpha_availability_resolver(settings, client)
+            alpha = _stocklean_availability_resolver(settings, client)
             service = RetrospectiveAuditService(
                 database.sessions,
                 LocalArtifactStore(settings.artifact_dir),

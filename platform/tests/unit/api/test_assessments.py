@@ -244,6 +244,8 @@ def test_user_can_read_only_sanitized_assessment_admission_summary(monkeypatch):
             return {
                 "running": 2,
                 "max_running": 4,
+                "waiting_for_data": 5,
+                "oldest_waiting_seconds": 45,
                 "queued": 3,
                 "oldest_queued_seconds": 18,
                 "admission": "queued",
@@ -259,6 +261,8 @@ def test_user_can_read_only_sanitized_assessment_admission_summary(monkeypatch):
     assert response.json() == {
         "running": 2,
         "max_running": 4,
+        "waiting_for_data": 5,
+        "oldest_waiting_seconds": 45,
         "queued": 3,
         "oldest_queued_seconds": 18,
         "admission": "queued",

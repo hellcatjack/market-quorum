@@ -47,6 +47,8 @@ class RunnerInput(BaseModel):
     work_dir: Path
     data_vendors: dict[str, str]
     tool_vendors: dict[str, str]
+    stocklean_url: AnyHttpUrl = Field(default="http://127.0.0.1:8021", validate_default=True)
+    stocklean_manifest_snapshot_id: str | None = Field(default=None, max_length=64)
     alpha_vantage_broker_url: AnyHttpUrl | None = Field(
         default="http://127.0.0.1:8020",
         validate_default=True,

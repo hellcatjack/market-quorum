@@ -261,26 +261,25 @@ The API listens on `127.0.0.1:8010`. Liveness and readiness are available at
 `/health/live` and `/health/ready`; authenticated business routes use
 `/api/v1`.
 
-### Alpha Vantage research providers
+### Unified StockLean research data
 
-When an Alpha Vantage research key is configured, newly admitted assessments use
-Alpha Vantage exclusively for core prices, technical indicators, fundamentals,
-news, and the deterministic verified-market snapshot. A rate limit delays and
-retries the same Alpha request; it never falls back to Yahoo. Installations with
-no Alpha research key may still use their explicit fallback configuration. Macro
-data remains on FRED and prediction markets remain on Polymarket. TradingNG
-freezes this external overlay into every immutable run snapshot without modifying
-TradingAgents:
+TradingNG stores no Alpha Vantage key and does not call Alpha Vantage, Yahoo, or
+Stooq directly. Every new assessment first asks StockLean to resolve the instrument
+and data requirements. Ready data is pinned as an immutable manifest; missing data
+enters `waiting_for_data` until the readiness service recomputes and verifies the
+manifest hash before atomically moving the run to `queued`. Macro data remains on
+FRED and prediction markets remain on Polymarket.
 
 ```dotenv
-ALPHA_VANTAGE_API_KEY=replace-with-secret
-TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
+TRADINGNG_STOCKLEAN_URL=http://127.0.0.1:8021
+TRADINGNG_STOCKLEAN_INTERNAL_TOKEN=replace-with-shared-private-token
+TRADINGNG_STOCKLEAN_READINESS_POLL_SECONDS=15
 ```
 
-The loopback Alpha Broker reads `ALPHA_VANTAGE_API_KEY`; TradingAgents research
-Workers no longer contact the provider directly. Restart the Broker first and
-then the scheduler and Workers after changing it. Only subsequently admitted
-runs are affected, and run details retain the configured vendor snapshot.
+The shared token stays only in both private environment files. Run details pin the
+StockLean snapshot ID and manifest SHA-256, and the scheduler rejects any run that
+lacks a verified manifest. Research candidates never modify StockLean project,
+model, PreTrade, or trading-batch membership.
 
 ### Official instrument names
 
@@ -312,35 +311,17 @@ cash distributions are stored separately with provider, request fingerprint,
 adapter, normalization, and data-quality provenance. Existing rows remain
 `validation.v1` and are never silently recalculated.
 
-Outcome validation has a separate provider configuration from assessment
-research. An Alpha Vantage plan that supports `TIME_SERIES_DAILY_ADJUSTED` can
-be enabled in `.env.platform`:
+Outcome validation and assessment research both read StockLean's versioned Alpha
+serving API:
 
 ```dotenv
-TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
-TRADINGNG_ALPHA_VANTAGE_API_KEY=replace-with-secret
-TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE=75
-TRADINGNG_ALPHA_VANTAGE_RETRY_ATTEMPTS=6
-TRADINGNG_ALPHA_VANTAGE_RETRY_BASE_SECONDS=5
-TRADINGNG_ALPHA_VANTAGE_RETRY_MAX_SECONDS=60
+TRADINGNG_VALIDATION_PRICE_PROVIDERS=stocklean
 TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
-TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=1.0
-TRADINGNG_ALPHA_VANTAGE_BROKER_MAX_IN_FLIGHT=3
-TRADINGNG_ALPHA_VANTAGE_BROKER_ADMISSION_QUEUE_LIMIT=6
-TRADINGNG_ALPHA_VANTAGE_AUTO_RETRY_ATTEMPTS=2
 ```
 
-The Alpha Vantage adapter reads as-traded OHLC, split coefficients, and cash
-distributions before entering the common `prices.v1` normalization boundary.
-With a validation key present, both validation generations use this adapter
-exclusively. Research and validation share the same per-key global Broker. It
-enforces a safe rate and in-flight cap, priority queue, identical-request
-coalescing, and cache. A rate limit pauses the key globally and recovery uses one
-probe request; Yahoo is never used as fallback. The System page shows safe RPM,
-in-flight requests, queue age, recovery time, and cache counters. After bounded
-request retries, rate and transient failures create at most two linked automatic
-assessment attempts. The API key is never stored in logs, artifacts, snapshots,
-or request fingerprints. Explicit validation retries are available through
+StockLean owns provider rate limits, request coalescing, versioning, corporate
+actions, and watermarks. TradingNG reads only the pinned snapshot. Explicit
+validation retries are available through
 `POST /api/v1/validations/{validation_id}/retry` and the MCP
 `retry_validation` tool.
 
@@ -415,8 +396,8 @@ restart-safe batches:
 ```
 
 Use `--run-id UUID` for one run. Each completed run commits independently, so an
-interrupted batch can be rerun safely. Operators should monitor the Alpha broker
-queue and SEC health between batches. REST exposes the run verdict, summary and
+interrupted batch can be rerun safely. Operators should monitor StockLean data
+watermarks, the waiting queue, and SEC health between batches. REST exposes the run verdict, summary and
 clean action; MCP exposes the matching integrity resource and clean-reassessment
 tool.
 
@@ -533,8 +514,8 @@ systemctl --user link "$PWD"/systemd/user/tradingng-platform-*.service
 systemctl --user link "$PWD"/systemd/user/tradingng-platform-workers.target
 systemctl --user daemon-reload
 systemctl --user enable --now tradingng-platform-containers.service
-systemctl --user enable --now tradingng-platform-alpha-broker.service
 systemctl --user enable --now tradingng-platform-api.service
+systemctl --user enable --now tradingng-platform-data-readiness.service
 systemctl --user enable --now tradingng-platform-scheduler.service
 systemctl --user enable --now tradingng-platform-workers.target
 systemctl --user enable --now tradingng-platform-validation.service

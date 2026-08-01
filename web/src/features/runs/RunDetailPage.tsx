@@ -30,7 +30,7 @@ import { RunTimeline } from "./RunTimeline";
 import { ValidationReplayPanel } from "./ValidationReplayPanel";
 
 const CANCELLABLE = new Set([
-  "queued", "admitted", "starting", "running_analysts", "research_debate", "trader_plan",
+  "waiting_for_data", "queued", "admitted", "starting", "running_analysts", "research_debate", "trader_plan",
   "risk_debate", "portfolio_decision", "finalizing",
 ]);
 const RETRYABLE = new Set(["failed", "cancelled", "needs_attention"]);
@@ -315,6 +315,13 @@ export function RunDetailPage() {
     : deleteAssessment.isError
       ? t("删除失败，请稍后重试。")
       : null;
+  const dataRequirement = run.data.data_requirement;
+  const dataProgress = (dataRequirement?.progress ?? {}) as Record<string, unknown>;
+  const dataCompleted = Number(dataProgress.completed_items ?? dataProgress.completed_units ?? 0);
+  const dataTotal = Number(dataProgress.total_items ?? dataProgress.total_units ?? 0);
+  const dataStage = String(dataProgress.stage ?? dataRequirement?.status ?? "-");
+  const dataWatermark = String(dataProgress.last_watermark ?? "-");
+  const dataError = String(dataProgress.error_code ?? dataProgress.stable_reason ?? "-");
 
   return (
     <section className="page-shell run-detail-page">
@@ -387,6 +394,30 @@ export function RunDetailPage() {
         <details><summary>{t("查看固定配置")}</summary><pre>{JSON.stringify({ request: run.data.request_config, resolved: run.data.resolved_config, memory: { mode: memory.mode, source_count: memory.sources.length, snapshot_sha256: memory.snapshot_sha256 }, data_vendors: run.data.data_vendors, tool_vendors: run.data.tool_vendors, gateway_snapshot_id: run.data.gateway_snapshot_id }, null, 2)}</pre></details>
       </section>
       {llmInteractions.isError ? <p className="page-warning" role="alert">{t("模型调用轨迹暂时不可用。")}</p> : null}
+      {dataRequirement ? (
+        <section className="data-readiness-panel" aria-label={t("数据准备")}>
+          <div className="data-readiness-panel__heading">
+            <div>
+              <p className="eyebrow">StockLean</p>
+              <h2>{t("数据准备")}</h2>
+            </div>
+            <span className="run-status run-status--muted">
+              {runStatusLabel(run.data.status, locale)}
+            </span>
+          </div>
+          <dl>
+            <div><dt>{t("准备阶段")}</dt><dd>{dataStage}</dd></div>
+            <div><dt>{t("完成量")}</dt><dd>{dataCompleted} / {dataTotal}</dd></div>
+            <div><dt>{t("最新水位")}</dt><dd>{dataWatermark}</dd></div>
+            <div><dt>{t("下次轮询")}</dt><dd>{dataRequirement.next_poll_at ?? "-"}</dd></div>
+            <div><dt>{t("数据快照")}</dt><dd title={dataRequirement.manifest_snapshot_id ?? undefined}>{dataRequirement.manifest_snapshot_id ?? "-"}</dd></div>
+            <div><dt>{t("稳定错误")}</dt><dd>{dataError}</dd></div>
+          </dl>
+          <div className="data-readiness-products" aria-label={t("产品")}>
+            {dataRequirement.required_products.map((product) => <span key={product}>{product}</span>)}
+          </div>
+        </section>
+      ) : null}
       <div className="detail-grid">
         <IntegrityPanel
           integrity={integrity.data ?? null}

@@ -39,9 +39,10 @@ def test_active_dotenv_is_git_ignored():
 
 def test_validation_provider_template_is_safe_by_default():
     values = _assignments(ROOT / ".env.platform.example")
-    assert values["TRADINGNG_VALIDATION_PRICE_PROVIDERS"] == "yfinance"
-    assert values["TRADINGNG_ALPHA_VANTAGE_API_KEY"] == ""
-    assert values["TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE"] == "75"
+    assert values["TRADINGNG_VALIDATION_PRICE_PROVIDERS"] == "stocklean"
+    assert values["TRADINGNG_STOCKLEAN_INTERNAL_TOKEN"] == ""
+    assert not any("ALPHA_VANTAGE" in key for key in values)
+    assert not any("YAHOO" in key or "STOOQ" in key for key in values)
 
 
 def test_offline_verification_checks_validation_worker_service():

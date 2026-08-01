@@ -1,5 +1,5 @@
 [Unit]
-Description=TradingNG Alpha Vantage global quota broker
+Description=Legacy TradingNG Alpha Vantage broker (rollback only; keep disabled)
 After=network-online.target
 Wants=network-online.target
 

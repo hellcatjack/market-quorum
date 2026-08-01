@@ -131,50 +131,28 @@ async def test_admission_uses_fresh_policy_and_gateway_on_every_pass():
     assert all(call[4].fast.model == "gpt-5.6-terra" for call in scheduler_repository.calls)
 
 
-async def test_admission_blocks_new_alpha_runs_during_global_cooldown_or_queue_pressure():
+async def test_stocklean_admission_has_no_alpha_broker_dependency():
     metadata = ExecutionMetadata(
         root_commit="root-sha",
         tradingagents_commit="submodule-sha",
         prompt_schema_version="v1",
-        data_vendors={"fundamental_data": "alpha_vantage"},
+        data_vendors={"fundamental_data": "stocklean"},
         tool_vendors={},
     )
-    for broker in (_AlphaBroker("cooldown"), _AlphaBroker("normal", queued=6)):
-        scheduler_repository = _SchedulerRepository()
-        service = AdmissionService(
-            scheduler_repository,
-            _PolicyRepository(),
-            _Gateway(),
-            _SystemProbe(),
-            metadata,
-            model_routing_repository=_ModelRoutingRepository(),
-            alpha_broker_client=broker,
-            alpha_broker_queue_limit=6,
-        )
-
-        await service.admit_one()
-
-        assert scheduler_repository.calls[0][5] == ("vendor:alpha_vantage:global_quota",)
-
-
-async def test_admission_does_not_probe_broker_when_alpha_is_not_configured():
-    class ExplodingBroker:
-        async def status(self):
-            raise AssertionError("broker should not be read")
-
     scheduler_repository = _SchedulerRepository()
     service = AdmissionService(
         scheduler_repository,
         _PolicyRepository(),
         _Gateway(),
         _SystemProbe(),
-        ExecutionMetadata("root", "sub", "v1", {"market": "yfinance"}, {}),
-        alpha_broker_client=ExplodingBroker(),
+        metadata,
+        model_routing_repository=_ModelRoutingRepository(),
     )
 
     await service.admit_one()
 
     assert scheduler_repository.calls[0][5] == ()
+    assert not hasattr(service, "alpha_broker_client")
 
 
 def test_configured_vendors_expands_ordered_fallback_chains():
@@ -190,6 +168,27 @@ def test_configured_vendors_expands_ordered_fallback_chains():
     )
 
     assert repository._configured_vendors(metadata) == {"alpha_vantage", "yfinance"}
+
+
+def test_verified_stocklean_manifest_is_required_by_manifest_policy():
+    assert repository._has_verified_data_manifest({}) is False
+    assert (
+        repository._has_verified_data_manifest(
+            {"data_manifest": {"snapshot_id": "snapshot-1", "manifest_sha256": "bad"}}
+        )
+        is False
+    )
+    assert (
+        repository._has_verified_data_manifest(
+            {
+                "data_manifest": {
+                    "snapshot_id": "snapshot-1",
+                    "manifest_sha256": "a" * 64,
+                }
+            }
+        )
+        is True
+    )
 
 
 def test_run_snapshot_is_canonical_and_resolves_depth_rounds():

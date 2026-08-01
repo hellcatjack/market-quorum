@@ -74,7 +74,7 @@ function overview(
         excluded_unknown: 0,
       },
     ],
-    run_counts: { total: 3, queued: 0, active: 0, succeeded: 2, anomalous: 1 },
+    run_counts: { total: 3, waiting_for_data: 0, queued: 0, active: 0, succeeded: 2, anomalous: 1 },
     ...overrides,
   };
 }

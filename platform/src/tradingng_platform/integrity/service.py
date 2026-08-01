@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 
 from sqlalchemy import func, select
@@ -7,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from tradingng_platform.assessments.contracts import RunView
 from tradingng_platform.assessments.repository import AssessmentRepository
+from tradingng_platform.assessments.service import _required_products
 from tradingng_platform.auth.principal import Principal
+from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.integrity.contracts import (
     CURRENT_POLICY_VERSION,
     IntegrityFindingView,
@@ -31,8 +34,9 @@ class CleanReassessmentNotAllowed(Exception):
 
 
 class IntegrityService:
-    def __init__(self, sessions: async_sessionmaker[AsyncSession]):
+    def __init__(self, sessions: async_sessionmaker[AsyncSession], stocklean_client=None):
         self.sessions = sessions
+        self.stocklean_client = stocklean_client
 
     async def get(self, principal: Principal, run_id: uuid.UUID) -> IntegrityView:
         principal.require("assessments:read")
@@ -123,9 +127,60 @@ class IntegrityService:
                 raise CleanReassessmentNotAllowed("source_run_unassessed")
             if integrity.status not in {"at_risk", "unknown"}:
                 raise CleanReassessmentNotAllowed("source_run_is_safe")
+            defaults = dict(context.batch.defaults_json or {})
+            request_config = dict(context.request.requested_config_json or {})
+            request_config.pop("data_manifest", None)
+            request_config["memory_mode"] = "independent"
+            initial_status = RunStatus.QUEUED
+            data_requirement = None
+            if self.stocklean_client is not None:
+                analysts = tuple(
+                    defaults.get("analysts") or request_config.get("analysts") or ("market",)
+                )
+                products = _required_products(analysts)
+                raw_key = f"clean:{context.run.id}:{CURRENT_POLICY_VERSION}"
+                external_key = "tradingng:" + hashlib.sha256(raw_key.encode()).hexdigest()
+                subject_hash = hashlib.sha256(
+                    f"{principal.issuer}\0{principal.subject}".encode()
+                ).hexdigest()
+                response = await self.stocklean_client.resolve_candidates(
+                    subject_ref=f"principal:{subject_hash}",
+                    items=[
+                        {
+                            "external_request_key": external_key,
+                            "symbol": context.instrument.canonical_ticker,
+                            "analysis_date": context.request.analysis_date,
+                            "analysts": list(analysts),
+                            "required_products": list(products),
+                        }
+                    ],
+                )
+                if len(response.items) != 1:
+                    raise CleanReassessmentNotAllowed("stocklean_incomplete_response")
+                admission = response.items[0]
+                if admission.readiness == "rejected":
+                    code = admission.error.code if admission.error else "stocklean_rejected"
+                    raise CleanReassessmentNotAllowed(code)
+                if admission.readiness == "ready":
+                    if admission.manifest is None:
+                        raise CleanReassessmentNotAllowed("manifest_reference_missing")
+                    request_config["data_manifest"] = admission.manifest.model_dump(mode="json")
+                else:
+                    if admission.candidate_request_id is None or admission.job is None:
+                        raise CleanReassessmentNotAllowed("progress_reference_missing")
+                    initial_status = RunStatus.WAITING_FOR_DATA
+                    data_requirement = {
+                        "provider_request_id": str(admission.candidate_request_id),
+                        "external_request_key": admission.external_request_key,
+                        "required_products": list(admission.required_products),
+                        "progress": admission.job.model_dump(mode="json"),
+                    }
             clean = await assessments.create_clean_reassessment(
                 context,
                 CURRENT_POLICY_VERSION,
+                request_config=request_config,
+                initial_status=initial_status,
+                data_requirement=data_requirement,
             )
             await assessments.append_audit(
                 principal,

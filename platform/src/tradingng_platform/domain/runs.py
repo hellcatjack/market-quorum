@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class RunStatus(str, Enum):
+    WAITING_FOR_DATA = "waiting_for_data"
     QUEUED = "queued"
     ADMITTED = "admitted"
     STARTING = "starting"
@@ -27,6 +28,12 @@ TERMINAL_STATUSES = {
 }
 
 ALLOWED_TRANSITIONS = {
+    RunStatus.WAITING_FOR_DATA: {
+        RunStatus.QUEUED,
+        RunStatus.FAILED,
+        RunStatus.CANCELLED,
+        RunStatus.NEEDS_ATTENTION,
+    },
     RunStatus.QUEUED: {RunStatus.ADMITTED, RunStatus.CANCELLED},
     RunStatus.ADMITTED: {
         RunStatus.STARTING,

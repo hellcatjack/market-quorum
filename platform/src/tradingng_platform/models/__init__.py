@@ -1,5 +1,6 @@
 from tradingng_platform.models.assessments import (
     AssessmentBatch,
+    AssessmentDataRequirement,
     AssessmentRequest,
     AssessmentRun,
     Instrument,
@@ -30,6 +31,7 @@ __all__ = [
     "ApiCredential",
     "Artifact",
     "AssessmentBatch",
+    "AssessmentDataRequirement",
     "AssessmentRequest",
     "AssessmentRun",
     "AuditEvent",

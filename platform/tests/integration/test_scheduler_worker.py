@@ -24,6 +24,7 @@ from tradingng_platform.integrity.contracts import IntegrityStatus
 from tradingng_platform.integrity.policy import PointInTimeRecorder
 from tradingng_platform.integrity.repository import IntegrityRepository
 from tradingng_platform.models import (
+    AssessmentRequest,
     AssessmentRun,
     Decision,
     RunConfigSnapshot,
@@ -119,6 +120,54 @@ async def test_idle_worker_heartbeat_refreshes_liveness(session_factory):
         worker = await session.get(Worker, worker_id)
         assert worker.status == "idle"
         assert worker.heartbeat_at > stale_at
+
+
+async def test_scheduler_refuses_queued_stocklean_run_without_verified_manifest(
+    session_factory,
+    instrument_classifier,
+):
+    principal = Principal(
+        "issuer",
+        "manifest-gate-test",
+        "user",
+        frozenset({"assessments:submit"}),
+        roles=frozenset({"Analyst"}),
+    )
+    run = (
+        await AssessmentService(session_factory, instrument_classifier).submit(
+            principal,
+            SubmitAssessments(
+                items=[AssessmentItem(ticker="NVDA", analysis_date=date(2026, 7, 25))],
+                idempotency_key="manifest-gate-test",
+            ),
+            "request-manifest-gate",
+        )
+    )[0]
+    metadata = ExecutionMetadata(
+        "root",
+        "submodule",
+        "v1",
+        {"market_data": "stocklean"},
+        {},
+        {"stocklean": {"manifest_required": True}},
+    )
+
+    denied = await _admit_once(session_factory, metadata)
+
+    assert denied.allowed is False
+    assert denied.reasons == ("data_manifest_missing",)
+    async with session_factory() as session, session.begin():
+        row = await session.get(AssessmentRun, run.id)
+        request = await session.get(AssessmentRequest, row.request_id)
+        request.requested_config_json = {
+            **dict(request.requested_config_json),
+            "data_manifest": {
+                "snapshot_id": "snapshot-1",
+                "manifest_sha256": "a" * 64,
+            },
+        }
+
+    assert (await _admit_once(session_factory, metadata)).allowed is True
 
 
 async def test_historical_mode_is_pinned_at_admission_without_eligible_history(

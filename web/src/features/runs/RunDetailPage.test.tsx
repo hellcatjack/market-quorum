@@ -187,6 +187,21 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
           content_sha256: "memory-entry-sha",
         }],
       },
+      data_requirement: {
+        status: "ready",
+        required_products: ["market", "fundamental"],
+        progress: {
+          stage: "manifest_ready",
+          completed_items: 2,
+          total_items: 2,
+          last_watermark: "2026-07-25",
+          next_retry_at: null,
+          error_code: null,
+        },
+        manifest_snapshot_id: "snapshot-stocklean-1",
+        manifest_sha256: "b".repeat(64),
+        next_poll_at: null,
+      },
     });
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -212,6 +227,10 @@ test("renders immutable metadata, evidence, artifacts and collaboration", async 
   expect(await screen.findByTestId("llm-1")).toHaveTextContent("关键裁决路由");
   expect(screen.getByTestId("llm-1")).toHaveTextContent("已完成");
   expect(screen.getByText("snapshot-sha")).toBeInTheDocument();
+  expect(screen.getByText("数据准备")).toBeInTheDocument();
+  expect(screen.getByText("manifest_ready")).toBeInTheDocument();
+  expect(screen.getByText("2 / 2")).toBeInTheDocument();
+  expect(screen.getAllByText("2026-07-25").length).toBeGreaterThan(0);
   expect(screen.getByText("历史辅助")).toBeInTheDocument();
   expect(screen.getByText("历史经验 1 条")).toBeInTheDocument();
   expect(screen.getByText("2026-07-01 · 5 个交易日验证")).toBeInTheDocument();

@@ -217,18 +217,26 @@ async def test_system_capacity_and_policy_update_are_bounded_and_audited(
     instrument_classifier,
 ):
     principal = _admin()
-    await AssessmentService(session_factory, instrument_classifier).submit(
+    runs = await AssessmentService(session_factory, instrument_classifier).submit(
         principal,
         SubmitAssessments(
-            items=[AssessmentItem(ticker="TSLA", analysis_date=date(2026, 7, 25))],
+            items=[
+                AssessmentItem(ticker="TSLA", analysis_date=date(2026, 7, 25)),
+                AssessmentItem(ticker="NVDA", analysis_date=date(2026, 7, 25)),
+            ],
             idempotency_key="system-20260725",
         ),
         "request-submit",
     )
+    async with session_factory() as session, session.begin():
+        waiting = await session.get(AssessmentRun, runs[0].id)
+        waiting.status = "waiting_for_data"
     service = SystemService(session_factory, _Gateway(), _Probe())
 
     capacity = await service.capacity(principal)
     assert capacity.queued == 1
+    assert capacity.waiting_for_data == 1
+    assert capacity.oldest_waiting_seconds is not None
     assert capacity.max_running_total == 2
     assert capacity.model_routing.fast.model == "gpt-5.6-terra"
     assert capacity.model_routing.fast.reasoning_effort == "high"

@@ -246,35 +246,35 @@ async def test_yfinance_v2_maps_actions_and_declares_split_normalized(monkeypatc
     assert series.split_coefficient == [Decimal("10"), Decimal("1")]
 
 
-def test_provider_router_skips_alpha_vantage_when_key_is_absent():
+def test_provider_router_uses_stocklean_without_alpha_key():
     settings = Settings(
         _env_file=None,
         database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
-        validation_price_providers=("alphavantage", "yfinance"),
+        validation_price_providers=("stocklean",),
         alpha_vantage_api_key=None,
+        stocklean_internal_token="internal-test-token",
     )
 
     router = build_price_provider(settings)
 
-    assert router.provider_ids == ("yfinance",)
+    assert router.provider_ids == ("stocklean",)
 
 
-def test_provider_router_applies_configured_alpha_vantage_rate_limit():
+def test_provider_router_does_not_switch_to_alpha_when_key_is_present():
     settings = Settings(
         _env_file=None,
         database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
-        validation_price_providers=("alphavantage", "yfinance"),
+        validation_price_providers=("stocklean",),
         alpha_vantage_api_key="premium-secret-key",
-        alpha_vantage_requests_per_minute=17,
+        stocklean_internal_token="internal-test-token",
     )
 
     router = build_price_provider(settings)
 
-    assert router.provider_ids == ("alphavantage",)
-    assert router.providers[0].requests_per_minute == 17
+    assert router.provider_ids == ("stocklean",)
 
 
-def test_provider_router_builds_broker_backed_alpha_provider():
+def test_provider_router_ignores_legacy_broker_for_stocklean():
     class FakeBroker:
         async def query(self, function_name, params):
             raise AssertionError("not called while building")
@@ -283,12 +283,12 @@ def test_provider_router_builds_broker_backed_alpha_provider():
         _env_file=None,
         database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
         alpha_vantage_api_key="premium-secret-key",
+        stocklean_internal_token="internal-test-token",
     )
 
     router = build_price_provider(settings, broker_client=FakeBroker())
 
-    assert router.provider_ids == ("alphavantage",)
-    assert router.providers[0]._api_key is None
+    assert router.provider_ids == ("stocklean",)
 
 
 async def test_legacy_adapter_uses_effective_alpha_provider():

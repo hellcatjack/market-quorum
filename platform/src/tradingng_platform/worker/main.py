@@ -39,6 +39,7 @@ async def run_worker() -> None:
         database.sessions,
         job_dir=settings.job_dir,
         gateway_url=str(settings.gateway_url),
+        stocklean_url=str(settings.stocklean_url),
         artifact_store=LocalArtifactStore(settings.artifact_dir),
         alpha_vantage_broker_url=str(settings.alpha_vantage_broker_url),
         alpha_vantage_broker_request_timeout_seconds=(

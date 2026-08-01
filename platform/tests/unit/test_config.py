@@ -84,9 +84,9 @@ def test_public_identity_and_mcp_defaults_use_the_canonical_origin():
 
     assert str(settings.oidc_issuer) == ("https://ushome.amycat.com/realms/tradingng")
     assert str(settings.mcp_resource_uri) == "https://ushome.amycat.com/mcp"
-    assert settings.validation_price_providers == ("yfinance",)
+    assert settings.validation_price_providers == ("stocklean",)
     assert settings.alpha_vantage_api_key is None
-    assert settings.research_data_vendor_chain == ("alpha_vantage", "yfinance")
+    assert settings.research_data_vendor_chain == ("stocklean",)
 
 
 def test_sec_user_agent_cannot_be_blank():
@@ -112,7 +112,7 @@ def test_validation_provider_order_and_alpha_key_are_secret(monkeypatch):
     assert "premium-secret" not in repr(settings)
 
 
-def test_configured_alpha_keys_make_research_and_validation_exclusive(monkeypatch):
+def test_legacy_alpha_configuration_cannot_override_stocklean_routing(monkeypatch):
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "research-premium-secret")
     settings = Settings(
         _env_file=None,
@@ -122,8 +122,8 @@ def test_configured_alpha_keys_make_research_and_validation_exclusive(monkeypatc
         validation_price_providers=("alphavantage", "yfinance"),
     )
 
-    assert settings.effective_research_data_vendor_chain == ("alpha_vantage",)
-    assert settings.effective_validation_price_providers == ("alphavantage",)
+    assert settings.effective_research_data_vendor_chain == ("stocklean",)
+    assert settings.effective_validation_price_providers == ("stocklean",)
     assert settings.alpha_vantage_retry_attempts == 6
     assert settings.alpha_vantage_retry_base_seconds == 5
     assert settings.alpha_vantage_retry_max_seconds == 60
@@ -131,7 +131,7 @@ def test_configured_alpha_keys_make_research_and_validation_exclusive(monkeypatc
     assert "validation-premium-secret" not in repr(settings)
 
 
-def test_missing_alpha_keys_preserve_explicit_vendor_routes(monkeypatch):
+def test_legacy_yahoo_configuration_cannot_override_stocklean_routing(monkeypatch):
     monkeypatch.delenv("ALPHA_VANTAGE_API_KEY", raising=False)
     settings = Settings(
         _env_file=None,
@@ -141,8 +141,8 @@ def test_missing_alpha_keys_preserve_explicit_vendor_routes(monkeypatch):
         validation_price_providers=("yfinance",),
     )
 
-    assert settings.effective_research_data_vendor_chain == ("yfinance",)
-    assert settings.effective_validation_price_providers == ("yfinance",)
+    assert settings.effective_research_data_vendor_chain == ("stocklean",)
+    assert settings.effective_validation_price_providers == ("stocklean",)
 
 
 def test_research_vendor_chain_preserves_explicit_order(monkeypatch):

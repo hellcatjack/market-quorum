@@ -161,6 +161,7 @@ def _run_counts(rows: list[tuple]) -> InstrumentRunCounts:
     statuses = [row[0].status for row in final_by_request.values()]
     return InstrumentRunCounts(
         total=len(statuses),
+        waiting_for_data=statuses.count("waiting_for_data"),
         queued=statuses.count("queued"),
         active=sum(status in _ACTIVE_STATUSES for status in statuses),
         succeeded=statuses.count("succeeded"),
@@ -644,6 +645,7 @@ class RecordService:
             instrument_count = len(items)
             totals = InstrumentRunCounts(
                 total=sum(item.run_counts.total for item in items),
+                waiting_for_data=sum(item.run_counts.waiting_for_data for item in items),
                 queued=sum(item.run_counts.queued for item in items),
                 active=sum(item.run_counts.active for item in items),
                 succeeded=sum(item.run_counts.succeeded for item in items),

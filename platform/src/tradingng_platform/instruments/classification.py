@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import httpx
 
 from tradingng_platform.domain.instruments import AssetType, canonicalize_ticker
+from tradingng_platform.vendors.stocklean import StockLeanClientError
 
 _SEARCH_URL = "https://query2.finance.yahoo.com/v1/finance/search"
 _QUOTE_TYPE_MAP = {
@@ -50,6 +51,38 @@ class InstrumentTypeUnsupported(InstrumentClassificationError):
     def __init__(self, ticker: str, quote_type: str):
         self.quote_type = quote_type
         super().__init__(ticker, f"instrument type {quote_type} is not supported for {ticker}")
+
+
+class StockLeanInstrumentClassifier:
+    def __init__(self, client):
+        self.client = client
+
+    async def classify_many(self, tickers: tuple[str, ...]) -> dict[str, InstrumentClassification]:
+        unique = tuple(dict.fromkeys(canonicalize_ticker(ticker) for ticker in tickers))
+        values = {}
+        for ticker in unique:
+            try:
+                identity = await self.client.instrument(ticker)
+            except StockLeanClientError as exc:
+                if exc.status_code == 404:
+                    raise InstrumentClassificationNotFound(ticker) from exc
+                raise InstrumentClassificationUnavailable(ticker) from exc
+            asset_type = {
+                "stock": AssetType.STOCK,
+                "fund": AssetType.FUND,
+            }.get(identity.asset_type)
+            if asset_type is None:
+                raise InstrumentTypeUnsupported(ticker, identity.asset_type.upper())
+            values[ticker] = InstrumentClassification(
+                ticker=ticker,
+                asset_type=asset_type,
+                quote_type="EQUITY" if asset_type is AssetType.STOCK else "ETF",
+                source="stocklean_alpha",
+                source_symbol=identity.vendor_symbol,
+                exchange=identity.exchange,
+                name=identity.name,
+            )
+        return values
 
 
 class YahooInstrumentClassifier:

@@ -91,6 +91,7 @@ def build_runner_input(
     *,
     job_dir: Path,
     gateway_url: str,
+    stocklean_url: str = "http://127.0.0.1:8021",
     alpha_vantage_broker_url: str = "http://127.0.0.1:8020",
     alpha_vantage_broker_request_timeout_seconds: float = 2100,
     sec_user_agent: str = "MarketQuorum/0.1 (+https://ushome.amycat.com)",
@@ -114,6 +115,7 @@ def build_runner_input(
         else empty_memory_snapshot()
     )
     alpha_policy = dict((claim.snapshot.get("vendor_policies") or {}).get("alpha_vantage") or {})
+    data_manifest = dict(request.get("data_manifest") or {})
     return RunnerInput(
         run_id=claim.run_id,
         ticker=claim.ticker,
@@ -133,6 +135,8 @@ def build_runner_input(
         work_dir=job_dir / str(claim.run_id),
         data_vendors=claim.snapshot["data_vendors"],
         tool_vendors=claim.snapshot["tool_vendors"],
+        stocklean_url=stocklean_url,
+        stocklean_manifest_snapshot_id=data_manifest.get("snapshot_id"),
         alpha_vantage_broker_url=alpha_vantage_broker_url,
         alpha_vantage_broker_request_timeout_seconds=(alpha_vantage_broker_request_timeout_seconds),
         alpha_vantage_coordination_dir=job_dir.parent / "vendor-limits",
@@ -154,6 +158,7 @@ class WorkerService:
         *,
         job_dir: Path,
         gateway_url: str,
+        stocklean_url: str = "http://127.0.0.1:8021",
         artifact_store: LocalArtifactStore,
         alpha_vantage_broker_url: str = "http://127.0.0.1:8020",
         alpha_vantage_broker_request_timeout_seconds: float = 2100,
@@ -169,6 +174,7 @@ class WorkerService:
         self.sessions = sessions
         self.job_dir = job_dir
         self.gateway_url = gateway_url
+        self.stocklean_url = stocklean_url
         self.artifact_store = artifact_store
         self.alpha_vantage_broker_url = alpha_vantage_broker_url
         self.alpha_vantage_broker_request_timeout_seconds = (
@@ -193,6 +199,7 @@ class WorkerService:
             claim,
             job_dir=self.job_dir,
             gateway_url=self.gateway_url,
+            stocklean_url=self.stocklean_url,
             alpha_vantage_broker_url=self.alpha_vantage_broker_url,
             alpha_vantage_broker_request_timeout_seconds=(
                 self.alpha_vantage_broker_request_timeout_seconds

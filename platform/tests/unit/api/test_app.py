@@ -46,13 +46,31 @@ def test_liveness_is_public(monkeypatch):
     assert re.fullmatch(r"[0-9a-f]{32}", response.headers["X-Request-ID"])
 
 
+def test_metrics_injects_request_and_exports_prometheus(monkeypatch):
+    _settings_environment(monkeypatch)
+
+    async def refresh(_sessions):
+        return None
+
+    monkeypatch.setattr("tradingng_platform.api.app.refresh_database_metrics", refresh)
+    monkeypatch.setattr(
+        "tradingng_platform.api.app.render_metrics",
+        lambda: b"tradingng_runs 1\n",
+    )
+    with TestClient(create_app()) as client:
+        response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert response.text == "tradingng_runs 1\n"
+
+
 async def test_readiness_reports_only_the_database_dialect(monkeypatch):
     class Session:
         async def execute(self, statement):
             return None
 
         async def scalar(self, statement):
-            return "20260729_0011"
+            return "20260801_0012"
 
     class SessionContext:
         async def __aenter__(self):

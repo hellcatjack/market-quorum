@@ -10,6 +10,8 @@ export type SubmitAssessmentBatch = components["schemas"]["SubmitAssessments"];
 export interface AdmissionSummary {
   running: number;
   max_running: number;
+  waiting_for_data: number;
+  oldest_waiting_seconds: number | null;
   queued: number;
   oldest_queued_seconds: number | null;
   admission: "immediate" | "queued" | "paused";

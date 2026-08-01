@@ -241,22 +241,22 @@ npm --prefix web run dev
 API 默认监听 `127.0.0.1:8010`。存活与就绪检查分别位于 `/health/live` 和
 `/health/ready`；需要身份认证的业务接口使用 `/api/v1`。
 
-### Alpha Vantage 研究数据源
+### StockLean 统一研究数据源
 
-配置 Alpha Vantage 研究 Key 后，新准入的评估会在行情、技术指标、基本面、新闻和
-确定性行情核对快照中独占使用 Alpha Vantage。遇到限流时，系统延时后重试同一个
-Alpha 请求，不会回退到 Yahoo；只有没有配置 Alpha 研究 Key 的安装环境才保留其显式
-备用配置。宏观数据继续使用 FRED，预测市场继续使用 Polymarket。实际路由由
-TradingNG 外部调度层写入不可变运行快照，不修改 TradingAgents：
+TradingNG 不保存 Alpha Vantage Key，也不直接调用 Alpha Vantage、Yahoo 或 Stooq。
+新评估先通过 StockLean 解析标的与数据需求；已有数据会立即固定 immutable manifest，
+缺失数据则进入 `waiting_for_data`，由独立 readiness 服务在清单完成且哈希重算通过后
+原子切换到 `queued`。宏观数据继续使用 FRED，预测市场继续使用 Polymarket。
 
 ```dotenv
-ALPHA_VANTAGE_API_KEY=replace-with-secret
-TRADINGNG_RESEARCH_DATA_VENDOR_CHAIN=alpha_vantage,yfinance
+TRADINGNG_STOCKLEAN_URL=http://127.0.0.1:8021
+TRADINGNG_STOCKLEAN_INTERNAL_TOKEN=replace-with-shared-private-token
+TRADINGNG_STOCKLEAN_READINESS_POLL_SECONDS=15
 ```
 
-`ALPHA_VANTAGE_API_KEY` 由回环地址上的 Alpha Broker 读取，TradingAgents 研究 Worker
-不再直接访问供应商。修改配置后需要先重启 Broker，再重启调度器和 Worker，且只影响
-之后准入的任务。运行详情中的数据源快照会保留实际配置，便于追溯和复现。
+共享 token 只保存在两边的私有环境文件中。运行详情固定 StockLean snapshot ID 与
+manifest SHA-256；调度器拒绝没有已验证清单的任务。新增研究候选不会修改 StockLean
+项目股票池、模型、PreTrade 或交易批次范围。
 
 ### 官方标的名称
 
@@ -282,30 +282,15 @@ SEC 自动请求需要配置 `TRADINGNG_SEC_USER_AGENT`；安装身份应保存�
 时间，分别保存价格回报与包含现金分配的总回报，并记录供应商、请求指纹、适配器版本、
 标准化版本和数据质量核对结果。旧记录继续保持 `validation.v1`，不会被自动重算。
 
-表现验证与研究任务使用独立的供应商配置。支持 `TIME_SERIES_DAILY_ADJUSTED` 的
-Alpha Vantage 方案可在 `.env.platform` 中启用：
+表现验证与研究任务统一读取 StockLean 的版本化 Alpha serving 接口：
 
 ```dotenv
-TRADINGNG_VALIDATION_PRICE_PROVIDERS=alphavantage,yfinance
-TRADINGNG_ALPHA_VANTAGE_API_KEY=replace-with-secret
-TRADINGNG_ALPHA_VANTAGE_REQUESTS_PER_MINUTE=75
-TRADINGNG_ALPHA_VANTAGE_RETRY_ATTEMPTS=6
-TRADINGNG_ALPHA_VANTAGE_RETRY_BASE_SECONDS=5
-TRADINGNG_ALPHA_VANTAGE_RETRY_MAX_SECONDS=60
+TRADINGNG_VALIDATION_PRICE_PROVIDERS=stocklean
 TRADINGNG_VALIDATION_PROVIDER_TIMEOUT_SECONDS=15
-TRADINGNG_ALPHA_VANTAGE_BROKER_UTILIZATION=1.0
-TRADINGNG_ALPHA_VANTAGE_BROKER_MAX_IN_FLIGHT=3
-TRADINGNG_ALPHA_VANTAGE_BROKER_ADMISSION_QUEUE_LIMIT=6
-TRADINGNG_ALPHA_VANTAGE_AUTO_RETRY_ATTEMPTS=2
 ```
 
-Alpha Vantage 适配器读取未复权 OHLC、拆股系数和现金分配，再进入统一的
-`prices.v1` 标准化层。配置验证 Key 后，新旧两代验证入口都独占使用该适配器；研究与
-验证共用按 Key 隔离的全局 Broker。Broker 统一执行安全速率、在途上限、优先队列、
-同请求合并与缓存；限流时全局暂停并以单请求探测恢复，不会切换到 Yahoo。系统状态页
-展示安全 RPM、在途请求、等待队列、恢复时间及缓存统计。供应商限流或瞬时故障在请求
-重试耗尽后最多自动创建两次关联评估，新任务在 Broker 冷却期间继续安全排队。
-API Key 不写入日志、产物、运行快照或请求指纹。显式重试可通过
+StockLean 负责供应商限流、请求合并、版本化、公司行为和数据水位；TradingNG 只读取
+固定 snapshot。显式重试可通过
 `POST /api/v1/validations/{validation_id}/retry` 或 MCP 工具
 `retry_validation` 发起。
 
@@ -367,7 +352,7 @@ TRADINGNG_SEC_USER_AGENT=MarketQuorum/0.1 (+https://ushome.amycat.com)
 ```
 
 使用 `--run-id UUID` 可以只审计一个运行。每个已完成运行独立提交，因此批次中断后
-可以安全重跑；每批之间应检查 Alpha Broker 队列和 SEC 响应状态。REST 提供单次
+可以安全重跑；每批之间应检查 StockLean 数据水位、等待队列和 SEC 响应状态。REST 提供单次
 完整性、汇总与干净重评估接口，MCP 提供对应资源和工具。
 
 回滚时应先停止新的消费入口，再按需部署旧版 API/Worker，但保留加法新增的表。
@@ -467,8 +452,8 @@ systemctl --user link "$PWD"/systemd/user/tradingng-platform-*.service
 systemctl --user link "$PWD"/systemd/user/tradingng-platform-workers.target
 systemctl --user daemon-reload
 systemctl --user enable --now tradingng-platform-containers.service
-systemctl --user enable --now tradingng-platform-alpha-broker.service
 systemctl --user enable --now tradingng-platform-api.service
+systemctl --user enable --now tradingng-platform-data-readiness.service
 systemctl --user enable --now tradingng-platform-scheduler.service
 systemctl --user enable --now tradingng-platform-workers.target
 systemctl --user enable --now tradingng-platform-validation.service

@@ -6,8 +6,10 @@ from tradingng_platform.instruments.classification import (
     InstrumentClassificationNotFound,
     InstrumentClassificationUnavailable,
     InstrumentTypeUnsupported,
+    StockLeanInstrumentClassifier,
     YahooInstrumentClassifier,
 )
+from tradingng_platform.vendors.stocklean import StockLeanInstrumentIdentity
 
 
 def _quote(symbol: str, quote_type: str) -> dict:
@@ -75,3 +77,19 @@ async def test_classifier_reports_provider_failure_without_response_body():
 
     assert captured.value.ticker == "NVDA"
     assert "private upstream diagnostic" not in str(captured.value)
+
+
+async def test_stocklean_classifier_uses_persisted_identity_without_yahoo_network():
+    class Client:
+        async def instrument(self, ticker):
+            return StockLeanInstrumentIdentity(
+                asset_type="stock",
+                exchange="NASDAQ",
+                name="Example Corp",
+                vendor_symbol=ticker,
+            )
+
+    result = await StockLeanInstrumentClassifier(Client()).classify_many(("XYZ",))
+
+    assert result["XYZ"].asset_type is AssetType.STOCK
+    assert result["XYZ"].source == "stocklean_alpha"

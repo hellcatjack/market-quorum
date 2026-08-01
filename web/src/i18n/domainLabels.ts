@@ -3,6 +3,7 @@ import type { UiLocale } from "./I18nProvider";
 import type { MessageKey } from "./messages";
 
 const RUN_STATUS_KEYS: Record<string, MessageKey> = {
+  waiting_for_data: "等待数据",
   queued: "排队中",
   admitted: "已准入",
   starting: "启动准备",
@@ -30,6 +31,7 @@ const STEP_STATUS_KEYS: Record<string, MessageKey> = {
 };
 
 const PHASE_KEYS: Record<string, MessageKey> = {
+  waiting_for_data: "等待数据",
   queued: "等待调度",
   admitted: "任务准入",
   starting: "启动准备",
@@ -42,6 +44,9 @@ const PHASE_KEYS: Record<string, MessageKey> = {
 };
 
 const ASSESSMENT_EVENT_KEYS: Record<string, MessageKey> = {
+  "assessment.waiting_for_data": "等待数据",
+  "assessment.data_progress": "数据准备进度更新",
+  "assessment.data_ready": "数据准备完成",
   "assessment.queued": "任务已排队",
   "assessment.admitted": "任务准入",
   "assessment.starting": "开始执行",

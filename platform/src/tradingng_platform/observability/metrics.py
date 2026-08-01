@@ -14,6 +14,11 @@ QUEUE_OLDEST = Gauge(
     "Age of the oldest queued assessment",
     registry=REGISTRY,
 )
+WAITING_OLDEST = Gauge(
+    "tradingng_data_waiting_oldest_seconds",
+    "Age of the oldest assessment waiting for StockLean data",
+    registry=REGISTRY,
+)
 STEP_DURATION = Histogram(
     "tradingng_step_duration_seconds",
     "Assessment step duration",
@@ -67,6 +72,11 @@ async def refresh_database_metrics(sessions) -> None:
         oldest = await session.scalar(
             select(func.min(AssessmentRun.created_at)).where(AssessmentRun.status == "queued")
         )
+        oldest_waiting = await session.scalar(
+            select(func.min(AssessmentRun.created_at)).where(
+                AssessmentRun.status == "waiting_for_data"
+            )
+        )
         workers = list(await session.scalars(select(Worker).order_by(Worker.instance_name)))
         validation_rows = (
             await session.execute(
@@ -79,6 +89,7 @@ async def refresh_database_metrics(sessions) -> None:
     for status, count in run_rows:
         RUNS.labels(status=status).set(count)
     QUEUE_OLDEST.set(max(0, (now - oldest).total_seconds()) if oldest else 0)
+    WAITING_OLDEST.set(max(0, (now - oldest_waiting).total_seconds()) if oldest_waiting else 0)
     WORKER_HEARTBEAT_AGE.clear()
     for worker in workers:
         WORKER_HEARTBEAT_AGE.labels(worker=worker.instance_name).set(

@@ -29,13 +29,13 @@ def test_commit_fingerprint_marks_tracked_worktree_changes(monkeypatch, tmp_path
     ]
 
 
-def test_execution_metadata_prefers_configured_research_chain(monkeypatch):
+def test_execution_metadata_forces_stocklean_for_alpha_categories(monkeypatch):
     monkeypatch.setattr(main, "_commit", lambda path: path.name or "root")
     monkeypatch.setenv("ALPHA_VANTAGE_API_KEY", "research-premium-secret")
     settings = Settings(
         _env_file=None,
         database_url="postgresql+psycopg://tradingng:test@127.0.0.1/tradingng",
-        research_data_vendor_chain=("alpha_vantage", "yfinance"),
+        research_data_vendor_chain=("stocklean",),
     )
 
     metadata = main._execution_metadata(settings)
@@ -46,15 +46,8 @@ def test_execution_metadata_prefers_configured_research_chain(monkeypatch):
         "fundamental_data",
         "news_data",
     ):
-        assert metadata.data_vendors[category] == "alpha_vantage"
+        assert metadata.data_vendors[category] == "stocklean"
     assert metadata.data_vendors["macro_data"] == "fred"
     assert metadata.data_vendors["prediction_markets"] == "polymarket"
-    assert metadata.vendor_policies == {
-        "alpha_vantage": {
-            "requests_per_minute": 75,
-            "retry_attempts": 6,
-            "retry_base_seconds": 5,
-            "retry_max_seconds": 60,
-        }
-    }
+    assert metadata.vendor_policies == {"stocklean": {"manifest_required": True}}
     assert "research-premium-secret" not in repr(metadata)

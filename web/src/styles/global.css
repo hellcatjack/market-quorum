@@ -373,7 +373,7 @@ h1 {
 
 .count-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 14px;
   margin-top: 22px;
 }
@@ -1228,6 +1228,62 @@ h1 {
   min-height: 34px;
   font-weight: 700;
   cursor: pointer;
+}
+
+.data-readiness-panel {
+  margin-top: 22px;
+  padding: 20px 24px;
+  border: 1px solid #b8cad4;
+  border-radius: 8px;
+  background: #f5f8fa;
+}
+
+.data-readiness-panel__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.data-readiness-panel__heading h2,
+.data-readiness-panel__heading p {
+  margin: 0;
+}
+
+.data-readiness-panel dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 22px;
+  margin: 18px 0 0;
+}
+
+.data-readiness-panel dt {
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.data-readiness-panel dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.data-readiness-products {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.data-readiness-products span {
+  padding: 4px 8px;
+  border: 1px solid #b8cad4;
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
 }
 
 .memory-sources ol {
@@ -3272,6 +3328,10 @@ pre {
     grid-template-columns: 1fr 1fr;
   }
 
+  .data-readiness-panel dl {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .memory-mode-options {
     grid-template-columns: 1fr;
   }
@@ -3398,6 +3458,10 @@ pre {
   .decision-facts,
   .timeline-entry__facts,
   .policy-form {
+    grid-template-columns: 1fr;
+  }
+
+  .data-readiness-panel dl {
     grid-template-columns: 1fr;
   }
 

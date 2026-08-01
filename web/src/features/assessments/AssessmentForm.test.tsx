@@ -11,6 +11,8 @@ import { parseTickers } from "./tickers";
 const BLOCKED_CAPACITY: AdmissionSummary = {
   running: 2,
   max_running: 2,
+  waiting_for_data: 0,
+  oldest_waiting_seconds: null,
   queued: 4,
   oldest_queued_seconds: 90,
   admission: "queued",

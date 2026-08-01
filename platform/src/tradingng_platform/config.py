@@ -60,6 +60,10 @@ class Settings(BaseSettings):
     api_host: str = "127.0.0.1"
     api_port: int = 8010
     gateway_url: AnyHttpUrl = "http://127.0.0.1:8000"
+    stocklean_url: AnyHttpUrl = "http://127.0.0.1:8021"
+    stocklean_internal_token: SecretStr = Field(default=SecretStr(""), repr=False)
+    stocklean_timeout_seconds: float = Field(default=15.0, ge=1.0, le=120.0)
+    stocklean_readiness_poll_seconds: float = Field(default=15.0, ge=2.0, le=300.0)
     oidc_issuer: AnyHttpUrl = "https://ushome.amycat.com/realms/tradingng"
     oidc_audience: str = "tradingng-api"
     oidc_jwks_ttl_seconds: int = 300
@@ -75,7 +79,7 @@ class Settings(BaseSettings):
     allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     webhook_private_host_allowlist: Annotated[tuple[str, ...], NoDecode] = ()
     max_running_validation: int = 2
-    validation_price_providers: Annotated[tuple[str, ...], NoDecode] = ("yfinance",)
+    validation_price_providers: Annotated[tuple[str, ...], NoDecode] = ("stocklean",)
     alpha_vantage_api_key: SecretStr | None = Field(default=None, repr=False)
     research_alpha_vantage_api_key: SecretStr | None = Field(
         default=None,
@@ -111,10 +115,7 @@ class Settings(BaseSettings):
     alpha_vantage_auto_retry_attempts: int = Field(default=2, ge=0, le=5)
     sec_user_agent: str = "MarketQuorum/0.1 (+https://ushome.amycat.com)"
     sec_request_timeout_seconds: float = Field(default=10, ge=1, le=60)
-    research_data_vendor_chain: Annotated[tuple[str, ...], NoDecode] = (
-        "alpha_vantage",
-        "yfinance",
-    )
+    research_data_vendor_chain: Annotated[tuple[str, ...], NoDecode] = ("stocklean",)
 
     @model_validator(mode="after")
     def resolve_database_url(self):
@@ -164,7 +165,7 @@ class Settings(BaseSettings):
     @classmethod
     def validate_price_providers(cls, value):
         normalized = tuple(item.strip().lower() for item in value if item.strip())
-        allowed = {"yfinance", "alphavantage"}
+        allowed = {"stocklean", "yfinance", "alphavantage"}
         if not normalized or len(set(normalized)) != len(normalized):
             raise ValueError("validation price providers must be unique and non-empty")
         if any(item not in allowed for item in normalized):
@@ -175,7 +176,9 @@ class Settings(BaseSettings):
     @classmethod
     def validate_research_data_vendor_chain(cls, value):
         normalized = tuple(item.strip().lower() for item in value if item.strip())
-        allowed = {"alpha_vantage", "yfinance"}
+        # Legacy values remain parseable during rollout; effective runtime routing is
+        # pinned to StockLean by effective_research_data_vendor_chain.
+        allowed = {"stocklean", "alpha_vantage", "yfinance"}
         if not normalized or len(set(normalized)) != len(normalized):
             raise ValueError("research data vendor chain must be unique and non-empty")
         if any(item not in allowed for item in normalized):
@@ -200,15 +203,11 @@ class Settings(BaseSettings):
 
     @property
     def effective_research_data_vendor_chain(self) -> tuple[str, ...]:
-        if self.research_alpha_vantage_api_key is not None:
-            return ("alpha_vantage",)
-        return self.research_data_vendor_chain
+        return ("stocklean",)
 
     @property
     def effective_validation_price_providers(self) -> tuple[str, ...]:
-        if self.alpha_vantage_api_key is not None:
-            return ("alphavantage",)
-        return self.validation_price_providers
+        return ("stocklean",)
 
     @computed_field
     @property

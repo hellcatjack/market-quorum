@@ -1,0 +1,28 @@
+{
+  "contract_version": "stocklean.research-intake.v1",
+  "items": [
+    {
+      "external_request_key": "batch-42:item-2",
+      "candidate_request_id": 422,
+      "candidate_id": 89,
+      "symbol": "ABC",
+      "scope": "production",
+      "identity": {
+        "asset_type": "fund",
+        "exchange": "NYSE ARCA",
+        "name": "Example Fund",
+        "vendor_symbol": "ABC"
+      },
+      "readiness": "ready",
+      "required_products": ["market", "ticker_news", "global_news"],
+      "job": null,
+      "manifest": {
+        "snapshot_id": "5cfa76bb-8e3d-4d29-9ac6-82a79fe35218",
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "captured_at": "2026-08-01T15:30:00Z",
+        "max_observation_date": "2026-07-31"
+      },
+      "error": null
+    }
+  ]
+}

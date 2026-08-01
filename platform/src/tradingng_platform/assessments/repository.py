@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from tradingng_platform.assessments.contracts import (
     AssessmentItem,
+    DataRequirementView,
     MemorySourceView,
     RunDetailView,
     RunEventView,
@@ -27,6 +28,7 @@ from tradingng_platform.instruments.classification import InstrumentClassificati
 from tradingng_platform.models import (
     Artifact,
     AssessmentBatch,
+    AssessmentDataRequirement,
     AssessmentRequest,
     AssessmentRun,
     AuditEvent,
@@ -242,6 +244,9 @@ class AssessmentRepository:
         instrument: Instrument,
         item: AssessmentItem,
         request_config: dict,
+        *,
+        initial_status: RunStatus = RunStatus.QUEUED,
+        data_requirement: dict | None = None,
     ) -> AssessmentRun:
         request = AssessmentRequest(
             batch_id=batch.id,
@@ -254,14 +259,33 @@ class AssessmentRepository:
         run = AssessmentRun(
             request_id=request.id,
             attempt=1,
-            status=RunStatus.QUEUED.value,
+            status=initial_status.value,
             config_snapshot_id=None,
             retry_of_run_id=None,
             version=1,
         )
         self.session.add(run)
         await self.session.flush()
-        await self.append_event(run.id, "assessment.queued", {})
+        if data_requirement is not None:
+            requirement = AssessmentDataRequirement(
+                run_id=run.id,
+                provider_request_id=data_requirement["provider_request_id"],
+                external_request_key=data_requirement["external_request_key"],
+                required_products_json=list(data_requirement["required_products"]),
+                status="waiting",
+                progress_json=dict(data_requirement["progress"]),
+                next_poll_at=datetime.now(timezone.utc),
+                version=1,
+            )
+            self.session.add(requirement)
+            await self.session.flush()
+            await self.append_event(
+                run.id,
+                "assessment.waiting_for_data",
+                {"progress": dict(data_requirement["progress"])},
+            )
+        else:
+            await self.append_event(run.id, "assessment.queued", {})
         return run
 
     async def append_event(
@@ -486,6 +510,9 @@ class AssessmentRepository:
             )
             for entry in memory_content.get("entries", ())
         )
+        data_requirement = await self.session.scalar(
+            select(AssessmentDataRequirement).where(AssessmentDataRequirement.run_id == run.id)
+        )
         return RunDetailView(
             **base.model_dump(),
             config_snapshot_sha256=snapshot.sha256 if snapshot is not None else None,
@@ -509,7 +536,33 @@ class AssessmentRepository:
                 snapshot_sha256=memory_content.get("snapshot_sha256"),
                 sources=memory_sources,
             ),
+            data_requirement=(
+                DataRequirementView(
+                    status=data_requirement.status,
+                    required_products=tuple(data_requirement.required_products_json or ()),
+                    progress=dict(data_requirement.progress_json or {}),
+                    manifest_snapshot_id=data_requirement.manifest_snapshot_id,
+                    manifest_sha256=data_requirement.manifest_sha256,
+                    next_poll_at=data_requirement.next_poll_at,
+                )
+                if data_requirement is not None
+                else None
+            ),
         )
+
+    async def cancel_data_requirement(self, run_id: uuid.UUID) -> None:
+        requirement = await self.session.scalar(
+            select(AssessmentDataRequirement)
+            .where(AssessmentDataRequirement.run_id == run_id)
+            .with_for_update()
+        )
+        if requirement is None or requirement.status not in {"waiting", "retry_wait"}:
+            return
+        requirement.status = "cancelled"
+        requirement.next_poll_at = None
+        requirement.lease_owner = None
+        requirement.lease_expires_at = None
+        requirement.version += 1
 
     async def get_run_context(
         self,
@@ -622,30 +675,64 @@ class AssessmentRepository:
             for event in events
         ]
 
-    async def create_retry(self, context: RunContext) -> AssessmentRun:
+    async def create_retry(
+        self,
+        context: RunContext,
+        *,
+        request_config: dict | None = None,
+        initial_status: RunStatus = RunStatus.QUEUED,
+        data_requirement: dict | None = None,
+    ) -> AssessmentRun:
         request = AssessmentRequest(
             batch_id=context.request.batch_id,
             instrument_id=context.request.instrument_id,
             analysis_date=context.request.analysis_date,
-            requested_config_json=dict(context.request.requested_config_json),
+            requested_config_json=(
+                dict(request_config)
+                if request_config is not None
+                else dict(context.request.requested_config_json)
+            ),
         )
         self.session.add(request)
         await self.session.flush()
         run = AssessmentRun(
             request_id=request.id,
             attempt=context.run.attempt + 1,
-            status=RunStatus.QUEUED.value,
+            status=initial_status.value,
             config_snapshot_id=None,
             retry_of_run_id=context.run.id,
             version=1,
         )
         self.session.add(run)
         await self.session.flush()
-        await self.append_event(
-            run.id,
-            "assessment.queued",
-            {"retry_of_run_id": str(context.run.id)},
-        )
+        if data_requirement is not None:
+            self.session.add(
+                AssessmentDataRequirement(
+                    run_id=run.id,
+                    provider_request_id=data_requirement["provider_request_id"],
+                    external_request_key=data_requirement["external_request_key"],
+                    required_products_json=list(data_requirement["required_products"]),
+                    status="waiting",
+                    progress_json=dict(data_requirement["progress"]),
+                    next_poll_at=datetime.now(timezone.utc),
+                    version=1,
+                )
+            )
+            await self.session.flush()
+            await self.append_event(
+                run.id,
+                "assessment.waiting_for_data",
+                {
+                    "retry_of_run_id": str(context.run.id),
+                    "progress": dict(data_requirement["progress"]),
+                },
+            )
+        else:
+            await self.append_event(
+                run.id,
+                "assessment.queued",
+                {"retry_of_run_id": str(context.run.id)},
+            )
         return run
 
     async def find_clean_reassessment(
@@ -668,6 +755,10 @@ class AssessmentRepository:
         self,
         context: RunContext,
         policy_version: str,
+        *,
+        request_config: dict,
+        initial_status: RunStatus,
+        data_requirement: dict | None,
     ) -> RunView:
         defaults = dict(context.batch.defaults_json or {})
         defaults.pop("_submission_sha256", None)
@@ -686,8 +777,6 @@ class AssessmentRepository:
         self.session.add(batch)
         await self.session.flush()
 
-        request_config = dict(context.request.requested_config_json or {})
-        request_config["memory_mode"] = "independent"
         request = AssessmentRequest(
             batch_id=batch.id,
             instrument_id=context.request.instrument_id,
@@ -699,7 +788,7 @@ class AssessmentRepository:
         run = AssessmentRun(
             request_id=request.id,
             attempt=1,
-            status=RunStatus.QUEUED.value,
+            status=initial_status.value,
             config_snapshot_id=None,
             retry_of_run_id=None,
             clean_reassessment_of_run_id=context.run.id,
@@ -707,14 +796,31 @@ class AssessmentRepository:
         )
         self.session.add(run)
         await self.session.flush()
-        await self.append_event(
-            run.id,
-            "assessment.queued",
-            {
-                "clean_reassessment_of_run_id": str(context.run.id),
-                "integrity_policy_version": policy_version,
-            },
-        )
+        event_payload = {
+            "clean_reassessment_of_run_id": str(context.run.id),
+            "integrity_policy_version": policy_version,
+        }
+        if data_requirement is not None:
+            self.session.add(
+                AssessmentDataRequirement(
+                    run_id=run.id,
+                    provider_request_id=data_requirement["provider_request_id"],
+                    external_request_key=data_requirement["external_request_key"],
+                    required_products_json=list(data_requirement["required_products"]),
+                    status="waiting",
+                    progress_json=dict(data_requirement["progress"]),
+                    next_poll_at=datetime.now(timezone.utc),
+                    version=1,
+                )
+            )
+            event_payload["progress"] = dict(data_requirement["progress"])
+            await self.append_event(
+                run.id,
+                "assessment.waiting_for_data",
+                event_payload,
+            )
+        else:
+            await self.append_event(run.id, "assessment.queued", event_payload)
         return self._run_view(run, request, context.instrument)
 
     async def comparison_metadata(

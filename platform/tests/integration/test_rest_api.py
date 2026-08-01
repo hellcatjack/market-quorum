@@ -93,6 +93,7 @@ def _headers(subject: str) -> dict[str, str]:
 async def test_complete_rest_management_workflow(
     test_database_url,
     session_factory,
+    instrument_classifier,
     tmp_path,
 ):
     settings = Settings(
@@ -102,7 +103,11 @@ async def test_complete_rest_management_workflow(
         webhook_encryption_key=Fernet.generate_key().decode(),
     )
     database = Database(settings)
-    app = create_app(settings=settings, database=database)
+    app = create_app(
+        settings=settings,
+        database=database,
+        instrument_classifier=instrument_classifier,
+    )
 
     async def test_principal(request: Request) -> Principal:
         return PRINCIPALS[request.headers.get("X-Test-Principal", "viewer")]

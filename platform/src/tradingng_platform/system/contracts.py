@@ -25,6 +25,8 @@ class CapacityView(BaseModel):
     open_circuits: list[str]
     admission_allowed: bool
     admission_reasons: list[str]
+    waiting_for_data: int = 0
+    oldest_waiting_seconds: int | None = None
 
 
 class SchedulerPolicyCommand(BaseModel):

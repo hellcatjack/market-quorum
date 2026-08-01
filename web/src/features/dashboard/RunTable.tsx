@@ -6,6 +6,7 @@ import { assetTypeLabel, runStatusLabel } from "../../i18n/domainLabels";
 import { LocalTime } from "../runs/RunTimeline";
 
 const STATUS: Record<string, { symbol: string; tone: string }> = {
+  waiting_for_data: { symbol: "◷", tone: "muted" },
   queued: { symbol: "◷", tone: "warning" }, admitted: { symbol: "→", tone: "active" },
   starting: { symbol: "→", tone: "active" }, running_analysts: { symbol: "↻", tone: "active" },
   research_debate: { symbol: "↻", tone: "active" }, trader_plan: { symbol: "↻", tone: "active" },

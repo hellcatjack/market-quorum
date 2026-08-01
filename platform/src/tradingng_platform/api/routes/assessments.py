@@ -21,6 +21,7 @@ from tradingng_platform.assessments.service import (
     AssessmentAccessDenied,
     AssessmentAnalystsIncompatible,
     AssessmentAssetTypeConflict,
+    AssessmentDataAdmissionRejected,
     AssessmentDeleteNotAllowed,
     AssessmentIdempotencyConflict,
     AssessmentInstrumentIdentityConflict,
@@ -97,6 +98,13 @@ def _translate(error: Exception) -> None:
             "No selected analysts are compatible with the resolved instrument type",
             {"ticker": error.ticker, "asset_type": error.asset_type.value},
         ) from None
+    if isinstance(error, AssessmentDataAdmissionRejected):
+        raise ApiError(
+            422,
+            error.code,
+            "StockLean rejected the requested instrument or data scope",
+            {"ticker": error.ticker},
+        ) from None
     if isinstance(error, InstrumentClassificationNotFound):
         raise ApiError(
             422,
@@ -138,6 +146,7 @@ async def _submit(
     except (
         AssessmentAnalystsIncompatible,
         AssessmentAssetTypeConflict,
+        AssessmentDataAdmissionRejected,
         AssessmentIdempotencyConflict,
         AssessmentInstrumentIdentityConflict,
         InstrumentClassificationNotFound,

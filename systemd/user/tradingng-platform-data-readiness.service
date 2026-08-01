@@ -1,0 +1,23 @@
+[Unit]
+Description=TradingNG StockLean data readiness reconciler
+After=tradingng-platform-containers.service stocklean-backend.service network-online.target
+Requires=tradingng-platform-containers.service
+Wants=stocklean-backend.service network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/app/devs/TradingNG
+EnvironmentFile=/app/devs/TradingNG/.env.platform
+Environment=PYTHONPATH=/app/devs/TradingNG/platform/src
+Environment=PYTHONUNBUFFERED=1
+ExecStartPre=/app/devs/TradingNG/.venv/bin/python /app/devs/TradingNG/scripts/check_platform_database.py
+ExecStart=/app/devs/TradingNG/.venv/bin/python -m tradingng_platform.data_readiness.main
+Restart=always
+RestartSec=5
+NoNewPrivileges=yes
+PrivateTmp=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

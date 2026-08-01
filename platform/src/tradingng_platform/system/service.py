@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from tradingng_platform.assessments.contracts import AdmissionSummaryView
 from tradingng_platform.assessments.repository import AssessmentRepository
 from tradingng_platform.auth.principal import Principal
+from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.model_routing import (
     AVAILABLE_CODEX_MODELS,
     AVAILABLE_REASONING_EFFORTS,
@@ -161,6 +162,8 @@ class SystemService:
             oldest_queued_seconds=capacity.oldest_queued_seconds,
             admission=admission,
             reason=reason,
+            waiting_for_data=capacity.waiting_for_data,
+            oldest_waiting_seconds=capacity.oldest_waiting_seconds,
         )
 
     async def _capacity_view(self) -> CapacityView:
@@ -194,6 +197,19 @@ class SystemService:
             oldest = await session.scalar(
                 select(func.min(AssessmentRun.created_at)).where(AssessmentRun.status == "queued")
             )
+            waiting_for_data = int(
+                await session.scalar(
+                    select(func.count())
+                    .select_from(AssessmentRun)
+                    .where(AssessmentRun.status == RunStatus.WAITING_FOR_DATA.value)
+                )
+                or 0
+            )
+            oldest_waiting = await session.scalar(
+                select(func.min(AssessmentRun.created_at)).where(
+                    AssessmentRun.status == RunStatus.WAITING_FOR_DATA.value
+                )
+            )
             circuits = await CircuitBreakerRepository(session).blockers(now)
         if alpha_broker is not None and not alpha_broker.admission_allowed(
             queue_limit=self.alpha_broker_queue_limit
@@ -215,6 +231,12 @@ class SystemService:
             open_circuits=list(circuits),
             admission_allowed=decision.allowed,
             admission_reasons=list(decision.reasons),
+            waiting_for_data=waiting_for_data,
+            oldest_waiting_seconds=(
+                max(0, int((now - oldest_waiting).total_seconds()))
+                if oldest_waiting is not None
+                else None
+            ),
         )
 
     async def get_scheduler_policy(self, principal: Principal) -> SchedulerPolicyView:

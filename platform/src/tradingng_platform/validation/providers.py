@@ -28,6 +28,7 @@ from tradingng_platform.vendors.alpha_vantage_client import (
     AlphaBrokerTransientError,
     AsyncAlphaVantageBrokerClient,
 )
+from tradingng_platform.vendors.stocklean import StockLeanClient, StockLeanClientError
 
 _ALPHA_VANTAGE_URL = "https://www.alphavantage.co/query"
 logger = logging.getLogger(__name__)
@@ -53,6 +54,56 @@ class ProviderProtocol(Protocol):
     provider_id: str
 
     async def history(self, ticker: str, start: date, end: date) -> ProviderPriceSeries: ...
+
+
+class StockLeanPriceProvider:
+    provider_id = "stocklean"
+    adapter_version = "stocklean.alpha.v1"
+
+    def __init__(self, client):
+        self.client = client
+
+    async def history(self, ticker: str, start: date, end: date) -> ProviderPriceSeries:
+        try:
+            payload = await self.client.daily_prices(ticker, start=start, end=end)
+        except StockLeanClientError as exc:
+            raise ProviderUnavailable("StockLean price service is unavailable") from exc
+        if not payload.rows:
+            raise ProviderInvalidData("StockLean returned no observations")
+        rows = list(payload.rows)
+
+        def values(name: str) -> list[Decimal]:
+            try:
+                return [Decimal(getattr(row, name)) for row in rows]
+            except (InvalidOperation, TypeError) as exc:
+                raise ProviderInvalidData(f"StockLean returned invalid {name}") from exc
+
+        return ProviderPriceSeries(
+            ticker=ticker.upper(),
+            provider_symbol=payload.symbol,
+            provider_id=self.provider_id,
+            provider_adapter_version=self.adapter_version,
+            request_fingerprint=_fingerprint(
+                self.provider_id,
+                ticker,
+                start,
+                end,
+                {"contract_version": "stocklean.alpha.v1"},
+            ),
+            ohlc_basis=OhlcBasis.AS_TRADED,
+            capabilities=frozenset({"splits", "cash_dividends"}),
+            currency=None,
+            timezone="America/New_York",
+            sessions=[row.session_date for row in rows],
+            open=values("open"),
+            high=values("high"),
+            low=values("low"),
+            close=values("close"),
+            adjusted_close=values("adjusted_close"),
+            cash_distributions=values("dividend_amount"),
+            split_coefficient=values("split_coefficient"),
+            collected_at=datetime.now(timezone.utc),
+        )
 
 
 class SlidingWindowRateLimiter:
@@ -390,10 +441,23 @@ def build_price_provider(
     settings: Settings,
     *,
     broker_client: AsyncAlphaVantageBrokerClient | None = None,
+    stocklean_client=None,
 ) -> PriceProviderRouter:
     providers: list[ProviderProtocol] = []
     for provider_id in settings.effective_validation_price_providers:
-        if provider_id == "alphavantage":
+        if provider_id == "stocklean":
+            resolved_stocklean = stocklean_client
+            if resolved_stocklean is None:
+                token = settings.stocklean_internal_token.get_secret_value()
+                if not token:
+                    raise ValueError("TRADINGNG_STOCKLEAN_INTERNAL_TOKEN is required")
+                resolved_stocklean = StockLeanClient(
+                    str(settings.stocklean_url),
+                    token=token,
+                    timeout=settings.stocklean_timeout_seconds,
+                )
+            providers.append(StockLeanPriceProvider(resolved_stocklean))
+        elif provider_id == "alphavantage":
             if settings.alpha_vantage_api_key is None:
                 continue
             resolved_broker = broker_client or AsyncAlphaVantageBrokerClient(

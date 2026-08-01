@@ -20,11 +20,10 @@ from tradingng_platform.scheduler.repository import (
     SchedulerRepository,
 )
 from tradingng_platform.scheduler.service import AdmissionService
-from tradingng_platform.vendors.alpha_vantage_client import AsyncAlphaVantageBrokerClient
 
 logger = logging.getLogger(__name__)
 
-_ALPHA_VANTAGE_RESEARCH_CATEGORIES = (
+_STOCKLEAN_RESEARCH_CATEGORIES = (
     "core_stock_apis",
     "technical_indicators",
     "fundamental_data",
@@ -59,23 +58,15 @@ def _commit(path: Path) -> str:
 def _execution_metadata(settings: Settings) -> ExecutionMetadata:
     project_root = Path(__file__).resolve().parents[4]
     data_vendors = dict(DEFAULT_CONFIG["data_vendors"])
-    research_vendor_chain = ",".join(settings.effective_research_data_vendor_chain)
-    for category in _ALPHA_VANTAGE_RESEARCH_CATEGORIES:
-        data_vendors[category] = research_vendor_chain
+    for category in _STOCKLEAN_RESEARCH_CATEGORIES:
+        data_vendors[category] = "stocklean"
     return ExecutionMetadata(
         root_commit=_commit(project_root),
         tradingagents_commit=_commit(project_root / "TradingAgents"),
         prompt_schema_version="v1",
         data_vendors=data_vendors,
         tool_vendors=dict(DEFAULT_CONFIG["tool_vendors"]),
-        vendor_policies={
-            "alpha_vantage": {
-                "requests_per_minute": settings.alpha_vantage_requests_per_minute,
-                "retry_attempts": settings.alpha_vantage_retry_attempts,
-                "retry_base_seconds": settings.alpha_vantage_retry_base_seconds,
-                "retry_max_seconds": settings.alpha_vantage_retry_max_seconds,
-            }
-        },
+        vendor_policies={"stocklean": {"manifest_required": True}},
     )
 
 
@@ -85,11 +76,6 @@ async def run_scheduler() -> None:
     gateway = GatewayClient(str(settings.gateway_url))
     system_probe = SystemProbe(settings.data_dir)
     metadata = _execution_metadata(settings)
-    alpha_broker = AsyncAlphaVantageBrokerClient(
-        str(settings.alpha_vantage_broker_url),
-        consumer="scheduler",
-        timeout=5,
-    )
     stopping = asyncio.Event()
     loop = asyncio.get_running_loop()
     for signum in (signal.SIGINT, signal.SIGTERM):
@@ -115,10 +101,6 @@ async def run_scheduler() -> None:
                         system_probe,
                         metadata,
                         model_routing_repository=ModelRoutingPolicyRepository(session),
-                        alpha_broker_client=alpha_broker,
-                        alpha_broker_queue_limit=(
-                            settings.alpha_vantage_broker_admission_queue_limit
-                        ),
                     )
                     decision = await service.admit_one()
                 if decision.allowed:

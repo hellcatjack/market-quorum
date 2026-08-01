@@ -9,6 +9,8 @@ const capacity: Capacity = {
   hard_max_running_total: 32,
   queued: 0,
   oldest_queued_seconds: null,
+  waiting_for_data: 0,
+  oldest_waiting_seconds: null,
   gateway_active_completions: 1,
   gateway_model: "gpt-5.6-sol",
   gateway_reasoning_effort: "xhigh",

@@ -50,6 +50,8 @@ class AdmissionSummaryView(BaseModel):
     oldest_queued_seconds: int | None
     admission: Literal["immediate", "queued", "paused"]
     reason: Literal["capacity_available", "capacity_busy", "temporarily_paused"]
+    waiting_for_data: int = 0
+    oldest_waiting_seconds: int | None = None
 
 
 class RunView(BaseModel):
@@ -88,6 +90,15 @@ class RunMemoryView(BaseModel):
     sources: tuple[MemorySourceView, ...] = ()
 
 
+class DataRequirementView(BaseModel):
+    status: str
+    required_products: tuple[str, ...] = ()
+    progress: dict = Field(default_factory=dict)
+    manifest_snapshot_id: str | None = None
+    manifest_sha256: str | None = None
+    next_poll_at: datetime | None = None
+
+
 class RunDetailView(RunView):
     config_snapshot_sha256: str | None = None
     gateway_snapshot_id: str | None = None
@@ -106,6 +117,7 @@ class RunDetailView(RunView):
     data_vendors: dict[str, str] = Field(default_factory=dict)
     tool_vendors: dict[str, str] = Field(default_factory=dict)
     memory: RunMemoryView = Field(default_factory=RunMemoryView)
+    data_requirement: DataRequirementView | None = None
 
 
 class RunListFilters(BaseModel):

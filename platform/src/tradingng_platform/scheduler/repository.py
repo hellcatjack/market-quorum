@@ -70,6 +70,21 @@ def _configured_vendors(metadata: ExecutionMetadata) -> set[str]:
     return configured
 
 
+def _has_verified_data_manifest(request_config: dict) -> bool:
+    manifest = request_config.get("data_manifest")
+    if not isinstance(manifest, dict):
+        return False
+    snapshot_id = manifest.get("snapshot_id")
+    manifest_sha256 = manifest.get("manifest_sha256")
+    return (
+        isinstance(snapshot_id, str)
+        and bool(snapshot_id.strip())
+        and isinstance(manifest_sha256, str)
+        and len(manifest_sha256) == 64
+        and all(character in "0123456789abcdef" for character in manifest_sha256)
+    )
+
+
 @dataclass(frozen=True)
 class BuiltRunSnapshot:
     content: dict
@@ -243,8 +258,17 @@ class SchedulerRepository:
             return AdmissionDecision(False, ("queue_empty",))
 
         candidate = None
+        manifest_required = bool(
+            metadata.vendor_policies.get("stocklean", {}).get("manifest_required")
+        )
+        manifest_missing = False
         for queued_candidate in candidates:
-            _, _, queued_instrument, _ = queued_candidate
+            _, queued_request, queued_instrument, _ = queued_candidate
+            if manifest_required and not _has_verified_data_manifest(
+                dict(queued_request.requested_config_json or {})
+            ):
+                manifest_missing = True
+                continue
             ticker_lock = await acquire_transaction_lock(
                 self.session,
                 f"ticker:{queued_instrument.canonical_ticker}",
@@ -267,6 +291,8 @@ class SchedulerRepository:
                 break
 
         if candidate is None:
+            if manifest_missing:
+                return AdmissionDecision(False, ("data_manifest_missing",))
             return AdmissionDecision(False, ("ticker_active",))
         run, request, instrument, batch = candidate
 

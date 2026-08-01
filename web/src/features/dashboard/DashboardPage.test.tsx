@@ -16,6 +16,8 @@ function response(value: unknown) {
 const capacity = {
   running: 2,
   max_running: 2,
+  waiting_for_data: 5,
+  oldest_waiting_seconds: 240,
   queued: 3,
   oldest_queued_seconds: 125,
   admission: "queued",
@@ -24,6 +26,16 @@ const capacity = {
 
 const runPage = {
   items: [
+    {
+      id: "run-waiting",
+      request_id: "request-0",
+      ticker: "NEW",
+      asset_type: "stock",
+      analysis_date: "2026-07-25",
+      status: "waiting_for_data",
+      attempt: 1,
+      created_at: "2026-07-25T11:00:00Z",
+    },
     {
       id: "run-queued",
       request_id: "request-1",
@@ -124,7 +136,7 @@ const overviewPage = {
   ],
   next_cursor: "next-instrument-page",
   instrument_count: 38,
-  run_counts: { total: 62, queued: 2, active: 4, succeeded: 53, anomalous: 3 },
+  run_counts: { total: 69, waiting_for_data: 7, queued: 2, active: 4, succeeded: 53, anomalous: 3 },
   validations_visible: true,
 };
 
@@ -161,6 +173,7 @@ test("defaults to one instrument row and keeps the full task view available", as
   );
   expect(screen.queryByText("vendor:finnhub")).not.toBeInTheDocument();
   expect(screen.getByTestId("count-queued")).toHaveTextContent("2");
+  expect(screen.getByTestId("count-waiting")).toHaveTextContent("7");
   expect(screen.getByTestId("count-active")).toHaveTextContent("4");
   expect(screen.getByTestId("count-succeeded")).toHaveTextContent("53");
   expect(screen.getByTestId("count-failed")).toHaveTextContent("3");

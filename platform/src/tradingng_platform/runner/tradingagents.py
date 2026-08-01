@@ -6,7 +6,7 @@ import re
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from functools import wraps
 from io import StringIO
@@ -59,6 +59,7 @@ from tradingng_platform.vendors.alpha_vantage_client import (
     AlphaBrokerTransientError,
     SyncAlphaVantageBrokerClient,
 )
+from tradingng_platform.vendors.stocklean_adapter import StockLeanResearchAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -168,6 +169,7 @@ class TradingAgentsRunner:
         with (
             _availability_resolver_context(self.input, self.availability_resolver) as resolver,
             _alpha_vantage_run_guard(self.input),
+            _stocklean_run_guard(self.input),
             _historical_point_in_time_guard(
                 self.input.analysis_date,
                 integrity_recorder,
@@ -404,13 +406,90 @@ def _availability_resolver_context(runner_input: RunnerInput, override=None):
             cache_dir=cache_dir,
             timeout_seconds=runner_input.sec_request_timeout_seconds,
         )
-        alpha = AlphaEarningsAvailabilityResolver(
-            lambda ticker: alpha_vantage_fundamentals._make_api_request(
-                "EARNINGS",
-                {"symbol": ticker},
+        configured = {
+            vendor.strip()
+            for chain in runner_input.data_vendors.values()
+            for vendor in str(chain).split(",")
+            if vendor.strip()
+        }
+        if "stocklean" in configured:
+            token = os.getenv("TRADINGNG_STOCKLEAN_INTERNAL_TOKEN", "")
+            snapshot_id = runner_input.stocklean_manifest_snapshot_id or ""
+            adapter = StockLeanResearchAdapter(
+                str(runner_input.stocklean_url),
+                token=token,
+                snapshot_id=snapshot_id,
             )
-        )
+
+            def earnings_loader(ticker):
+                return adapter.get_earnings(ticker, runner_input.analysis_date.isoformat())
+        else:
+
+            def earnings_loader(ticker):
+                return alpha_vantage_fundamentals._make_api_request("EARNINGS", {"symbol": ticker})
+
+        alpha = AlphaEarningsAvailabilityResolver(earnings_loader)
         yield CompositeAvailabilityResolver(sec, alpha)
+
+
+@contextmanager
+def _stocklean_run_guard(runner_input: RunnerInput):
+    configured = {
+        vendor.strip()
+        for chain in (*runner_input.data_vendors.values(), *runner_input.tool_vendors.values())
+        for vendor in str(chain).split(",")
+        if vendor.strip()
+    }
+    if "stocklean" not in configured:
+        yield
+        return
+    token = os.getenv("TRADINGNG_STOCKLEAN_INTERNAL_TOKEN", "")
+    if not token:
+        raise RuntimeError("TRADINGNG_STOCKLEAN_INTERNAL_TOKEN is required")
+    if not runner_input.stocklean_manifest_snapshot_id:
+        raise RuntimeError("StockLean manifest snapshot is required")
+    adapter = StockLeanResearchAdapter(
+        str(runner_input.stocklean_url),
+        token=token,
+        snapshot_id=runner_input.stocklean_manifest_snapshot_id,
+    )
+    routes = {
+        "get_stock_data": adapter.get_stock,
+        "get_indicators": adapter.get_indicator,
+        "get_fundamentals": adapter.get_fundamentals,
+        "get_balance_sheet": adapter.get_balance_sheet,
+        "get_cashflow": adapter.get_cashflow,
+        "get_income_statement": adapter.get_income_statement,
+        "get_news": adapter.get_news,
+        "get_global_news": adapter.get_global_news,
+        "get_insider_transactions": adapter.get_insider_transactions,
+    }
+    originals = {method: dict(VENDOR_METHODS[method]) for method in routes}
+    original_loader = market_data_validator.load_ohlcv
+    try:
+        for method, route in routes.items():
+            VENDOR_METHODS[method]["stocklean"] = route
+
+        def load_ohlcv(symbol: str, curr_date: str):
+            start = (date.fromisoformat(curr_date) - timedelta(days=500)).isoformat()
+            frame = pd.read_csv(StringIO(adapter.get_stock(symbol, start, curr_date)))
+            return frame.rename(
+                columns={
+                    "timestamp": "Date",
+                    "open": "Open",
+                    "high": "High",
+                    "low": "Low",
+                    "close": "Close",
+                    "volume": "Volume",
+                }
+            )[["Date", "Open", "High", "Low", "Close", "Volume"]]
+
+        market_data_validator.load_ohlcv = load_ohlcv
+        yield
+    finally:
+        for method, original in originals.items():
+            VENDOR_METHODS[method] = original
+        market_data_validator.load_ohlcv = original_loader
 
 
 @contextmanager

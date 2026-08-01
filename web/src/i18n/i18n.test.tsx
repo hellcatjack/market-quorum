@@ -44,6 +44,8 @@ test("persists an explicit language choice and updates the document language", a
 });
 
 test("renders domain status identifiers as readable labels in both languages", () => {
+  expect(runStatusLabel("waiting_for_data", "zh-CN")).toBe("等待数据");
+  expect(runStatusLabel("waiting_for_data", "en-US")).toBe("Waiting for data");
   expect(runStatusLabel("running_analysts", "zh-CN")).toBe("分析师研究");
   expect(runStatusLabel("running_analysts", "en-US")).toBe("Analyst research");
   expect(runStatusLabel("future_state", "en-US")).toBe("Unknown status (future_state)");
