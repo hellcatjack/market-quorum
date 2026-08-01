@@ -430,6 +430,11 @@ class AssessmentRepository:
         await remove("run_steps", RunStep, RunStep.run_id == run_id)
         await remove("artifacts", Artifact, Artifact.run_id == run_id)
         await remove("events", RunEvent, RunEvent.run_id == run_id)
+        await remove(
+            "data_requirements",
+            AssessmentDataRequirement,
+            AssessmentDataRequirement.run_id == run_id,
+        )
         await remove("runs", AssessmentRun, AssessmentRun.id == run_id)
 
         request_is_referenced = await self.session.scalar(

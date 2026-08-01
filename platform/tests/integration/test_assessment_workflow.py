@@ -20,6 +20,7 @@ from tradingng_platform.domain.runs import RunStatus
 from tradingng_platform.models import (
     Artifact,
     AssessmentBatch,
+    AssessmentDataRequirement,
     AssessmentRequest,
     AssessmentRun,
     AuditEvent,
@@ -293,6 +294,14 @@ async def test_delete_removes_complete_run_graph_and_orphans(
         await session.flush()
         session.add_all(
             [
+                AssessmentDataRequirement(
+                    run_id=run_view.id,
+                    provider_request_id="17",
+                    external_request_key=f"assessment:{run_view.id}",
+                    required_products_json=["market", "fundamental"],
+                    status="failed",
+                    progress_json={"stage": "failed"},
+                ),
                 RunStep(
                     run_id=run_view.id,
                     name="finalizing",
@@ -393,6 +402,7 @@ async def test_delete_removes_complete_run_graph_and_orphans(
     async with session_factory() as session:
         owned_models = (
             WebhookDelivery,
+            AssessmentDataRequirement,
             RunIntegrityAssessment,
             Validation,
             DecisionPriceBasis,
