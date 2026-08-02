@@ -261,11 +261,19 @@ def audit_evidence(
                 "current_snapshot_blocked" if blocked else "current_snapshot_exposed",
             )
         elif tool_name == "get_macro_indicators":
-            vintage = visible_tool_output_text(output).startswith("POINT_IN_TIME_VINTAGE:")
+            rendered = visible_tool_output_text(output)
+            vintage = rendered.startswith("POINT_IN_TIME_VINTAGE:")
+            unavailable = rendered.startswith("DATA_UNAVAILABLE:")
             recorder.record(
                 tool_name,
-                IntegrityStatus.SAFE if vintage else IntegrityStatus.AT_RISK,
-                "fred_vintage_applied" if vintage else "macro_vintage_missing",
+                IntegrityStatus.SAFE if vintage or unavailable else IntegrityStatus.AT_RISK,
+                (
+                    "fred_vintage_applied"
+                    if vintage
+                    else "macro_data_unavailable"
+                    if unavailable
+                    else "macro_vintage_missing"
+                ),
             )
         elif tool_name in _DATE_BOUNDED_TOOLS:
             _audit_date_bounded_output(

@@ -35,6 +35,7 @@ from tradingng_platform.instruments.classification import (
     InstrumentClassificationUnavailable,
     InstrumentTypeUnsupported,
 )
+from tradingng_platform.vendors.stocklean import StockLeanClientError
 
 router = APIRouter(tags=["assessments"])
 
@@ -105,6 +106,18 @@ def _translate(error: Exception) -> None:
             "StockLean rejected the requested instrument or data scope",
             {"ticker": error.ticker},
         ) from None
+    if isinstance(error, StockLeanClientError):
+        if error.status_code == 429:
+            raise ApiError(
+                429,
+                "stocklean_quota_exceeded",
+                "StockLean data-admission capacity is temporarily exhausted",
+            ) from None
+        raise ApiError(
+            503,
+            "stocklean_unavailable",
+            "StockLean data admission is temporarily unavailable",
+        ) from None
     if isinstance(error, InstrumentClassificationNotFound):
         raise ApiError(
             422,
@@ -152,6 +165,7 @@ async def _submit(
         InstrumentClassificationNotFound,
         InstrumentClassificationUnavailable,
         InstrumentTypeUnsupported,
+        StockLeanClientError,
     ) as error:
         _translate(error)
     if not runs:

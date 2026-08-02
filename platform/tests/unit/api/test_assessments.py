@@ -34,6 +34,7 @@ from tradingng_platform.integrity.service import (
     CleanReassessmentNotAllowed,
     IntegrityNotFound,
 )
+from tradingng_platform.vendors.stocklean import StockLeanClientError
 
 RUN_ID = uuid.UUID("00000000-0000-0000-0000-000000000101")
 RETRY_ID = uuid.UUID("00000000-0000-0000-0000-000000000102")
@@ -314,6 +315,11 @@ def test_user_can_read_only_sanitized_assessment_admission_summary(monkeypatch):
             InstrumentClassificationUnavailable("NVDA"),
             503,
             "instrument_classification_unavailable",
+        ),
+        (
+            StockLeanClientError("stocklean_rejected", status_code=429),
+            429,
+            "stocklean_quota_exceeded",
         ),
     ],
 )

@@ -209,6 +209,29 @@ def test_retrospective_audit_accepts_archived_fred_vintage_message(tmp_path):
     assert "fred_vintage_applied" in result.reason_codes
 
 
+def test_retrospective_audit_accepts_unavailable_historical_macro_data(tmp_path):
+    evidence = _write_evidence(
+        tmp_path / "evidence.jsonl",
+        tool_name="get_macro_indicators",
+        output={
+            "content": "DATA_UNAVAILABLE: optional macro_data could not be retrieved.",
+            "name": "get_macro_indicators",
+            "type": "tool",
+        },
+    )
+
+    result = audit_evidence(
+        evidence,
+        ticker="NVDA",
+        analysis_date=date(2025, 7, 1),
+        resolver=StubResolver({}),
+        now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+
+    assert result.status is IntegrityStatus.SAFE
+    assert "macro_data_unavailable" in result.reason_codes
+
+
 async def test_retrospective_service_archives_once_and_is_idempotent(tmp_path):
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:

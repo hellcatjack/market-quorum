@@ -145,8 +145,13 @@ def record_observed_tool(
         recorder.record(tool_name, IntegrityStatus.SAFE, "date_bounded_route")
     elif tool_name in _FINANCIAL_STATEMENT_TOOLS:
         recorder.record(tool_name, IntegrityStatus.SAFE, "point_in_time_filtered")
-    elif tool_name == "get_macro_indicators" and rendered.startswith("POINT_IN_TIME_VINTAGE:"):
-        recorder.record(tool_name, IntegrityStatus.SAFE, "fred_vintage_applied")
+    elif tool_name == "get_macro_indicators":
+        if rendered.startswith("POINT_IN_TIME_VINTAGE:"):
+            recorder.record(tool_name, IntegrityStatus.SAFE, "fred_vintage_applied")
+        elif rendered.startswith("DATA_UNAVAILABLE:"):
+            recorder.record(tool_name, IntegrityStatus.SAFE, "macro_data_unavailable")
+        else:
+            recorder.record(tool_name, IntegrityStatus.UNKNOWN, "unregistered_tool")
     elif tool_name in _CURRENT_SNAPSHOT_TOOLS:
         if "POINT_IN_TIME_DATA_UNAVAILABLE:" in rendered:
             recorder.record(tool_name, IntegrityStatus.SAFE, "current_snapshot_blocked")
@@ -169,8 +174,11 @@ def evidence_temporal_metadata(
         return effective_at, "point_in_time_bounded"
     if tool_name in _FINANCIAL_STATEMENT_TOOLS:
         return effective_at, "point_in_time_filtered"
-    if tool_name == "get_macro_indicators" and rendered.startswith("POINT_IN_TIME_VINTAGE:"):
-        return effective_at, "point_in_time_vintage"
+    if tool_name == "get_macro_indicators":
+        if rendered.startswith("POINT_IN_TIME_VINTAGE:"):
+            return effective_at, "point_in_time_vintage"
+        if rendered.startswith("DATA_UNAVAILABLE:"):
+            return None, "point_in_time_unavailable"
     if "POINT_IN_TIME_DATA_UNAVAILABLE:" in rendered:
         return None, "point_in_time_unavailable"
     return None, "current_snapshot" if analysis_date >= datetime.now(timezone.utc).date() else None

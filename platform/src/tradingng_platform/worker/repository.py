@@ -187,14 +187,21 @@ class WorkerRepository:
         )
         if run is None:
             raise RuntimeError("runner event references an unknown run")
-        last_payload = await self.session.scalar(
+        payloads = await self.session.scalars(
             select(RunEvent.payload_json)
             .where(
                 RunEvent.run_id == run_id,
                 RunEvent.event_type.like("runner.%"),
             )
             .order_by(RunEvent.sequence.desc())
-            .limit(1)
+        )
+        last_payload = next(
+            (
+                payload
+                for payload in payloads
+                if int(payload.get("runner_attempt", 1)) == run.attempt
+            ),
+            None,
         )
         expected = int((last_payload or {}).get("runner_sequence", 0)) + 1
         if event.sequence != expected:
@@ -202,7 +209,11 @@ class WorkerRepository:
                 f"expected durable runner sequence {expected}, received {event.sequence}"
             )
 
-        payload = {**event.payload, "runner_sequence": event.sequence}
+        payload = {
+            **event.payload,
+            "runner_sequence": event.sequence,
+            "runner_attempt": run.attempt,
+        }
         await AssessmentRepository(self.session).append_event(
             run_id,
             f"runner.{event.type}.{event.name}",

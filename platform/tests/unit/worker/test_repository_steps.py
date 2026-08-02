@@ -113,6 +113,35 @@ async def test_stage_transition_and_result_complete_every_step(monkeypatch):
         await engine.dispose()
 
 
+async def test_recovered_attempt_starts_a_new_durable_runner_sequence(monkeypatch):
+    monkeypatch.setattr(repository_module, "upsert", _sqlite_upsert)
+    engine, sessions = await _database()
+    try:
+        async with sessions() as session, session.begin():
+            run = await _run(session, RunStatus.STARTING)
+            repository = WorkerRepository(session)
+            await repository.persist_runner_event(run.id, _stage(1, "running_analysts"))
+
+            run.attempt = 2
+            run.status = RunStatus.STARTING.value
+            await repository.persist_runner_event(run.id, _stage(1, "running_analysts"))
+            events = list(
+                await session.scalars(
+                    select(RunEvent)
+                    .where(
+                        RunEvent.run_id == run.id,
+                        RunEvent.event_type.like("runner.%"),
+                    )
+                    .order_by(RunEvent.sequence)
+                )
+            )
+
+        assert [event.payload_json["runner_sequence"] for event in events] == [1, 1]
+        assert [event.payload_json["runner_attempt"] for event in events] == [1, 2]
+    finally:
+        await engine.dispose()
+
+
 async def test_failure_marks_running_step_failed_with_error_code():
     engine, sessions = await _database()
     try:

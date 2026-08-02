@@ -21,6 +21,10 @@ _SENSITIVE_KEY = re.compile(
     r"api[_-]?key|authorization|cookie|password|secret|token",
     re.IGNORECASE,
 )
+_SENSITIVE_TEXT_VALUE = re.compile(
+    r"(?i)((?:[?&]|\b)(?:api[_-]?key|apikey|access_token|token|secret|password)=)"
+    r"[^&\s)\]}>'\"]+"
+)
 _TOOL_CATEGORIES = {
     "get_stock_data": "core_stock_apis",
     "get_verified_market_snapshot": "core_stock_apis",
@@ -38,6 +42,8 @@ _TOOL_CATEGORIES = {
 
 def redact(value: Any) -> Any:
     value = _jsonable(value)
+    if isinstance(value, str):
+        return _SENSITIVE_TEXT_VALUE.sub(r"\1[REDACTED]", value)
     if isinstance(value, dict):
         return {
             str(key): "[REDACTED]" if _SENSITIVE_KEY.search(str(key)) else redact(item)

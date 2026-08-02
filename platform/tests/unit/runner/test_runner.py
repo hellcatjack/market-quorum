@@ -14,7 +14,7 @@ from tradingagents.dataflows.interface import VENDOR_METHODS
 from tradingng_platform.assessments.contracts import MemoryMode
 from tradingng_platform.integrity.financials import Availability
 from tradingng_platform.memory import MemoryCandidate, build_memory_snapshot
-from tradingng_platform.runner.callbacks import AuditCallback
+from tradingng_platform.runner.callbacks import AuditCallback, redact
 from tradingng_platform.runner.contracts import RunnerInput
 from tradingng_platform.runner.tradingagents import (
     TradingAgentsRunner,
@@ -33,6 +33,15 @@ DECISION = """**Rating**: Hold
 **Price Target**: 175.50
 
 **Time Horizon**: 6-12 months"""
+
+
+def test_redact_removes_sensitive_query_parameters_from_strings():
+    value = redact(
+        {"content": ("request failed: https://example.test/data?api_key=must-not-leak&format=json")}
+    )
+
+    assert "must-not-leak" not in value["content"]
+    assert "api_key=[REDACTED]" in value["content"]
 
 
 class _FakeGraph:

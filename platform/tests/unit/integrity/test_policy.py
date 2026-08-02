@@ -110,3 +110,28 @@ def test_fred_vintage_tool_message_is_safe_and_time_bounded():
     assert document.reason_codes == ("fred_vintage_applied",)
     assert effective_at == "2025-07-01T23:59:59.999999+00:00"
     assert freshness == "point_in_time_vintage"
+
+
+def test_unavailable_historical_macro_data_is_safe_without_an_effective_date():
+    analysis_date = date(2025, 7, 1)
+    recorder = PointInTimeRecorder(
+        analysis_date,
+        now=datetime(2026, 7, 27, tzinfo=timezone.utc),
+    )
+    output = ToolMessage(
+        content="DATA_UNAVAILABLE: optional macro_data could not be retrieved.",
+        tool_call_id="macro-unavailable",
+    )
+
+    record_observed_tool(recorder, "get_macro_indicators", output)
+    effective_at, freshness = evidence_temporal_metadata(
+        "get_macro_indicators",
+        analysis_date,
+        output,
+    )
+
+    document = recorder.finalize()
+    assert document.status is IntegrityStatus.SAFE
+    assert document.reason_codes == ("macro_data_unavailable",)
+    assert effective_at is None
+    assert freshness == "point_in_time_unavailable"
