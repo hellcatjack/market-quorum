@@ -1,4 +1,5 @@
 import logging
+import re
 
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
@@ -32,28 +33,26 @@ from .yfinance_news import get_global_news_yfinance, get_news_yfinance
 
 logger = logging.getLogger(__name__)
 
+_SENSITIVE_QUERY_VALUE = re.compile(
+    r"(?i)((?:[?&]|\b)(?:api[_-]?key|apikey|access_token|token|secret|password)=)"
+    r"[^&\s)\]}>'\"]+"
+)
+
+
+def _safe_error_text(error: Exception) -> str:
+    return _SENSITIVE_QUERY_VALUE.sub(r"\1[REDACTED]", str(error))
+
+
 # Tools organized by category
 TOOLS_CATEGORIES = {
-    "core_stock_apis": {
-        "description": "OHLCV stock price data",
-        "tools": [
-            "get_stock_data"
-        ]
-    },
+    "core_stock_apis": {"description": "OHLCV stock price data", "tools": ["get_stock_data"]},
     "technical_indicators": {
         "description": "Technical analysis indicators",
-        "tools": [
-            "get_indicators"
-        ]
+        "tools": ["get_indicators"],
     },
     "fundamental_data": {
         "description": "Company fundamentals",
-        "tools": [
-            "get_fundamentals",
-            "get_balance_sheet",
-            "get_cashflow",
-            "get_income_statement"
-        ]
+        "tools": ["get_fundamentals", "get_balance_sheet", "get_cashflow", "get_income_statement"],
     },
     "news_data": {
         "description": "News and insider data",
@@ -61,20 +60,20 @@ TOOLS_CATEGORIES = {
             "get_news",
             "get_global_news",
             "get_insider_transactions",
-        ]
+        ],
     },
     "macro_data": {
         "description": "Macroeconomic indicators (rates, inflation, labor, growth)",
         "tools": [
             "get_macro_indicators",
-        ]
+        ],
     },
     "prediction_markets": {
         "description": "Market-implied probabilities for forward-looking events",
         "tools": [
             "get_prediction_markets",
-        ]
-    }
+        ],
+    },
 }
 
 VENDOR_LIST = [
@@ -143,12 +142,14 @@ VENDOR_METHODS = {
     },
 }
 
+
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
     for category, info in TOOLS_CATEGORIES.items():
         if method in info["tools"]:
             return category
     raise ValueError(f"Method '{method}' not found in any category")
+
 
 def get_vendor(category: str, method: str = None) -> str:
     """Get the configured vendor for a data category or specific tool method.
@@ -165,11 +166,12 @@ def get_vendor(category: str, method: str = None) -> str:
     # Fall back to category-level configuration
     return config.get("data_vendors", {}).get(category, "default")
 
+
 def route_to_vendor(method: str, *args, **kwargs):
     """Route method calls to appropriate vendor implementation with fallback support."""
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
-    primary_vendors = [v.strip() for v in vendor_config.split(',')]
+    primary_vendors = [v.strip() for v in vendor_config.split(",")]
 
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
@@ -215,7 +217,12 @@ def route_to_vendor(method: str, *args, **kwargs):
             # Don't let one vendor's failure crash the call when another can
             # serve it, but never swallow silently: a broken primary must be
             # visible in the logs (#989), not hidden behind a fallback's verdict.
-            logger.warning("Vendor %r failed for %s: %s", vendor, method, e)
+            logger.warning(
+                "Vendor %r failed for %s: %s",
+                vendor,
+                method,
+                _safe_error_text(e),
+            )
             if first_error is None:
                 first_error = e
             continue
@@ -230,7 +237,8 @@ def route_to_vendor(method: str, *args, **kwargs):
             # verdict can't hide a broken primary (network/auth/etc.).
             logger.warning(
                 "Returning NO_DATA for %s, but a vendor errored earlier: %s",
-                method, first_error,
+                method,
+                _safe_error_text(first_error),
             )
         sym = last_no_data.symbol
         canonical = last_no_data.canonical
@@ -252,10 +260,15 @@ def route_to_vendor(method: str, *args, **kwargs):
     # abort the run.
     if first_error is not None:
         if category in OPTIONAL_CATEGORIES:
-            logger.warning("Optional %s unavailable for %s: %s", category, method, first_error)
+            logger.warning(
+                "Optional %s unavailable for %s: %s",
+                category,
+                method,
+                _safe_error_text(first_error),
+            )
             return (
-                f"DATA_UNAVAILABLE: optional {category} could not be retrieved "
-                f"({first_error}). Proceed without it; do not fabricate values."
+                f"DATA_UNAVAILABLE: optional {category} could not be retrieved. "
+                "Proceed without it; do not fabricate values."
             )
         raise first_error
 
